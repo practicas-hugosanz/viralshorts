@@ -198,9 +198,18 @@
 
   /* ------------------------------------------------------------ contador */
   .counter { display: flex; align-items: center; gap: 12px; }
+  /* El + y el - son SVG, no texto: un glifo se coloca segun las metricas de
+     la fuente (el signo menos se apoya en el eje matematico, no en el centro
+     del boton) y siempre queda un pelo alto o bajo. Con dos trazos dibujados
+     y `place-items: center` el icono cae en el centro exacto del circulo. */
   .counter button {
     width: 40px; height: 40px; padding: 0; flex: none;
-    font-size: 20px; line-height: 1; border-radius: 50%;
+    display: grid; place-items: center;
+    line-height: 0; border-radius: 50%;
+  }
+  .counter button svg {
+    width: 15px; height: 15px; display: block;
+    fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round;
   }
   .counter output {
     font-size: 22px; font-weight: 700; min-width: 34px; text-align: center;
@@ -517,9 +526,13 @@
         <div class="field">
           <span class="label">Cuántos shorts sacar</span>
           <div class="counter">
-            <button type="button" id="clips-down" aria-label="Menos">&minus;</button>
+            <button type="button" id="clips-down" aria-label="Uno menos">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>
+            </button>
             <output id="clips-out">3</output>
-            <button type="button" id="clips-up" aria-label="Mas">+</button>
+            <button type="button" id="clips-up" aria-label="Uno más">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>
+            </button>
             <input type="number" id="clips" value="3" min="1" max="20" hidden>
             <span class="unit" id="clips-unit">shorts del mismo pódcast</span>
           </div>
