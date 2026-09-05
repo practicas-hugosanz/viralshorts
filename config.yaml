@@ -1,0 +1,149 @@
+# Configuracion de viralshorts.
+# Solo hace falta escribir aqui lo que quieras cambiar; el resto usa los valores
+# por defecto de viralshorts/config.py.
+
+clips:
+  num_clips: 3
+  # 25-45s es el punto dulce actual de Shorts/Reels. 75s (lo que hacia el
+  # script original) es largo: la retencion se hunde antes del final.
+  min_duration: 25
+  max_duration: 45
+  head_skip: 60          # ignora la intro
+  tail_skip: 30          # ignora la despedida
+  min_gap: 30            # separacion minima entre clips elegidos
+
+download:
+  max_height: 1080       # 720 = la mitad de descarga, un pelo menos de nitidez
+  concurrent_fragments: 8  # fragmentos en paralelo; es lo que acelera la bajada
+
+transcribe:
+  model_size: medium     # tiny | base | small | medium | large-v3
+  language: es           # null = autodetectar
+  device: auto           # auto | cpu | cuda
+  compute_type: auto     # auto | int8 | float16
+  beam_size: 1           # 1 = greedy (el doble de rapido); 5 = maxima calidad
+  cpu_threads: 0         # 0 = auto (nucleos fisicos)
+  batched: true          # transcribe por lotes: 2-4x mas rapido, misma calidad
+  batch_size: 8
+
+prescan:
+  # Lo que hace que el pipeline tarde minutos y no horas: el heatmap y la
+  # energia se calculan sobre el video entero en segundos, eligen las zonas
+  # calientes, y Whisper solo transcribe esas. Ponlo en false para transcribir
+  # las tres horas enteras (mucho mas lento, no mejora el resultado).
+  enabled: true
+  regions: 0             # 0 = auto (num_clips * 5, minimo 12). Menos = mas rapido
+  padding: 15            # margen a cada lado de cada zona
+
+scoring:
+  # Pesos de cada senal. El heatmap de YouTube es la mejor senal barata que
+  # existe; el LLM es la mejor cara. La densidad de palabras casi no cuenta.
+  weight_heatmap: 0.30
+  weight_energy: 0.15
+  weight_density: 0.05
+  weight_context: 0.25   # cuanto se entiende el clip sin ver el resto
+  weight_llm: 0.35
+  weight_hook: 0.15
+  llm_candidates: 24     # ventanas que se mandan a Claude
+  # Si dos clips comparten mas de esta fraccion de vocabulario, el segundo se
+  # descarta: son el mismo tema contado dos veces. 1.0 lo desactiva.
+  max_similarity: 0.5
+
+llm:
+  enabled: true
+  model: claude-opus-5
+  effort: medium         # low | medium | high | xhigh | max
+  generate_metadata: true
+  batch_size: 10         # fragmentos por peticion (mas = respuestas cortadas)
+  max_retries: 3         # un 429 o un "overloaded" no puede tirar la seleccion
+  cache: true            # no volver a pagar por lo ya puntuado
+
+jumpcuts:
+  enabled: true
+  max_silence: 0.35      # silencio maximo que se conserva
+  padding: 0.12
+
+reframe:
+  enabled: true          # seguir la cara del que habla
+  # Con varias caras en plano, seguir a la que mueve la boca mientras suena
+  # audio, en vez de a la mas grande. Encuadra al que habla, no al que escucha.
+  speaker_tracking: true
+  talk_window: 2.5       # segundos de historial de "quien esta hablando"
+  switch_margin: 1.4     # cuanto tiene que ganar el otro para cambiar de plano
+  # Descarta las caras que no se mueven: fotos, carteles y miniaturas que el
+  # detector confunde con personas y se llevan el encuadre.
+  ignore_static_faces: true
+  sample_interval: 0.5
+  smoothing_window: 2.0
+  deadzone: 0.04
+
+zoom:
+  enabled: true          # punch-in suave; desactivalo para renderizar mas rapido
+  min_zoom: 1.0
+  max_zoom: 1.07
+  period: 14
+
+layout:
+  width: 1080
+  height: 1920
+  top_ratio: 0.5         # mitad podcast, mitad gameplay
+  fps: 30
+
+audio:
+  loudnorm: true         # imprescindible: iguala el volumen al del resto del feed
+  target_i: -14
+
+subtitles:
+  enabled: true
+  font_name: Arial Black # instala la fuente en el SISTEMA, no basta el .ttf suelto
+  font_size: 92
+  color_active: "#FFF200"
+  max_words_per_group: 3
+  vertical_position_ratio: 0.30
+  pop_scale: 118         # 100 = sin efecto de rebote
+  # Tapa una letra de las palabrotas: "puta" -> "p#ta". Solo el texto; el
+  # audio no se toca. Lleva una lista de serie en castellano e ingles.
+  censor_profanity: true
+  censor_char: "#"
+  censor_words: []       # raices propias que anadir, p. ej. ["chorra"]
+
+title_card:
+  # Tarjeta de contexto al arrancar: aparece en el CENTRO del vertical, con el
+  # mismo estilo que los subtitulos, se lee y se va. Nunca coincide en pantalla
+  # con el gancho.
+  enabled: true
+  # show  = programa e invitado ("The Wild Project - Xokas")
+  # video = el titulo entero del video de origen
+  # clip  = la mejor frase del propio clip
+  source: show
+  duration: 2.5
+  font_size: 74
+  wrap_chars: 22         # caracteres por linea antes de partir
+
+hook:
+  enabled: true          # rotulo de gancho, cuando se va la tarjeta
+  duration: 4.0
+  font_size: 64
+
+context:
+  # Detecta donde EMPIEZA cada tema (cohesion lexica) y penaliza los clips que
+  # arrancan a media frase o con un "y entonces eso...". Sube el peso si
+  # todavia salen clips que no se entienden solos.
+  enabled: true
+  sensitivity: 0.6
+
+output:
+  dir: output
+  crf: 20
+  preset: medium
+  # "auto" prueba NVIDIA, Intel y AMD, comprueba que funcionen de verdad y cae
+  # a la CPU si no hay nada. "off" fuerza libx264.
+  hardware_encoder: auto
+  render_workers: 0      # shorts a la vez. 0 = auto segun los nucleos
+  thumbnail: true        # deja un .jpg de portada junto a cada short
+  csv: true              # publicaciones.csv con titulos, ganchos y hashtags
+
+paths:
+  work_dir: work
+  cache_dir: work/cache
+  plans_dir: work/plans  # selecciones guardadas para revisar antes de montar

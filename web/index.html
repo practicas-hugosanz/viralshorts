@@ -1,0 +1,1694 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>viralshorts</title>
+<style>
+  :root {
+    --bg:        #0b0e14;
+    --surface:   #141a24;
+    --surface-2: #1b2431;
+    --surface-3: #222d3d;
+    --line:      #2b3646;
+    --line-soft: #212b39;
+    --text:      #e9eff8;
+    --muted:     #8fa0b7;
+    --faint:     #64748b;
+    --accent:    #ffd23f;
+    --accent-dim:#3a3116;
+    --blue:      #5aa9ff;
+    --ok:        #46d17f;
+    --err:       #ff6b61;
+    --r-sm: 8px;
+    --r:    12px;
+    --r-lg: 16px;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.6 "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+    /* Un resplandor muy sutil arriba para que la pagina no sea un rectangulo plano. */
+    background-image:
+      radial-gradient(900px 380px at 50% -180px, rgba(255,210,63,.10), transparent 70%),
+      radial-gradient(700px 320px at 90% 60px, rgba(90,169,255,.07), transparent 70%);
+    background-repeat: no-repeat;
+  }
+  h1, h2, h3 { margin: 0; line-height: 1.25; }
+  p { margin: 0; }
+
+  /* ---------------------------------------------------------- cabecera */
+  header {
+    position: sticky; top: 0; z-index: 30;
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 24px;
+    background: rgba(11,14,20,.82);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 700; letter-spacing: -.2px; }
+  .brand .mark {
+    width: 26px; height: 26px; border-radius: 7px; flex: none;
+    background: linear-gradient(140deg, var(--accent), #ff9f43);
+    display: grid; place-items: center; color: #1a1405; font-size: 14px;
+  }
+  .brand span { color: var(--accent); }
+
+  .pill {
+    margin-left: auto; display: flex; align-items: center; gap: 7px;
+    padding: 5px 13px 5px 11px; border-radius: 999px;
+    font-size: 13px; font-weight: 600;
+    background: var(--surface-2); color: var(--muted);
+    border: 1px solid var(--line);
+  }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+  .pill.running { color: #1a1405; background: var(--accent); border-color: var(--accent); }
+  .pill.running .dot { animation: blink 1.1s ease-in-out infinite; }
+  .pill.done    { color: var(--ok);  border-color: rgba(70,209,127,.45); background: rgba(70,209,127,.10); }
+  .pill.error,
+  .pill.stopped { color: var(--err); border-color: rgba(255,107,97,.45); background: rgba(255,107,97,.10); }
+  @keyframes blink { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+
+  .ghost-link {
+    background: none; border: 0; color: var(--muted); font: inherit; font-size: 13px;
+    cursor: pointer; padding: 5px 8px; border-radius: var(--r-sm);
+  }
+  .ghost-link:hover { color: var(--text); background: var(--surface-2); }
+
+  /* ------------------------------------------------------------- lienzo */
+  main { max-width: 880px; margin: 0 auto; padding: 26px 22px 90px; }
+
+  .intro { text-align: center; margin-bottom: 30px; }
+  .intro h1 { font-size: 29px; letter-spacing: -.6px; margin-bottom: 9px; }
+  .intro p  { color: var(--muted); font-size: 15.5px; max-width: 560px; margin: 0 auto; }
+
+  /* --------------------------------------------------------- tarjeta paso */
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg);
+    margin-bottom: 16px;
+    overflow: hidden;
+    transition: border-color .2s;
+  }
+  .step:focus-within { border-color: var(--line); }
+  .step-head { display: flex; align-items: center; gap: 13px; padding: 18px 20px 0; }
+  .step-num {
+    width: 27px; height: 27px; flex: none; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 13px; font-weight: 700;
+    background: var(--surface-3); color: var(--muted);
+    border: 1px solid var(--line);
+    transition: all .25s;
+  }
+  .step.filled .step-num {
+    background: var(--ok); border-color: var(--ok); color: #06210f;
+  }
+  .step.filled .step-num::after { content: "\2713"; }
+  .step.filled .step-num i { display: none; }
+  .step-head h2 { font-size: 16.5px; font-weight: 650; letter-spacing: -.2px; }
+  .step-body { padding: 12px 20px 20px 60px; }
+  @media (max-width: 620px) { .step-body { padding-left: 20px; } }
+
+  .lead { color: var(--muted); font-size: 13.5px; margin-bottom: 14px; }
+  .lead a { color: var(--blue); text-decoration: none; }
+  .lead a:hover { text-decoration: underline; }
+
+  /* ------------------------------------------------------------- campos */
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+  .field > .label { display: block; margin-bottom: 6px; font-size: 13px; color: var(--muted); font-weight: 500; }
+
+  input[type=text], input[type=number], select, textarea {
+    width: 100%; padding: 11px 13px;
+    border-radius: var(--r-sm); border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); font: inherit; font-size: 14.5px;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input::placeholder { color: var(--faint); }
+  input:focus, select:focus {
+    outline: none; border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(90,169,255,.16);
+  }
+  select { cursor: pointer; }
+
+  .with-button { display: flex; gap: 8px; }
+  .with-button input { flex: 1; min-width: 0; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 520px) { .row { grid-template-columns: 1fr; } }
+
+  /* -------------------------------------------------------- vista previa */
+  .preview {
+    display: none; gap: 13px; align-items: center;
+    margin-top: 11px; padding: 10px;
+    background: var(--surface-2); border: 1px solid var(--line-soft);
+    border-radius: var(--r); font-size: 13.5px;
+  }
+  .preview.on { display: flex; }
+  .preview img {
+    width: 104px; height: 58px; object-fit: cover; border-radius: var(--r-sm);
+    background: #000; flex: none; display: none;
+  }
+  .preview img.on { display: block; }
+  .preview .what { min-width: 0; }
+  .preview .what b { display: block; font-weight: 600; }
+  .preview .what span { color: var(--muted); font-size: 12.5px; word-break: break-all; }
+  .preview .tick { margin-left: auto; color: var(--ok); font-size: 17px; flex: none; }
+
+  /* ------------------------------------------------------------- botones */
+  button {
+    padding: 10px 15px; border-radius: var(--r-sm);
+    border: 1px solid var(--line); background: var(--surface-2);
+    color: var(--text); font: inherit; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: background .15s, border-color .15s, transform .06s;
+  }
+  button:hover:not(:disabled) { background: var(--surface-3); border-color: var(--muted); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary {
+    background: linear-gradient(135deg, var(--accent), #ffb01f);
+    color: #1a1405; border-color: transparent; font-weight: 700;
+  }
+  button.primary:hover:not(:disabled) { filter: brightness(1.07); border-color: transparent; }
+  button.danger { color: var(--err); border-color: rgba(255,107,97,.35); }
+  button.big { width: 100%; padding: 15px; font-size: 16px; border-radius: var(--r); }
+
+  /* ----------------------------------------------------- grupos de opcion */
+  .choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+  @media (max-width: 560px) { .choices { grid-template-columns: 1fr; } }
+  .choice {
+    position: relative; display: block; cursor: pointer;
+    padding: 12px 13px; border-radius: var(--r);
+    background: var(--surface-2); border: 1px solid var(--line-soft);
+    transition: border-color .15s, background .15s;
+  }
+  .choice:hover { border-color: var(--line); }
+  .choice input { position: absolute; opacity: 0; pointer-events: none; }
+  .choice b { display: block; font-size: 14px; font-weight: 650; margin-bottom: 2px; }
+  .choice em { font-style: normal; color: var(--muted); font-size: 12.5px; line-height: 1.45; display: block; }
+  /* .on lo pone el JS: :has() no existe en navegadores algo antiguos y la
+     seleccion tiene que verse SIEMPRE, es la mitad de la interfaz. */
+  .choice:has(input:checked), .choice.on {
+    border-color: var(--accent); background: var(--accent-dim);
+  }
+  .choice:has(input:checked) b, .choice.on b { color: var(--accent); }
+
+  /* ------------------------------------------------------------ contador */
+  .counter { display: flex; align-items: center; gap: 12px; }
+  .counter button {
+    width: 40px; height: 40px; padding: 0; flex: none;
+    font-size: 20px; line-height: 1; border-radius: 50%;
+  }
+  .counter output {
+    font-size: 22px; font-weight: 700; min-width: 34px; text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .counter .unit { color: var(--muted); font-size: 13.5px; }
+
+  /* ------------------------------------------------------ interruptores */
+  .toggles { display: grid; gap: 4px; }
+  .toggle {
+    display: flex; align-items: flex-start; gap: 12px; cursor: pointer;
+    padding: 10px 11px; border-radius: var(--r-sm); margin: 0;
+    transition: background .15s;
+  }
+  .toggle:hover { background: var(--surface-2); }
+  .toggle input { position: absolute; opacity: 0; pointer-events: none; }
+  .switch {
+    width: 38px; height: 22px; flex: none; margin-top: 1px;
+    border-radius: 999px; background: var(--surface-3);
+    border: 1px solid var(--line); position: relative; transition: background .18s, border-color .18s;
+  }
+  .switch::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--muted); transition: transform .18s, background .18s;
+  }
+  .toggle input:checked + .switch { background: var(--accent); border-color: var(--accent); }
+  .toggle input:checked + .switch::after { transform: translateX(16px); background: #1a1405; }
+  .toggle input:focus-visible + .switch { box-shadow: 0 0 0 3px rgba(90,169,255,.3); }
+  .toggle .txt b { display: block; font-size: 14px; font-weight: 600; }
+  .toggle .txt em { font-style: normal; color: var(--muted); font-size: 12.5px; display: block; }
+
+  /* -------------------------------------------------------------- avanzado */
+  details.adv { margin-top: 6px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+  details.adv > summary {
+    cursor: pointer; color: var(--muted); font-size: 13.5px; font-weight: 600;
+    list-style: none; display: flex; align-items: center; gap: 7px; padding: 4px 0;
+  }
+  details.adv > summary::-webkit-details-marker { display: none; }
+  details.adv > summary::before { content: "\25B8"; transition: transform .2s; display: inline-block; }
+  details.adv[open] > summary::before { transform: rotate(90deg); }
+  details.adv > summary:hover { color: var(--text); }
+  .adv-body { padding-top: 14px; }
+  .adv-body > * + * { margin-top: 14px; }
+
+  /* --------------------------------------------------------------- lanzar */
+  .launch { margin-top: 22px; }
+  .launch .aside { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 11px; }
+  .launch .aside button { flex: 1 1 150px; }
+  .eta { text-align: center; color: var(--muted); font-size: 13px; margin-top: 11px; }
+  .eta b { color: var(--text); font-weight: 600; }
+
+  /* ------------------------------------------------------------- progreso */
+  .panel {
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg); padding: 20px; margin-bottom: 16px;
+  }
+  .panel > h2 {
+    font-size: 12.5px; text-transform: uppercase; letter-spacing: .9px;
+    color: var(--faint); font-weight: 700; margin-bottom: 15px;
+  }
+
+  .steps-live { display: grid; gap: 2px; margin-bottom: 16px; }
+  .live {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 10px; border-radius: var(--r-sm);
+    color: var(--faint); font-size: 14px; transition: all .25s;
+  }
+  .live .ic {
+    width: 21px; height: 21px; flex: none; border-radius: 50%;
+    border: 2px solid currentColor; display: grid; place-items: center;
+    font-size: 11px; font-weight: 700;
+  }
+  .live.done { color: var(--ok); }
+  .live.done .ic { background: var(--ok); border-color: var(--ok); color: #06210f; }
+  .live.done .ic::after { content: "\2713"; }
+  .live.now { color: var(--text); background: var(--surface-2); font-weight: 600; }
+  .live.now .ic { border-color: var(--accent); border-right-color: transparent; animation: spin .8s linear infinite; }
+  .live.skip { color: var(--faint); }
+  .live.skip .ic::after { content: "\2013"; }
+  .live .tail { margin-left: auto; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; }
+  @keyframes spin { to { transform: rotate(360deg) } }
+
+  .bar { height: 8px; background: var(--surface-3); border-radius: 999px; overflow: hidden; }
+  .bar > i {
+    display: block; height: 100%; width: 0; border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent), #ff9f43);
+    transition: width .25s ease-out;
+  }
+  .bar-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 7px; font-size: 13.5px; }
+  .bar-row .pct { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  pre#log {
+    margin: 12px 0 0; max-height: 300px; overflow: auto; font-size: 12px;
+    font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+    background: var(--bg); border: 1px solid var(--line-soft); border-radius: var(--r-sm);
+    padding: 12px; white-space: pre-wrap; word-break: break-word; color: #a9b8ca; line-height: 1.55;
+  }
+  pre#log .err  { color: var(--err); }
+  pre#log .warn { color: var(--accent); }
+
+  /* -------------------------------------------------------------- avisos */
+  .banner {
+    display: none; gap: 13px; align-items: flex-start;
+    padding: 14px 16px; border-radius: var(--r); margin-bottom: 16px; font-size: 14px;
+    background: rgba(255,107,97,.09); border: 1px solid rgba(255,107,97,.4);
+  }
+  .banner.on { display: flex; }
+  .banner.tip { background: rgba(90,169,255,.08); border-color: rgba(90,169,255,.35); }
+  .banner .ic { font-size: 17px; line-height: 1.3; flex: none; }
+  .banner b { display: block; margin-bottom: 3px; }
+  .banner p { color: var(--muted); font-size: 13.5px; }
+  .banner code {
+    background: var(--surface-3); padding: 1px 6px; border-radius: 5px;
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 12.5px; color: var(--text);
+  }
+
+  /* ------------------------------------------------------------ momentos */
+  .clip {
+    border: 1px solid var(--line-soft); border-radius: var(--r); padding: 13px 15px;
+    margin-bottom: 9px; background: var(--surface-2);
+  }
+  .clip-head { display: flex; gap: 11px; align-items: baseline; font-size: 14px; }
+  .clip-head b { color: var(--accent); }
+  .clip-head .at { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .clip-head .score { margin-left: auto; color: var(--faint); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .clip .why  { margin-top: 7px; color: var(--blue); font-size: 13px; }
+  .clip .said { margin-top: 6px; color: var(--muted); font-size: 13px; }
+
+  /* ----------------------------------------------------------- resultados */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 16px; }
+  .result {
+    border: 1px solid var(--line-soft); border-radius: var(--r); overflow: hidden;
+    background: var(--surface-2); display: flex; flex-direction: column;
+  }
+  .result video { width: 100%; display: block; background: #000; aspect-ratio: 9/16; }
+  .result .meta { padding: 12px 13px; display: flex; flex-direction: column; gap: 7px; flex: 1; }
+  .result .hook { color: var(--accent); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+  .result h3 { font-size: 14px; line-height: 1.4; font-weight: 600; }
+  .result .caption { color: var(--muted); font-size: 12.5px; white-space: pre-wrap; max-height: 76px; overflow: auto; }
+  .result .foot { margin-top: auto; display: flex; gap: 7px; }
+  .result .foot button { flex: 1; font-size: 12.5px; padding: 7px; }
+
+  .empty { color: var(--faint); font-size: 13.5px; text-align: center; padding: 22px 10px; }
+  .hint { color: var(--faint); font-size: 12.5px; margin-top: 7px; }
+
+  /* --------------------------------------------------- estilo subtitulos */
+  .style-grid { display: grid; grid-template-columns: 1fr 190px; gap: 18px; align-items: start; }
+  @media (max-width: 640px) { .style-grid { grid-template-columns: 1fr; } }
+  .style-controls > * + * { margin-top: 13px; }
+  .slider-row { display: flex; align-items: center; gap: 11px; }
+  .slider-row input[type=range] { flex: 1; accent-color: var(--accent); }
+  .slider-row output { min-width: 42px; text-align: right; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+  .swatch {
+    width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
+    border: 2px solid var(--line); padding: 0; flex: none;
+  }
+  .swatch.on { border-color: var(--text); transform: scale(1.12); }
+
+  /* Maqueta 9:16 para ver el subtitulo antes de gastar un render. */
+  .phone {
+    position: relative; width: 100%; max-width: 190px; aspect-ratio: 9/16;
+    border-radius: 14px; overflow: hidden; border: 1px solid var(--line);
+    background: linear-gradient(180deg, #253046 0%, #253046 50%, #16203a 50%, #16203a 100%);
+  }
+  .phone .seam { position: absolute; inset: 50% 0 auto; height: 1px; background: rgba(255,255,255,.09); }
+  .phone .card, .phone .sub {
+    position: absolute; left: 6%; right: 6%; text-align: center;
+    font-family: "Arial Black", "Segoe UI", sans-serif; font-weight: 900;
+    line-height: 1.12; color: #fff; text-transform: uppercase;
+    -webkit-text-stroke: 2px #000; paint-order: stroke fill;
+  }
+  .phone .card { top: 46%; transform: translateY(-50%); font-size: 11px; text-transform: none; }
+  .phone .sub span.hot { color: var(--accent); }
+  .phone .hooktag {
+    position: absolute; left: 6%; right: 6%; top: 5%;
+    text-align: center; font-family: "Arial Black", sans-serif; color: #fff;
+    -webkit-text-stroke: 2px #000; font-size: 8px; text-transform: uppercase;
+  }
+
+  /* -------------------------------------------------------- revision */
+  .review {
+    border: 1px solid var(--line-soft); border-radius: var(--r);
+    background: var(--surface-2); margin-bottom: 11px; overflow: hidden;
+    transition: border-color .15s, opacity .15s;
+  }
+  .review.off { opacity: .5; }
+  .review.on { border-color: var(--accent); }
+  .review-head {
+    display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer;
+  }
+  .review-head input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+  .review-head .who { min-width: 0; flex: 1; }
+  .review-head .who b { display: block; font-size: 14px; font-weight: 600; }
+  .review-head .who span { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .review-head .score { color: var(--faint); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .review-body { padding: 0 14px 14px; display: grid; gap: 10px; }
+  .review-body .said {
+    color: var(--muted); font-size: 13px; max-height: 92px; overflow: auto;
+    background: var(--bg); border: 1px solid var(--line-soft);
+    border-radius: var(--r-sm); padding: 9px 11px;
+  }
+  .review-body .why { color: var(--blue); font-size: 12.5px; }
+  .review-body label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .review-body input { font-size: 14px; padding: 9px 11px; }
+  .counted { display: flex; justify-content: space-between; font-size: 12px; color: var(--faint); margin-top: 3px; }
+  .counted .over { color: var(--err); }
+  .review-actions {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--line-soft);
+  }
+  .review-actions .grow { flex: 1 1 200px; }
+  .review-actions .tally { color: var(--muted); font-size: 13px; }
+
+  /* ------------------------------------------------------------- cola */
+  .queue-item {
+    display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+    border: 1px solid var(--line-soft); border-radius: var(--r-sm);
+    margin-bottom: 7px; font-size: 13.5px; background: var(--surface-2);
+  }
+  .queue-item .num {
+    width: 22px; height: 22px; border-radius: 50%; flex: none; display: grid;
+    place-items: center; background: var(--surface-3); color: var(--muted); font-size: 12px;
+  }
+  .queue-item .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .queue-item .tag { color: var(--faint); font-size: 12px; flex: none; }
+
+  [hidden] { display: none !important; }
+
+  /* ------------------------------------------------------------- ayuda */
+  dialog {
+    border: 1px solid var(--line); border-radius: var(--r-lg); padding: 0;
+    background: var(--surface); color: var(--text); max-width: 560px; width: calc(100% - 40px);
+  }
+  dialog::backdrop { background: rgba(4,6,10,.7); backdrop-filter: blur(3px); }
+  /* Con el dialogo abierto, la rueda del raton movia la pagina de detras y se
+     perdia el sitio donde estabas. Se bloquea mientras esta abierto. */
+  body.modal-open { overflow: hidden; }
+  dialog .dlg-head { display: flex; align-items: center; padding: 18px 20px 0; }
+  dialog h2 { font-size: 18px; }
+  dialog .dlg-body { padding: 14px 20px 20px; font-size: 14px; color: var(--muted); }
+  dialog .dlg-body h3 { font-size: 14.5px; color: var(--text); margin: 16px 0 5px; }
+  dialog .dlg-body h3:first-child { margin-top: 0; }
+  dialog .dlg-body ol { margin: 0; padding-left: 20px; }
+  dialog .dlg-body li { margin-bottom: 5px; }
+  dialog .dlg-foot { padding: 0 20px 18px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><span class="mark">&#9889;</span>viral<span>shorts</span></div>
+  <button type="button" class="ghost-link" id="help-open">&#9432;&nbsp; Cómo funciona</button>
+  <div class="pill" id="status"><span class="dot"></span><span id="status-text">listo</span></div>
+</header>
+
+<main>
+
+  <div class="intro" id="intro">
+    <h1>Convierte un podcast en shorts</h1>
+    <p>Pega el enlace de un pódcast largo. La aplicación busca los mejores momentos,
+       los recorta en vertical, les pone subtítulos y te los deja listos para subir.</p>
+  </div>
+
+  <div class="banner tip" id="tip"></div>
+  <div class="banner" id="banner"></div>
+
+  <!-- ==================================================== formulario ==== -->
+  <form id="form" autocomplete="off">
+
+    <!-- ------------------------------------------------ paso 1: podcast -->
+    <section class="step" id="step-1">
+      <div class="step-head"><div class="step-num"><i>1</i></div><h2>El pódcast que quieres cortar</h2></div>
+      <div class="step-body">
+        <p class="lead">Pega el enlace de YouTube del vídeo largo, o elige un archivo de tu ordenador.</p>
+        <div class="with-button">
+          <input type="text" id="podcast" placeholder="https://www.youtube.com/watch?v=..." required>
+          <button type="button" data-browse="podcast">Elegir archivo</button>
+        </div>
+        <div class="preview" id="podcast-preview">
+          <img alt=""><div class="what"><b></b><span></span></div><div class="tick">&#10003;</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------- paso 2: gameplay -->
+    <section class="step" id="step-2">
+      <div class="step-head"><div class="step-num"><i>2</i></div><h2>El vídeo de fondo</h2></div>
+      <div class="step-body">
+        <p class="lead">
+          En la mitad de abajo del short va otro vídeo sin sonido —gameplay, cosas satisfactorias, lo que sea—
+          para que el ojo no se despegue. Si no tienes ninguno, busca en YouTube
+          <a href="https://www.youtube.com/results?search_query=subway+surfers+gameplay+no+copyright" target="_blank" rel="noopener">Subway&nbsp;Surfers</a>,
+          <a href="https://www.youtube.com/results?search_query=minecraft+parkour+gameplay+no+copyright" target="_blank" rel="noopener">Minecraft&nbsp;parkour</a> o
+          <a href="https://www.youtube.com/results?search_query=satisfying+video+no+copyright+1080p" target="_blank" rel="noopener">vídeos satisfactorios</a>
+          sin copyright y pega el enlace aquí.
+        </p>
+        <div class="with-button">
+          <input type="text" id="background" placeholder="https://www.youtube.com/watch?v=..." required>
+          <button type="button" data-browse="background">Elegir archivo</button>
+        </div>
+        <div class="preview" id="background-preview">
+          <img alt=""><div class="what"><b></b><span></span></div><div class="tick">&#10003;</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------ paso 3: ajustes -->
+    <section class="step" id="step-3">
+      <div class="step-head"><div class="step-num"><i>3</i></div><h2>Cómo los quieres</h2></div>
+      <div class="step-body">
+
+        <div class="field">
+          <span class="label">Cuántos shorts sacar</span>
+          <div class="counter">
+            <button type="button" id="clips-down" aria-label="Menos">&minus;</button>
+            <output id="clips-out">3</output>
+            <button type="button" id="clips-up" aria-label="Mas">+</button>
+            <input type="number" id="clips" value="3" min="1" max="20" hidden>
+            <span class="unit" id="clips-unit">shorts del mismo pódcast</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="label">Duración de cada short</span>
+          <div class="choices" id="length-choices">
+            <label class="choice"><input type="radio" name="length" value="short">
+              <b>Cortos</b><em>15-30 s. Se ven enteros, retienen mejor.</em></label>
+            <label class="choice"><input type="radio" name="length" value="normal" checked>
+              <b>Normales</b><em>25-45 s. El punto dulce de Shorts y Reels.</em></label>
+            <label class="choice"><input type="radio" name="length" value="long">
+              <b>Largos</b><em>45-60 s. Para historias que necesitan aire.</em></label>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="label">Calidad frente a velocidad</span>
+          <div class="choices" id="preset-choices">
+            <label class="choice"><input type="radio" name="preset" value="fast">
+              <b>Rápido</b><em>Unos 6 min. Transcripción menos fina.</em></label>
+            <label class="choice"><input type="radio" name="preset" value="balanced" checked>
+              <b>Equilibrado</b><em>Unos 12 min. Lo recomendado.</em></label>
+            <label class="choice"><input type="radio" name="preset" value="best">
+              <b>Máxima calidad</b><em>Unos 25 min. Subtítulos más exactos.</em></label>
+          </div>
+          <p class="hint" id="preset-hint">Tiempos orientativos para un pódcast de unas 2 horas en este ordenador.</p>
+        </div>
+
+        <div class="field">
+          <span class="label">Idioma del pódcast</span>
+          <select id="language">
+            <option value="es" selected>Español</option>
+            <option value="en">Inglés</option>
+            <option value="auto">Detectarlo solo</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <span class="label">Estilo de los subtítulos</span>
+          <div class="style-grid">
+            <div class="style-controls">
+              <div>
+                <label class="label" for="st_color">Color de la palabra que suena</label>
+                <div class="swatches" id="st_swatches">
+                  <button type="button" class="swatch" data-color="#FFF200" style="background:#FFF200" title="Amarillo"></button>
+                  <button type="button" class="swatch" data-color="#00E676" style="background:#00E676" title="Verde"></button>
+                  <button type="button" class="swatch" data-color="#40C4FF" style="background:#40C4FF" title="Azul"></button>
+                  <button type="button" class="swatch" data-color="#FF5252" style="background:#FF5252" title="Rojo"></button>
+                  <button type="button" class="swatch" data-color="#FFFFFF" style="background:#FFFFFF" title="Blanco"></button>
+                  <input type="color" id="st_color" value="#FFF200" class="swatch" style="padding:0;border:2px solid var(--line)">
+                </div>
+              </div>
+              <div>
+                <label class="label" for="st_size">Tamaño de la letra</label>
+                <div class="slider-row">
+                  <input type="range" id="st_size" min="56" max="130" step="2" value="92">
+                  <output id="st_size_out">92</output>
+                </div>
+              </div>
+              <div>
+                <label class="label" for="st_pos">Altura en pantalla</label>
+                <div class="slider-row">
+                  <input type="range" id="st_pos" min="10" max="70" step="1" value="30">
+                  <output id="st_pos_out">30%</output>
+                </div>
+              </div>
+              <div>
+                <label class="label" for="st_words">Palabras por línea</label>
+                <div class="slider-row">
+                  <input type="range" id="st_words" min="1" max="6" step="1" value="3">
+                  <output id="st_words_out">3</output>
+                </div>
+              </div>
+              <div>
+                <label class="label" for="st_font">Fuente</label>
+                <select id="st_font">
+                  <option value="Arial Black" selected>Arial Black — la de TikTok</option>
+                  <option value="Impact">Impact</option>
+                  <option value="Montserrat ExtraBold">Montserrat ExtraBold</option>
+                  <option value="Anton">Anton</option>
+                  <option value="Bebas Neue">Bebas Neue</option>
+                  <option value="Verdana">Verdana</option>
+                </select>
+                <p class="hint">Tiene que estar instalada en Windows, no basta con tener el archivo suelto.</p>
+              </div>
+            </div>
+            <div>
+              <div class="phone" id="phone">
+                <div class="seam"></div>
+                <div class="hooktag" id="ph_hook">¿POR QUÉ NADIE LO DICE?</div>
+                <div class="sub" id="ph_sub"></div>
+              </div>
+              <p class="hint" style="text-align:center">Vista aproximada</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- --------------------------------------------------- avanzado -->
+        <details class="adv" id="adv">
+          <summary>Ajustes avanzados</summary>
+          <div class="adv-body">
+
+            <div class="toggles">
+              <label class="toggle">
+                <input type="checkbox" id="llm" checked><span class="switch"></span>
+                <span class="txt"><b>Que Claude elija y titule</b>
+                  <em>Lee la transcripción, escoge los momentos con más gancho y <b>redacta</b> título, descripción y hashtags. Necesita una clave de API de Anthropic. Si lo apagas sigue habiendo textos, pero <b>extraídos</b>: se usa la mejor frase que ya dice el invitado en vez de escribir una nueva.</em></span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" id="reframe" checked><span class="switch"></span>
+                <span class="txt"><b>Seguir la cara</b>
+                  <em>El encuadre se mueve hacia quien habla en vez de recortar siempre por el centro.</em></span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" id="jumpcuts" checked><span class="switch"></span>
+                <span class="txt"><b>Quitar los silencios</b>
+                  <em>Corta las pausas largas para que el clip vaya más rápido.</em></span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" id="zoom" checked><span class="switch"></span>
+                <span class="txt"><b>Zoom lento</b>
+                  <em>Un acercamiento suave y continuo para que el plano no se quede muerto.</em></span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" id="censor" checked><span class="switch"></span>
+                <span class="txt"><b>Tapar las palabrotas</b>
+                  <em>En los subtítulos, «puta» sale como «p#ta» y «gilipollas» como «gilip#llas». Se sigue leyendo igual, pero el texto deja de ser literal para los filtros de las plataformas. El audio no se toca.</em></span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" id="title_card" checked><span class="switch"></span>
+                <span class="txt"><b>Tarjeta de contexto al empezar</b>
+                  <em>Los primeros 2,5 segundos aparece arriba el título del clip, como en TikTok, y luego desaparece. Es lo que hace que quien llega de golpe entienda de qué se habla.</em></span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" id="context" checked><span class="switch"></span>
+                <span class="txt"><b>Empezar donde empieza el tema</b>
+                  <em>Busca dónde arranca cada conversación y evita los recortes que empiezan a media frase o en un «y entonces eso…». Si lo apagas, se elige solo por lo más rebobinado.</em></span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" id="prescan" checked><span class="switch"></span>
+                <span class="txt"><b>Búsqueda rápida de momentos</b>
+                  <em>Localiza primero las zonas calientes y solo transcribe esas. Sin esto, un pódcast de 3 h tarda casi 2 horas en vez de 10 minutos. Déjalo puesto.</em></span>
+              </label>
+            </div>
+
+            <div class="row">
+              <div class="field">
+                <span class="label">Duración mínima (s)</span>
+                <input type="number" id="min_duration" value="25" min="5" max="180">
+              </div>
+              <div class="field">
+                <span class="label">Duración máxima (s)</span>
+                <input type="number" id="max_duration" value="45" min="5" max="180">
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="field">
+                <span class="label">Ignorar el principio (s)</span>
+                <input type="number" id="head_skip" value="60" min="0">
+              </div>
+              <div class="field">
+                <span class="label">Ignorar el final (s)</span>
+                <input type="number" id="tail_skip" value="30" min="0">
+              </div>
+            </div>
+            <p class="hint">Se salta la intro y la despedida, donde casi nunca está el mejor momento.</p>
+
+            <div class="row">
+              <div class="field">
+                <span class="label">Modelo de transcripción</span>
+                <select id="model">
+                  <option value="tiny">tiny &mdash; volando, con erratas</option>
+                  <option value="small">small &mdash; rápido</option>
+                  <option value="medium" selected>medium &mdash; recomendado</option>
+                  <option value="large-v3">large-v3 &mdash; el mejor, muy lento sin GPU</option>
+                </select>
+              </div>
+              <div class="field">
+                <span class="label">Precisión de la escucha</span>
+                <select id="beam">
+                  <option value="1" selected>Rápida (greedy)</option>
+                  <option value="3">Media</option>
+                  <option value="5">Máxima</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field">
+              <span class="label">Zonas del pódcast que se examinan</span>
+              <select id="regions">
+                <option value="">Automático (según cuántos shorts pidas)</option>
+                <option value="8">8 &mdash; más rápido, menos variedad</option>
+                <option value="16">16 &mdash; más donde elegir</option>
+                <option value="24">24 &mdash; exprimir el pódcast entero</option>
+              </select>
+            </div>
+
+            <div class="row">
+              <div class="field">
+                <span class="label">Calidad de la descarga</span>
+                <select id="st_height">
+                  <option value="1080" selected>1080p &mdash; la mejor imagen</option>
+                  <option value="720">720p &mdash; se descarga en la mitad de tiempo</option>
+                  <option value="480">480p &mdash; solo si tu conexión va justa</option>
+                </select>
+              </div>
+              <div class="field">
+                <span class="label">Shorts a la vez</span>
+                <select id="st_workers">
+                  <option value="0" selected>Automático (según tu procesador)</option>
+                  <option value="1">Uno &mdash; el ordenador se queda libre</option>
+                  <option value="2">Dos</option>
+                  <option value="3">Tres &mdash; solo con muchos núcleos</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field">
+              <span class="label">Codificar con la tarjeta gráfica</span>
+              <select id="st_encoder">
+                <option value="auto" selected>Si la hay (NVIDIA, Intel o AMD)</option>
+                <option value="off">No, usar solo el procesador</option>
+              </select>
+              <p class="hint">Con GPU el montaje va varias veces más rápido; los archivos salen algo más grandes.</p>
+            </div>
+
+            <div class="field">
+              <span class="label">Carpeta donde se guardan</span>
+              <div class="with-button">
+                <input type="text" id="output" value="output">
+                <button type="button" data-browse="output" data-kind="folder">Elegir carpeta</button>
+              </div>
+            </div>
+
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- --------------------------------------------------------- lanzar -->
+    <div class="launch">
+      <button type="submit" class="primary big" id="run">Generar mis shorts</button>
+      <div class="aside">
+        <button type="button" id="review">Buscar y revisar antes de montar</button>
+        <button type="button" class="danger" id="stop" disabled>Detener</button>
+        <button type="button" id="clear">Empezar de nuevo</button>
+        <button type="button" id="reveal">Abrir carpeta</button>
+      </div>
+      <p class="eta" id="eta"></p>
+    </div>
+  </form>
+
+  <!-- ========================================================= cola ===== -->
+  <section class="panel" id="queue-panel" hidden>
+    <h2>En cola</h2>
+    <div id="queue-list"></div>
+    <div class="review-actions" style="margin-top:11px;padding-top:11px">
+      <span class="tally grow">Se montan uno detrás de otro, sin pisarse.</span>
+      <button type="button" id="queue-clear">Vaciar la cola</button>
+    </div>
+  </section>
+
+  <!-- ===================================================== progreso ===== -->
+  <section class="panel" id="progress-panel" hidden>
+    <h2>En marcha</h2>
+    <div class="steps-live" id="steps-live"></div>
+    <div class="bar-row">
+      <span id="stage-label">Preparando</span>
+      <span class="pct" id="pct"></span>
+    </div>
+    <div class="bar"><i id="bar"></i></div>
+    <details class="adv" style="margin-top:14px">
+      <summary>Ver el detalle técnico</summary>
+      <pre id="log"></pre>
+    </details>
+  </section>
+
+  <!-- ===================================================== momentos ===== -->
+  <section class="panel" id="clips-panel" hidden>
+    <h2>Momentos elegidos</h2>
+    <div id="clips-list"></div>
+  </section>
+
+  <!-- ====================================================== revision ==== -->
+  <section class="panel" id="review-panel" hidden>
+    <h2>Elige cuáles se montan</h2>
+    <p class="lead" style="margin-bottom:14px">
+      Estos son los momentos que ha encontrado, ordenados por hora del pódcast.
+      Desmarca los que no te convenzan y corrige el título o el gancho si hace falta:
+      solo se renderizan los que dejes marcados.
+    </p>
+    <div id="review-list"></div>
+    <div class="review-actions">
+      <span class="tally grow" id="review-tally"></span>
+      <button type="button" id="review-save">Guardar cambios</button>
+      <button type="button" class="primary" id="review-render">Montar los marcados</button>
+    </div>
+  </section>
+
+  <!-- ==================================================== resultados ==== -->
+  <section class="panel" id="results-panel" hidden>
+    <h2>Tus shorts</h2>
+    <div class="grid" id="results"></div>
+  </section>
+
+</main>
+
+<!-- ========================================================= ayuda ====== -->
+<dialog id="help">
+  <div class="dlg-head"><h2>Cómo funciona</h2></div>
+  <div class="dlg-body">
+    <h3>Lo que hace</h3>
+    <ol>
+      <li>Descarga el pódcast y el vídeo de fondo.</li>
+      <li>Mira qué partes rebobina más la gente en YouTube y dónde sube la energía del audio.</li>
+      <li>Transcribe solo esas zonas y elige los mejores momentos.</li>
+      <li>Recorta en vertical siguiendo la cara, quita silencios y quema los subtítulos.</li>
+    </ol>
+    <h3>Lo que necesitas</h3>
+    <ol>
+      <li>Un enlace de YouTube (o un archivo) del pódcast.</li>
+      <li>Otro vídeo cualquiera para el fondo.</li>
+      <li>Paciencia: entre 6 y 25 minutos según la calidad que elijas.</li>
+    </ol>
+    <h3>¿Hace falta Claude?</h3>
+    <p>No. <b>Elegir los momentos</b> funciona sin él: se usa el «most replayed»
+       de YouTube y la energía del audio, que son señales muy buenas. Y los
+       <b>títulos, ganchos y hashtags</b> también se generan solos, extrayendo la
+       mejor frase que ya dice el invitado.</p>
+    <p style="margin-top:8px">Con Claude activado esos textos están
+       <i>redactados</i> en vez de <i>recortados</i>, que se nota. Para eso hace
+       falta una clave de API de Anthropic en la variable de entorno
+       <code>ANTHROPIC_API_KEY</code>.</p>
+    <h3>Sobre los derechos</h3>
+    <p>Montar un pódcast ajeno con gameplay ajeno y subirlo puede acarrear
+       reclamaciones de Content ID. Con contenido propio o con permiso, sin problema.</p>
+  </div>
+  <div class="dlg-foot"><button type="button" class="primary" id="help-close">Entendido</button></div>
+</dialog>
+
+<script>
+const TOKEN = "__TOKEN__";
+const $ = (id) => document.getElementById(id);
+
+const FIELDS = ["podcast", "background", "output", "clips", "language",
+                "min_duration", "max_duration", "head_skip", "tail_skip",
+                "model", "beam", "regions"];
+const FLAGS  = ["llm", "reframe", "jumpcuts", "zoom", "prescan",
+                "title_card", "context", "censor"];
+const RADIOS = ["length", "preset"];
+// Estilo de subtitulos: id del control -> clave que entiende el servidor.
+const STYLE  = { st_color: "color_active", st_size: "font_size",
+                 st_pos: "position", st_words: "words", st_font: "font_name",
+                 st_height: "max_height", st_workers: "workers",
+                 st_encoder: "encoder" };
+// Los tres ultimos no tocan el aspecto sino la velocidad, pero viajan por el
+// mismo camino: son ajustes del pipeline que la pagina puede cambiar.
+const LOOK   = ["st_color", "st_size", "st_pos", "st_words", "st_font"];
+
+// ===========================================================================
+// Presets: traducen una eleccion humana a los parametros tecnicos
+// ===========================================================================
+const LENGTHS = {
+  short:  { min_duration: 15, max_duration: 30 },
+  normal: { min_duration: 25, max_duration: 45 },
+  long:   { min_duration: 45, max_duration: 60 },
+};
+const PRESETS = {
+  fast:     { model: "small",  beam: "1", regions: "8",  minutes: "unos 6 minutos" },
+  balanced: { model: "medium", beam: "1", regions: "",   minutes: "unos 12 minutos" },
+  best:     { model: "medium", beam: "5", regions: "16", minutes: "unos 25 minutos" },
+};
+
+function radio(name)      { const el = document.querySelector(`input[name="${name}"]:checked`); return el ? el.value : ""; }
+function paintChoices() {
+  document.querySelectorAll(".choice").forEach(label =>
+    label.classList.toggle("on", label.querySelector("input").checked));
+}
+function setRadio(name, v) { const el = document.querySelector(`input[name="${name}"][value="${v}"]`); if (el) el.checked = true; }
+
+/** Vuelca el preset elegido sobre los campos avanzados. */
+function applyPresets() {
+  const length = LENGTHS[radio("length")];
+  if (length) {
+    $("min_duration").value = length.min_duration;
+    $("max_duration").value = length.max_duration;
+  }
+  const preset = PRESETS[radio("preset")];
+  if (preset) {
+    $("model").value   = preset.model;
+    $("beam").value    = preset.beam;
+    $("regions").value = preset.regions;
+  }
+  updateEta();
+}
+
+/** Si el usuario toca los campos a mano, el preset deja de mandar. */
+function presetFromFields() {
+  const min = +$("min_duration").value, max = +$("max_duration").value;
+  const match = Object.entries(LENGTHS)
+    .find(([, v]) => v.min_duration === min && v.max_duration === max);
+  document.querySelectorAll('input[name="length"]').forEach(r => r.checked = false);
+  if (match) setRadio("length", match[0]);
+
+  const found = Object.entries(PRESETS).find(([, v]) =>
+    v.model === $("model").value && v.beam === $("beam").value && v.regions === $("regions").value);
+  document.querySelectorAll('input[name="preset"]').forEach(r => r.checked = false);
+  if (found) setRadio("preset", found[0]);
+  paintChoices();
+  updateEta();
+}
+
+function updateEta() {
+  const preset = PRESETS[radio("preset")];
+  const n = +$("clips").value || 1;
+  const label = preset ? preset.minutes : "un rato";
+  $("eta").innerHTML = `Tardará <b>${label}</b> con un pódcast de unas 2 horas, ` +
+                       `más aproximadamente medio minuto por cada uno de los ${n} shorts.`;
+}
+
+// ===========================================================================
+// Persistencia
+// ===========================================================================
+function saveForm() {
+  const data = {};
+  FIELDS.forEach(k => data[k] = $(k).value);
+  FLAGS.forEach(k  => data[k] = $(k).checked);
+  RADIOS.forEach(k => data[k] = radio(k));
+  Object.keys(STYLE).forEach(k => data[k] = $(k).value);
+  data.adv = $("adv").open;
+  try { localStorage.setItem("viralshorts.form", JSON.stringify(data)); } catch (e) {}
+}
+function loadForm() {
+  let data = {};
+  try { data = JSON.parse(localStorage.getItem("viralshorts.form") || "{}"); } catch (e) {}
+  FIELDS.forEach(k => { if (data[k] !== undefined) $(k).value = data[k]; });
+  FLAGS.forEach(k  => { if (data[k] !== undefined) $(k).checked = data[k]; });
+  RADIOS.forEach(k => { if (data[k]) setRadio(k, data[k]); });
+  Object.keys(STYLE).forEach(k => { if (data[k]) $(k).value = data[k]; });
+  if (data.adv) $("adv").open = true;
+  $("clips-out").textContent = $("clips").value;
+}
+
+// ===========================================================================
+// Estilo de subtitulos: controles + maqueta 9:16
+// ===========================================================================
+function styleValues() {
+  const out = {};
+  Object.entries(STYLE).forEach(([id, key]) => {
+    let value = $(id).value;
+    if (key === "position") value = (+value) / 100;     // el servidor lo quiere 0..1
+    out[key] = value;
+  });
+  return out;
+}
+
+/** Pinta la maqueta con los valores actuales, sin gastar un render. */
+function paintPhone() {
+  const size = +$("st_size").value;
+  const position = +$("st_pos").value;
+  const words = +$("st_words").value;
+  const color = $("st_color").value;
+  const font = $("st_font").value;
+
+  $("st_size_out").textContent = size;
+  $("st_pos_out").textContent = position + "%";
+  $("st_words_out").textContent = words;
+  document.querySelectorAll("#st_swatches .swatch[data-color]").forEach(button =>
+    button.classList.toggle("on", button.dataset.color.toUpperCase() === color.toUpperCase()));
+
+  const sample = ["ESTO", "NO", "TE", "LO", "HABÍAN", "CONTADO"];
+  const line = sample.slice(0, Math.max(1, words));
+  const hot = Math.min(1, line.length - 1);
+  // La maqueta mide 190 px de ancho y el video 1080: el mismo factor para el
+  // cuerpo de letra hace que lo que se ve aqui se parezca a lo que sale.
+  const scale = 190 / 1080;
+  const sub = $("ph_sub");
+  sub.style.fontFamily = `"${font}", "Arial Black", sans-serif`;
+  sub.style.fontSize = (size * scale).toFixed(1) + "px";
+  sub.style.bottom = position + "%";
+  sub.innerHTML = line.map((word, i) =>
+    `<span class="${i === hot ? "hot" : ""}" ${i === hot ? `style="color:${color}"` : ""}>${word}</span>`
+  ).join(" ");
+}
+
+// ===========================================================================
+// Estado visual del formulario
+// ===========================================================================
+const YT_ID = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|live\/|shorts\/|embed\/)|youtu\.be\/)([\w-]{11})/;
+
+function refreshPreview(id) {
+  const value = $(id).value.trim();
+  const box   = $(id + "-preview");
+  const card  = $(id === "podcast" ? "step-1" : "step-2");
+  const img   = box.querySelector("img");
+  const title = box.querySelector("b");
+  const sub   = box.querySelector("span");
+
+  card.classList.toggle("filled", value.length > 0);
+  if (!value) { box.classList.remove("on"); return; }
+
+  box.classList.add("on");
+  const match = value.match(YT_ID);
+  if (match) {
+    title.textContent = "Buscando el título…";
+    sub.textContent = value.length > 70 ? value.slice(0, 70) + "…" : value;
+    img.src = `https://img.youtube.com/vi/${match[1]}/mqdefault.jpg`;
+    img.classList.add("on");
+    img.onerror = () => img.classList.remove("on");
+  } else if (/^https?:\/\//i.test(value)) {
+    title.textContent = "Enlace";
+    sub.textContent = value;
+    img.classList.remove("on");
+  } else {
+    title.textContent = "Archivo de tu ordenador";
+    sub.textContent = value.split(/[\\/]/).pop() || value;
+    img.classList.remove("on");
+  }
+  askTitle(id, value);
+}
+
+// ---------------------------------------------------------------------------
+// Titulo real del video: lo pregunta el servidor con yt-dlp, sin descargar
+// ---------------------------------------------------------------------------
+const titleTimers = {};
+
+/** Sustituye "Vídeo de YouTube" por el titulo de verdad, con canal y duracion. */
+function askTitle(id, value) {
+  clearTimeout(titleTimers[id]);
+  // El enlace se pega de golpe pero tambien puede escribirse: sin esta espera
+  // se lanzaria una consulta por cada pulsacion.
+  titleTimers[id] = setTimeout(async () => {
+    if ($(id).value.trim() !== value) return;
+    const box = $(id + "-preview");
+    try {
+      const data = await post("/api/title", { url: value });
+      if ($(id).value.trim() !== value) return;   // ha cambiado mientras tanto
+      if (!data.title) throw new Error("sin titulo");
+      box.querySelector("b").textContent = data.title;
+      const bits = [];
+      if (data.uploader) bits.push(data.uploader);
+      if (data.duration) bits.push(readableTime(data.duration));
+      box.querySelector("span").textContent = bits.join(" · ") || value;
+    } catch (error) {
+      // Sin conexion, vídeo privado o url rara: se deja la etiqueta generica.
+      const label = box.querySelector("b");
+      if (label.textContent === "Buscando el título…") {
+        label.textContent = "Vídeo de YouTube";
+      }
+    }
+  }, 500);
+}
+
+function readableTime(seconds) {
+  const total = Math.round(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  return hours ? `${hours} h ${minutes} min` : `${minutes} min`;
+}
+
+function refreshStep3() {
+  // El paso 3 viene con valores por defecto validos, pero marcarlo antes de que
+  // el usuario haya puesto los videos hace pensar que ya esta todo hecho.
+  const ready = $("podcast").value.trim() && $("background").value.trim();
+  $("step-3").classList.toggle("filled", !!ready);
+  $("clips-unit").textContent = (+$("clips").value === 1)
+    ? "short de este pódcast" : "shorts del mismo pódcast";
+}
+
+// ===========================================================================
+// Servidor
+// ===========================================================================
+async function post(path, body) {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-VS-Token": TOKEN },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await response.json().catch(() => ({ ok: false, error: "respuesta ilegible" }));
+  if (!response.ok || data.ok === false) throw new Error(data.error || `HTTP ${response.status}`);
+  return data;
+}
+
+/** Traduce los errores tecnicos a algo accionable. */
+function explain(raw) {
+  const text = String(raw || "");
+  const rules = [
+    [/no se encontro ffmpeg|ffmpeg.*no.*PATH/i,
+     ["Falta ffmpeg", "Es el programa que monta el vídeo. Instálalo con <code>winget install Gyan.FFmpeg</code>, cierra esta ventana y vuelve a abrir la interfaz."]],
+    [/ANTHROPIC_API_KEY|api[_ ]key|authentication|401|credit balance/i,
+     ["Claude no ha podido entrar", "Falta la clave <code>ANTHROPIC_API_KEY</code> o no tiene saldo. Desactiva <b>Que Claude elija y titule</b> en los ajustes avanzados y todo lo demás seguirá funcionando."]],
+    [/carpeta de trabajo.*ocupada|WorkDirBusy|ya hay un proceso|cerrojo/i,
+     ["Ya hay otra ejecución en marcha", "Espera a que termine, o pulsa Detener antes de volver a lanzarla."]],
+    [/Sign in to confirm|bot|cookies|age.?restricted|Private video|unavailable/i,
+     ["YouTube no deja descargar ese vídeo", "Suele pasar con vídeos privados, con restricción de edad, o cuando YouTube pide iniciar sesión. Prueba con otro enlace, o descarga el vídeo a mano y elígelo como archivo."]],
+    [/is not a valid URL|Unsupported URL|no such file|No existe/i,
+     ["Ese enlace o archivo no vale", "Comprueba que el enlace esté completo y que el archivo siga en su sitio."]],
+    [/no devolvio ninguna palabra|audio audible/i,
+     ["No se ha oído nada en el vídeo", "Puede que el vídeo no tenga pista de audio, o que esté en silencio."]],
+    [/ninguna ventana candidata|suficientes frases/i,
+     ["No hay ningún momento que cumpla lo que pides", "Baja la duración mínima, o reduce los segundos que se ignoran al principio y al final."]],
+    [/MemoryError|CUDA|cuDNN|out of memory/i,
+     ["Se ha quedado sin memoria", "Elige el preset <b>Rápido</b>, o baja el modelo de transcripción en los ajustes avanzados."]],
+  ];
+  for (const [pattern, [title, body]] of rules) if (pattern.test(text)) return { title, body, raw: text };
+  return { title: "Algo ha fallado", body: "Abre <b>Ver el detalle técnico</b> en la sección «En marcha» para ver qué ha pasado.", raw: text };
+}
+
+/** Aviso del pipeline (Claude caido, falta una fuente...): no es un error. */
+function showNotice(event) {
+  showBanner($("tip"), event.titulo || "Aviso", escapeHtml(event.texto || ""));
+}
+
+function showBanner(node, title, body) {
+  node.innerHTML = `<div class="ic">${node.id === "tip" ? "ℹ" : "⚠"}</div>
+                    <div><b>${title}</b><p>${body}</p></div>`;
+  node.classList.add("on");
+}
+function clearBanner(node) { node.classList.remove("on"); node.innerHTML = ""; }
+
+// ===========================================================================
+// Fases visibles
+// ===========================================================================
+const STEPS = [
+  { key: "descarga",      label: "Descargar los vídeos" },
+  { key: "analisis",      label: "Buscar dónde están los momentos buenos" },
+  { key: "transcripcion", label: "Escuchar y transcribir" },
+  { key: "claude",        label: "Elegir los mejores y titularlos", optional: true },
+  { key: "render",        label: "Montar los shorts" },
+];
+const STAGE_TO_STEP = { descarga: 0, analisis: 1, transcripcion: 2, claude: 3, metadatos: 3, render: 4 };
+
+function paintSteps(current) {
+  $("steps-live").innerHTML = STEPS.map((step, i) => {
+    let cls = "live";
+    if (current === null)      cls += "";
+    else if (i < current)      cls += " done";
+    else if (i === current)    cls += " now";
+    if (step.optional && !$("llm").checked) cls = "live skip";
+    return `<div class="${cls}"><div class="ic"></div><span>${step.label}</span>
+              <span class="tail">${step.optional && !$("llm").checked ? "omitido" : ""}</span></div>`;
+  }).join("");
+}
+
+// ===========================================================================
+// Lanzar
+// ===========================================================================
+function collect(review) {
+  const form = { review: !!review };
+  FIELDS.forEach(k => form[k] = $(k).value.trim());
+  FLAGS.forEach(k  => form[k] = $(k).checked);
+  form.clips = parseInt(form.clips, 10) || 3;
+  form.style = styleValues();
+  return form;
+}
+
+async function launch(review) {
+  clearBanner($("banner"));
+  const busy = $("status").classList.contains("running");
+  if (!busy) {
+    $("results").innerHTML = "";
+    $("results-panel").hidden = true;
+    $("clips-panel").hidden = true;
+    $("review-panel").hidden = true;
+    $("progress-panel").hidden = false;
+    $("log").textContent = "";
+    paintSteps(0);
+  }
+  try {
+    const answer = await post("/api/run", collect(review));
+    if (answer.encolado) {
+      showBanner($("tip"), "Añadido a la cola",
+        `Va en la posición ${answer.posicion}. Empezará en cuanto termine lo que hay en marcha.`);
+      $("queue-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      $("progress-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  } catch (error) {
+    const nice = explain(error.message);
+    showBanner($("banner"), nice.title, nice.body);
+    if (!busy) $("progress-panel").hidden = true;
+  }
+}
+
+// ===========================================================================
+// Cola
+// ===========================================================================
+function renderQueue(items) {
+  const list = items || [];
+  $("queue-panel").hidden = list.length === 0;
+  $("queue-list").innerHTML = list.map(item => `
+    <div class="queue-item">
+      <div class="num">${item.n}</div>
+      <div class="what">${escapeHtml(shortName(item.podcast))}</div>
+      <div class="tag">${item.revisar ? "para revisar" : item.clips + " shorts"}</div>
+    </div>`).join("");
+}
+
+function shortName(text) {
+  const value = String(text || "");
+  if (/^https?:/i.test(value)) return value.length > 60 ? value.slice(0, 60) + "…" : value;
+  return value.split(/[\\/]/).pop() || value;
+}
+
+// ===========================================================================
+// Revision de los momentos antes de montar
+// ===========================================================================
+let PLAN = null;          // { ruta, clips: [...] }
+
+function renderReview(plan) {
+  PLAN = plan;
+  const clips = (plan && plan.clips) || [];
+  $("review-panel").hidden = clips.length === 0;
+  if (!clips.length) return;
+
+  $("clips-panel").hidden = true;   // lo sustituye este panel, mas util
+  $("review-list").innerHTML = clips.map(clip => `
+    <div class="review ${clip.seleccionado ? "on" : "off"}" data-n="${clip.n}">
+      <label class="review-head">
+        <input type="checkbox" data-role="pick" ${clip.seleccionado ? "checked" : ""}>
+        <span class="who">
+          <b>${escapeHtml(clip.titulo || "Momento " + clip.n)}</b>
+          <span>minuto ${clip.marca} · ${clip.duracion} s</span>
+        </span>
+        <span class="score">nota ${clip.puntuacion}</span>
+      </label>
+      <div class="review-body">
+        ${clip.motivo ? `<p class="why">${escapeHtml(clip.motivo)}</p>` : ""}
+        <p class="said">«${escapeHtml(clip.texto || "")}»</p>
+        <div>
+          <label>Título de la publicación</label>
+          <input type="text" data-role="titulo" value="${escapeAttr(clip.titulo)}" maxlength="120">
+          <div class="counted"><span></span><span data-count="titulo">0/70</span></div>
+        </div>
+        <div>
+          <label>Gancho (el rótulo de los primeros segundos)</label>
+          <input type="text" data-role="gancho" value="${escapeAttr(clip.gancho)}" maxlength="90">
+          <div class="counted"><span></span><span data-count="gancho">0/45</span></div>
+        </div>
+        <div>
+          <label>Hashtags, separados por espacios</label>
+          <input type="text" data-role="hashtags" value="${escapeAttr((clip.hashtags || []).join(" "))}">
+        </div>
+      </div>
+    </div>`).join("");
+
+  $("review-list").querySelectorAll(".review").forEach(card => {
+    const pick = card.querySelector('[data-role="pick"]');
+    pick.addEventListener("change", () => {
+      card.classList.toggle("on", pick.checked);
+      card.classList.toggle("off", !pick.checked);
+      updateTally();
+    });
+    ["titulo", "gancho"].forEach(role => {
+      const input = card.querySelector(`[data-role="${role}"]`);
+      input.addEventListener("input", () => countChars(card, role));
+      countChars(card, role);
+    });
+  });
+  updateTally();
+}
+
+/** Los limites no son caprichosos: mas largo y la plataforma lo corta. */
+function countChars(card, role) {
+  const limits = { titulo: 70, gancho: 45 };
+  const input = card.querySelector(`[data-role="${role}"]`);
+  const label = card.querySelector(`[data-count="${role}"]`);
+  const length = input.value.length;
+  label.textContent = `${length}/${limits[role]}`;
+  label.classList.toggle("over", length > limits[role]);
+}
+
+function updateTally() {
+  const picked = pickedNumbers();
+  $("review-tally").textContent = picked.length
+    ? `${picked.length} de ${PLAN.clips.length} marcados para montar.`
+    : "No has marcado ninguno.";
+  $("review-render").disabled = picked.length === 0;
+}
+
+function pickedNumbers() {
+  return [...$("review-list").querySelectorAll(".review")]
+    .filter(card => card.querySelector('[data-role="pick"]').checked)
+    .map(card => +card.dataset.n);
+}
+
+function reviewChanges() {
+  return [...$("review-list").querySelectorAll(".review")].map(card => ({
+    n: +card.dataset.n,
+    seleccionado: card.querySelector('[data-role="pick"]').checked,
+    publicacion: {
+      title: card.querySelector('[data-role="titulo"]').value.trim(),
+      hook: card.querySelector('[data-role="gancho"]').value.trim(),
+      hashtags: card.querySelector('[data-role="hashtags"]').value
+                    .split(/[\s,]+/).filter(Boolean),
+    },
+  }));
+}
+
+async function saveReview(quiet) {
+  if (!PLAN) return false;
+  try {
+    const answer = await post("/api/plan/save", {
+      ruta: PLAN.ruta, clips: reviewChanges(), style: styleValues(),
+    });
+    PLAN = { ruta: PLAN.ruta, clips: answer.clips };
+    if (!quiet) showBanner($("tip"), "Cambios guardados",
+      "Los títulos y la selección quedan guardados en el plan.");
+    return true;
+  } catch (error) {
+    showBanner($("banner"), "No se han podido guardar los cambios",
+               escapeHtml(error.message));
+    return false;
+  }
+}
+
+async function renderFromPlan(only) {
+  if (!PLAN) return;
+  if (!(await saveReview(true))) return;
+  clearBanner($("banner"));
+  try {
+    const answer = await post("/api/plan/render", {
+      ruta: PLAN.ruta, only, output: $("output").value.trim(),
+      podcast: $("podcast").value.trim(),
+    });
+    if (answer.encolado) {
+      showBanner($("tip"), "Añadido a la cola",
+        `Se montará en cuanto termine lo que hay en marcha (posición ${answer.posicion}).`);
+    } else {
+      $("progress-panel").hidden = false;
+      $("progress-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  } catch (error) {
+    const nice = explain(error.message);
+    showBanner($("banner"), nice.title, nice.body);
+  }
+}
+
+// ===========================================================================
+// Cableado
+// ===========================================================================
+loadForm();
+refreshPreview("podcast");
+refreshPreview("background");
+refreshStep3();
+paintChoices();
+updateEta();
+paintSteps(null);
+paintPhone();
+
+["podcast", "background"].forEach(id =>
+  $(id).addEventListener("input", () => { refreshPreview(id); refreshStep3(); saveForm(); }));
+
+document.querySelectorAll('input[name="length"], input[name="preset"]').forEach(radio =>
+  radio.addEventListener("change", () => { applyPresets(); paintChoices(); saveForm(); }));
+
+["min_duration", "max_duration", "model", "beam", "regions"].forEach(id =>
+  $(id).addEventListener("change", () => { presetFromFields(); saveForm(); }));
+
+$("llm").addEventListener("change", () => paintSteps(null));
+
+function bumpClips(delta) {
+  const input = $("clips");
+  input.value = Math.min(20, Math.max(1, (+input.value || 3) + delta));
+  $("clips-out").textContent = input.value;
+  refreshStep3();
+  updateEta();
+  saveForm();
+}
+$("clips-up").addEventListener("click", () => bumpClips(1));
+$("clips-down").addEventListener("click", () => bumpClips(-1));
+
+document.addEventListener("change", saveForm);
+
+document.querySelectorAll("[data-browse]").forEach(button => {
+  button.addEventListener("click", async () => {
+    const target = button.dataset.browse;
+    button.disabled = true;
+    try {
+      const { path } = await post("/api/browse", { kind: button.dataset.kind || "file" });
+      if (path) { $(target).value = path; refreshPreview(target); saveForm(); }
+    } catch (error) {
+      showBanner($("banner"), "No se ha podido abrir el explorador",
+                 "Pega la ruta del archivo a mano en la casilla.");
+    } finally {
+      button.disabled = false;
+    }
+  });
+});
+
+$("form").addEventListener("submit", (event) => { event.preventDefault(); launch(false); });
+$("review").addEventListener("click", () => launch(true));
+$("stop").addEventListener("click", () => post("/api/stop").catch(() => {}));
+$("queue-clear").addEventListener("click", () => post("/api/queue/clear").catch(() => {}));
+$("review-save").addEventListener("click", () => saveReview(false));
+$("review-render").addEventListener("click", () => renderFromPlan(pickedNumbers()));
+
+// -- estilo de subtitulos y velocidad ---------------------------------------
+Object.keys(STYLE).forEach(id =>
+  $(id).addEventListener("input", () => {
+    if (LOOK.includes(id)) paintPhone();
+    saveForm();
+  }));
+document.querySelectorAll("#st_swatches .swatch[data-color]").forEach(button =>
+  button.addEventListener("click", () => {
+    $("st_color").value = button.dataset.color;
+    paintPhone();
+    saveForm();
+  }));
+$("reveal").addEventListener("click", () => fetch("/api/reveal"));
+function openHelp() {
+  $("help").showModal();
+  document.body.classList.add("modal-open");
+}
+function closeHelp() {
+  // Se suelta el bloqueo AQUI y no solo en el evento `close`: el navegador
+  // dispara ese evento de forma asincrona, asi que dejarlo como unica via
+  // significa un instante con la pagina todavia bloqueada tras cerrar.
+  document.body.classList.remove("modal-open");
+  $("help").close();
+}
+
+$("help-open").addEventListener("click", openHelp);
+$("help-close").addEventListener("click", closeHelp);
+// La tecla Escape cierra el dialogo por su cuenta, sin pasar por closeHelp:
+// este evento es la red que recoge ese caso.
+$("help").addEventListener("close", () => document.body.classList.remove("modal-open"));
+// Clic fuera de la tarjeta = cerrar. El propio <dialog> ocupa toda la pantalla,
+// asi que un clic en el fondo llega con target = el dialogo.
+$("help").addEventListener("click", (event) => { if (event.target === $("help")) closeHelp(); });
+
+// ---------------------------------------------------------------------------
+// Empezar de nuevo: deja la pagina como recien abierta, sin tocar los ajustes
+// ---------------------------------------------------------------------------
+$("clear").addEventListener("click", () => {
+  $("podcast").value = "";
+  $("background").value = "";
+  refreshPreview("podcast");
+  refreshPreview("background");
+  refreshStep3();
+  saveForm();
+
+  $("results").innerHTML = "";
+  $("clips-list").innerHTML = "";
+  $("review-list").innerHTML = "";
+  $("log").textContent = "";
+  $("results-panel").hidden = true;
+  $("clips-panel").hidden = true;
+  $("review-panel").hidden = true;
+  $("progress-panel").hidden = true;
+  PLAN = null;
+  clearBanner($("banner"));
+  clearBanner($("tip"));
+  lastError = "";
+  paintSteps(null);
+  $("bar").style.width = "0";
+  $("pct").textContent = "";
+  $("stage-label").textContent = "Preparando";
+  $("podcast").focus();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
+// ===========================================================================
+// Estado del trabajo
+// ===========================================================================
+function setStatus(status) {
+  const labels = { idle: "listo", running: "trabajando", done: "terminado",
+                   error: "algo ha fallado", stopped: "detenido" };
+  $("status").className = "pill " + status;
+  $("status-text").textContent = labels[status] || status;
+
+  const busy = status === "running";
+  $("stop").disabled = !busy;
+  $("clear").disabled = busy;
+  // Estando ocupado los botones siguen valiendo: lo que lances se pone en cola
+  // en vez de pelearse por la carpeta de trabajo.
+  $("run").textContent = busy ? "Añadir a la cola" : "Generar mis shorts";
+  $("review").textContent = busy
+    ? "Añadir a la cola para revisar" : "Buscar y revisar antes de montar";
+  if (!busy) { $("bar").style.width = "0"; $("pct").textContent = ""; }
+  if (status === "done") { paintSteps(STEPS.length); $("stage-label").textContent = "Terminado"; }
+}
+
+let lastError = "";
+
+function appendLog(line) {
+  const log = $("log");
+  const failure = line.match(/ERROR\s+\S+\s+(.*)$/);
+  if (failure) lastError = failure[1];
+  const span = document.createElement("span");
+  if (/ERROR|Traceback|\bXX\b/.test(line)) span.className = "err";
+  else if (/WARNING|aviso/i.test(line)) span.className = "warn";
+  span.textContent = line + "\n";
+  log.appendChild(span);
+  log.scrollTop = log.scrollHeight;
+}
+
+function renderClips(clips) {
+  $("clips-panel").hidden = !clips.length;
+  if (!clips.length) return;
+  $("clips-list").innerHTML = clips.map(clip => `
+    <div class="clip">
+      <div class="clip-head">
+        <b>#${clip.n}</b>
+        <span class="at">minuto ${clip.marca} &middot; ${clip.duracion} s</span>
+        <span class="score">nota ${clip.puntuacion}</span>
+      </div>
+      ${clip.motivo ? `<p class="why">${escapeHtml(clip.motivo)}</p>` : ""}
+      <p class="said">&laquo;${escapeHtml(clip.texto || "")}&raquo;</p>
+    </div>`).join("");
+}
+
+function addResult(item) {
+  $("results-panel").hidden = false;
+  const card = document.createElement("div");
+  card.className = "result";
+  card.innerHTML = `
+    <video controls preload="metadata" src="/api/video?f=${encodeURIComponent(item.fichero)}"></video>
+    <div class="meta">
+      ${item.gancho ? `<div class="hook">${escapeHtml(item.gancho)}</div>` : ""}
+      <h3>${escapeHtml(item.titulo || item.fichero)}</h3>
+      ${item.pie ? `<div class="caption">${escapeHtml(item.pie)}</div>` : ""}
+      <div class="foot"></div>
+    </div>`;
+  const foot = card.querySelector(".foot");
+  if (item.pie || item.titulo) {
+    const copy = document.createElement("button");
+    copy.textContent = "Copiar texto";
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(`${item.titulo || ""}\n\n${item.pie || ""}`.trim());
+        copy.textContent = "✓ Copiado";
+        setTimeout(() => copy.textContent = "Copiar texto", 1600);
+      } catch (e) { copy.textContent = "No se pudo copiar"; }
+    });
+    foot.appendChild(copy);
+  }
+  // Rehacer solo este short: cambia el título o el gancho arriba y vuelve a
+  // montarse en un minuto, sin repetir descarga ni transcripción.
+  if (PLAN && item.n) {
+    const again = document.createElement("button");
+    again.textContent = "Rehacer este";
+    again.addEventListener("click", async () => {
+      again.disabled = true;
+      again.textContent = "Montando…";
+      await renderFromPlan([item.n]);
+      again.disabled = false;
+      again.textContent = "Rehacer este";
+    });
+    foot.appendChild(again);
+  }
+
+  const open = document.createElement("button");
+  open.textContent = "Ver carpeta";
+  open.addEventListener("click", () => fetch("/api/reveal"));
+  foot.appendChild(open);
+  $("results").appendChild(card);
+}
+
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+/** Igual, pero para meter el texto dentro de un atributo value="...". */
+function escapeAttr(text) {
+  return escapeHtml(text || "").replace(/"/g, "&quot;");
+}
+
+// ===========================================================================
+// Eventos del servidor
+// ===========================================================================
+const events = new EventSource("/api/events?t=" + encodeURIComponent(TOKEN));
+
+events.onmessage = (message) => {
+  const event = JSON.parse(message.data);
+  switch (event.type) {
+    case "hello":
+      setStatus(event.status);
+      if (event.log && event.log.length) {
+        $("progress-panel").hidden = false;
+        $("log").textContent = "";
+        event.log.forEach(appendLog);
+      }
+      renderQueue(event.queue || []);
+      if (event.plan) renderReview(event.plan);
+      renderClips(event.clips || []);
+      (event.notices || []).forEach(showNotice);
+      (event.results || []).forEach(addResult);
+      if (!(event.results || []).length) loadExisting();
+      if (event.env && event.env.font_ok === false) {
+        showBanner($("banner"), `Falta la fuente «${event.env.font}»`,
+          "Los subtítulos saldrán con otra letra cualquiera. Instálala en Windows " +
+          "(clic derecho en el .ttf → Instalar para todos los usuarios) o elige " +
+          `<b>${event.env.font_alternative || "Arial"}</b> en «Estilo de los subtítulos».`);
+      }
+      if (event.env && event.env.has_api_key === false && $("llm").checked) {
+        showBanner($("tip"), "Puede que Claude no funcione aquí",
+          "No se ha encontrado la variable <code>ANTHROPIC_API_KEY</code>. Si tampoco has " +
+          "iniciado sesión con <code>ant auth login</code>, apaga «Que Claude elija y titule» " +
+          "en los ajustes avanzados: los shorts se siguen haciendo igual, y los títulos y " +
+          "hashtags se sacan de las propias frases del clip.");
+      }
+      if (event.env && event.env.ffmpeg === false) {
+        showBanner($("banner"), "Falta ffmpeg",
+          "Es el programa que monta el vídeo. Instálalo con <code>winget install Gyan.FFmpeg</code>, " +
+          "cierra esta ventana y vuelve a abrir la interfaz.");
+      }
+      break;
+
+    case "job":
+      setStatus(event.status);
+      if (event.status === "running") { lastError = ""; $("log").textContent = ""; paintSteps(0); }
+      if (event.status === "error") {
+        const nice = explain(lastError);
+        showBanner($("banner"), nice.title, nice.body);
+      }
+      break;
+
+    case "log": appendLog(event.line); break;
+
+    case "stage": {
+      const index = STAGE_TO_STEP[event.stage];
+      if (index !== undefined) paintSteps(index);
+      $("stage-label").textContent = event.label || event.stage;
+      break;
+    }
+
+    case "progress":
+      $("bar").style.width = event.pct + "%";
+      $("pct").textContent = event.pct.toFixed(0) + "%";
+      break;
+
+    case "clips":       renderClips(event.clips || []); break;
+    case "queue":       renderQueue(event.queue || []); break;
+    case "aviso":       showNotice(event); break;
+    case "plan":
+      renderReview({ ruta: event.ruta, clips: event.clips || [] });
+      $("stage-label").textContent = "Momentos listos para revisar";
+      $("review-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+      break;
+    case "clip_done":   addResult(event); break;
+    case "clip_failed":
+      showBanner($("banner"), `El short ${event.n} no ha salido`,
+                 escapeHtml(event.error || "") + " Los demás siguen adelante.");
+      break;
+    case "finished":
+      $("stage-label").textContent = `Listo: ${event.ok} de ${event.total} shorts`;
+      $("bar").style.width = "100%";
+      $("pct").textContent = "100%";
+      break;
+  }
+};
+
+events.onerror = () => {
+  $("status").className = "pill error";
+  $("status-text").textContent = "sin conexión";
+};
+
+async function loadExisting() {
+  try {
+    const { results } = await (await fetch("/api/existing")).json();
+    results.forEach(addResult);
+  } catch (error) {}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+viralshorts - como probarlo
+===========================
+
+1. Descomprime esta carpeta entera en el escritorio.
+2. Doble clic en   INSTALAR.bat
+   Se instala solo (Python si falta, dependencias y ffmpeg portable).
+   La primera vez tarda unos minutos.
+3. Al terminar se abre la interfaz en el navegador.
+
+A partir de ahi, para volver a abrirlo: doble clic en  "Abrir interfaz.bat"
+
+Notas
+-----
+- Windows puede avisar de "editor desconocido": pulsa "Mas informacion" > "Ejecutar de todas formas".
+- La primera transcripcion descarga el modelo de Whisper (unos cientos de MB). Es normal que tarde.
+- Titulos y hashtags con IA son opcionales: sin la clave de Anthropic el programa funciona igual.

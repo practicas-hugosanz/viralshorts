@@ -1,0 +1,22 @@
+# Descargas, transcripciones cacheadas y ficheros intermedios del render
+work/
+output/
+
+# Videos y subtitulos sueltos
+*.mp4
+*.mkv
+*.webm
+*.m4a
+*.ass
+*.info.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Portadas y hojas de publicacion generadas
+*.jpg
+publicaciones.csv

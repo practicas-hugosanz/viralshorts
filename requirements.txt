@@ -1,0 +1,21 @@
+# Nucleo del pipeline
+yt-dlp>=2024.1.0          # descarga + heatmap "most replayed" de YouTube
+faster-whisper>=1.0.0     # transcripcion con marca de tiempo por palabra
+numpy>=1.24               # curva de energia del audio
+PyYAML>=6.0               # config.yaml
+
+# Reencuadre siguiendo la cara del que habla.
+# Opcional: sin esto el recorte es centrado, el pipeline sigue funcionando.
+opencv-python-headless>=4.8
+
+# Puntuacion de contenido y generacion de titulos/hashtags con Claude.
+# Opcional: sin credenciales el pipeline usa solo heatmap + energia + densidad.
+anthropic>=0.40
+
+# ---------------------------------------------------------------------------
+# ffmpeg NO se instala con pip: es un binario externo y es obligatorio.
+#   Windows: winget install Gyan.FFmpeg   (o: choco install ffmpeg)
+#   macOS:   brew install ffmpeg
+#   Linux:   sudo apt install ffmpeg
+# Comprueba con: ffmpeg -version
+# ---------------------------------------------------------------------------
