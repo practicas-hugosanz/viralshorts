@@ -1,16 +1,46 @@
-viralshorts - como probarlo
-===========================
+viralshorts - como usarlo
+=========================
 
-1. Descomprime esta carpeta entera en el escritorio.
-2. Doble clic en   INSTALAR.bat
-   Se instala solo (Python si falta, dependencias y ffmpeg portable).
-   La primera vez tarda unos minutos.
-3. Al terminar se abre la interfaz en el navegador.
+1. Descomprime esta carpeta ENTERA (boton derecho sobre el ZIP > "Extraer
+   todo"). No abras los ficheros desde dentro del ZIP: no funciona.
 
-A partir de ahi, para volver a abrirlo: doble clic en  "Abrir interfaz.bat"
+2. Doble clic en    viralshorts.bat
 
-Notas
------
-- Windows puede avisar de "editor desconocido": pulsa "Mas informacion" > "Ejecutar de todas formas".
-- La primera transcripcion descarga el modelo de Whisper (unos cientos de MB). Es normal que tarde.
-- Titulos y hashtags con IA son opcionales: sin la clave de Anthropic el programa funciona igual.
+   Ya esta. No hay paso 3.
+
+La primera vez tarda unos minutos: se instala solo lo que haga falta (Python,
+las dependencias y ffmpeg) y luego abre la interfaz en el navegador. Todo se
+queda dentro de esta carpeta, no cambia nada de tu ordenador.
+
+Las siguientes veces abre al momento, con el mismo viralshorts.bat o con el
+acceso directo "viralshorts" que aparece en el Escritorio.
+
+
+Si algo va mal
+--------------
+- Windows avisa de "editor desconocido" o "Windows protegio tu PC":
+  pulsa "Mas informacion" > "Ejecutar de todas formas". Pasa con cualquier
+  programa que no este firmado; el codigo lo tienes delante.
+
+- Se queda a medias o da un error: doble clic en
+  install\Reparar instalacion.bat
+  Rehace la instalacion desde cero sin tocar tus videos ni tu configuracion.
+
+- Lo que ha pasado exactamente queda apuntado en
+  install\log-instalacion.txt
+
+
+Detalles que conviene saber
+---------------------------
+- La primera transcripcion descarga el modelo de Whisper (unos cientos de MB).
+  Es normal que la primera vez tarde bastante mas que las siguientes.
+
+- Si tienes tarjeta grafica NVIDIA puedes acelerar mucho la transcripcion con
+  install\Activar GPU NVIDIA.bat  (descarga unos 600 MB de librerias). Es
+  opcional: sin eso el programa funciona igual, solo que con el procesador.
+  Para saber como estas: install\Comprobar GPU.bat
+
+- Los titulos y hashtags con IA son opcionales: sin la clave de Anthropic el
+  programa funciona igual, solo que esos textos los escribes tu.
+
+- Los shorts terminados aparecen en la carpeta  output.

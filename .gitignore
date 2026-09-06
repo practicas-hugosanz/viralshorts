@@ -10,6 +10,11 @@ output/
 *.ass
 *.info.json
 
+# Artefactos del instalador (ffmpeg portable, log y marca de "ya instalado")
+bin/
+install/log-instalacion.txt
+install/.instalado
+
 # Python
 __pycache__/
 *.py[cod]

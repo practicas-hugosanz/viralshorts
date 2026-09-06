@@ -11,8 +11,10 @@ video con la misma configuracion no vuelve a transcribir.
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import logging
+import os
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -78,6 +80,9 @@ class Transcriber:
         self._model = None
         self._batched = None
         self._device: Optional[str] = None
+        # Se pone a True cuando la GPU ya ha fallado una vez: a partir de ahi
+        # no se vuelve a intentar en esta ejecucion.
+        self._solo_cpu = False
 
     # -- modelo ---------------------------------------------------------
     def _load_model(self):
@@ -107,6 +112,7 @@ class Transcriber:
             # Un fallo tipico aqui es no tener cuDNN/CUDA instalados aunque haya
             # GPU: seguir en CPU es mejor que abortar el pipeline entero.
             log.warning("No se pudo usar la GPU (%s). Reintentando en CPU.", exc)
+            self._solo_cpu = True
             self._model = WhisperModel(self.cfg.model_size, device="cpu",
                                        compute_type="int8", cpu_threads=threads)
             device, compute_type = "cpu", "int8"
@@ -125,13 +131,15 @@ class Transcriber:
         if self.cfg.cpu_threads > 0:
             return self.cfg.cpu_threads
         try:
-            import os
             physical = os.cpu_count() or 4
             return max(1, physical // 2) if physical > 4 else physical
         except Exception:
             return 4
 
     def _resolve_device(self) -> tuple[str, str]:
+        if self._solo_cpu:
+            return "cpu", "int8"
+
         device = self.cfg.device
         if device == "auto":
             device = "cuda" if _cuda_available() else "cpu"
@@ -310,12 +318,56 @@ class Transcriber:
         return self._batched
 
     def _run(self, audio):
-        """Lanza la transcripcion con el motor y las opciones que toquen."""
+        """Transcribe, y si la GPU falla a mitad, repite entero en CPU.
+
+        Hace falta reintentar aqui y no solo al cargar el modelo porque
+        ctranslate2 carga cuBLAS/cuDNN de forma perezosa: la primera vez que
+        multiplica matrices de verdad, no al construir el WhisperModel. En un
+        equipo con GPU pero sin esas librerias, Whisper carga sin una queja y
+        el error ('cublas64_12.dll is not found or cannot be loaded') sale
+        despues, ya empezada la transcripcion. Sin esto, ahi muere el pipeline
+        entero por algo de lo que se puede uno recuperar.
+        """
+        try:
+            return self._arranca(audio)
+        except Exception as exc:
+            if self._device != "cuda" or not _fallo_de_gpu(exc):
+                raise
+            log.warning("La GPU no se pudo usar para transcribir (%s).", exc)
+            log.warning("Se sigue con el procesador: tarda mas, pero termina. "
+                        "Para arreglar la GPU: 'install\\Activar GPU NVIDIA.bat'.")
+            self._a_cpu()
+            return self._arranca(audio)
+
+    def _arranca(self, audio):
+        """Lanza la transcripcion y fuerza a que empiece el trabajo de verdad.
+
+        faster-whisper devuelve un generador perezoso: si nos limitaramos a
+        devolverlo, el fallo de la GPU saltaria fuera de este metodo, ya en el
+        bucle que consume los segmentos, donde no se puede reintentar. Sacar
+        aqui el primer segmento provoca el error dentro del try, y luego se
+        vuelve a encadenar para no perder ni ese segmento ni el avance en
+        streaming.
+        """
         engine = self._engine()
         options = self._options()
         if engine is not self._model:
             options["batch_size"] = max(1, int(self.cfg.batch_size))
-        return engine.transcribe(audio, **options)
+        raw, info = engine.transcribe(audio, **options)
+
+        iterador = iter(raw)
+        try:
+            primero = next(iterador)
+        except StopIteration:
+            return iter(()), info
+        return itertools.chain((primero,), iterador), info
+
+    def _a_cpu(self) -> None:
+        """Tira el modelo de GPU y obliga a recargar en CPU."""
+        self._model = None
+        self._batched = None
+        self._device = None
+        self._solo_cpu = True
 
     def _cache_key(self, path: Path, regions: Optional[Sequence] = None) -> str:
         stat = path.stat()
@@ -353,12 +405,83 @@ def _to_segment(seg, offset: float = 0.0) -> Optional[Segment]:
     )
 
 
+# Mensajes con los que ctranslate2 avisa de que la GPU no se puede usar. La
+# comparacion es por texto porque la libreria lanza RuntimeError pelado, sin
+# ningun tipo de excepcion propia que distinguir.
+_FALLOS_DE_GPU = (
+    "cublas", "cudnn", "cuda", "gpu", "libcu",
+    "is not found or cannot be loaded",
+    "no kernel image is available",
+    "out of memory",
+)
+
+
+def _fallo_de_gpu(exc: BaseException) -> bool:
+    texto = f"{type(exc).__name__}: {exc}".lower()
+    return any(marca in texto for marca in _FALLOS_DE_GPU)
+
+
+def _registra_dlls_de_nvidia() -> None:
+    """Hace visibles las DLL de CUDA instaladas con pip.
+
+    Los paquetes `nvidia-cublas-cu12` y `nvidia-cudnn-cu12` dejan sus DLL
+    dentro del entorno virtual, no en el PATH, asi que en Windows nadie las
+    encuentra: ctranslate2 falla con 'cublas64_12.dll is not found' aunque
+    esten instaladas. `os.add_dll_directory` es la forma soportada de anadir
+    esas carpetas a la busqueda desde Python 3.8.
+    """
+    if os.name != "nt":
+        return
+    try:
+        import nvidia
+    except ImportError:
+        return
+    for raiz in getattr(nvidia, "__path__", []):
+        for carpeta in Path(raiz).glob("*/bin"):
+            if carpeta.is_dir():
+                try:
+                    os.add_dll_directory(str(carpeta))
+                except (OSError, AttributeError):
+                    pass
+
+
+def _librerias_cuda_cargables() -> bool:
+    """Comprueba que cuBLAS se puede cargar de verdad.
+
+    Hace falta porque `get_cuda_device_count()` solo mira el driver: en un
+    equipo con GPU pero sin cuBLAS/cuDNN devuelve 1 igualmente, el modelo se
+    carga sin quejarse y el fallo aparece mucho despues, a mitad de la
+    transcripcion, cuando ctranslate2 va a multiplicar matrices por primera
+    vez. Mejor descubrirlo antes de elegir dispositivo.
+    """
+    if os.name != "nt":
+        return True   # en Linux/macOS el enlazado lo resuelve el sistema
+    import ctypes
+    for nombre in ("cublas64_12.dll", "cublas64_11.dll"):
+        try:
+            ctypes.WinDLL(nombre)
+            return True
+        except OSError:
+            continue
+    return False
+
+
 def _cuda_available() -> bool:
     try:
         import ctranslate2
-        return ctranslate2.get_cuda_device_count() > 0
+        if ctranslate2.get_cuda_device_count() <= 0:
+            return False
     except Exception:
         return False
+
+    _registra_dlls_de_nvidia()
+    if _librerias_cuda_cargables():
+        return True
+
+    log.info("Hay GPU NVIDIA pero le faltan las librerias CUDA (cuBLAS/cuDNN); "
+             "se transcribe con el procesador. Para usar la tarjeta: doble clic "
+             "en 'install\\Activar GPU NVIDIA.bat'.")
+    return False
 
 
 def _progress(current: float, total: float, final: bool = False) -> None:

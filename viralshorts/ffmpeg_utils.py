@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -23,6 +24,25 @@ log = logging.getLogger(__name__)
 
 class FFmpegError(RuntimeError):
     """ffmpeg o ffprobe terminaron con error."""
+
+
+def _usar_ffmpeg_portable() -> None:
+    """Anade al PATH la copia de ffmpeg que descarga el instalador.
+
+    El instalador deja ffmpeg en bin/ffmpeg/bin dentro del proyecto para no
+    tener que tocar el PATH del sistema ni pedir permisos de administrador.
+    Los lanzadores .bat ya lo anaden, pero esto hace que tambien funcione
+    ejecutando `python gui.py` o `python pipeline.py` directamente.
+    """
+    local = Path(__file__).resolve().parent.parent / "bin" / "ffmpeg" / "bin"
+    if not local.is_dir():
+        return
+    partes = os.environ.get("PATH", "").split(os.pathsep)
+    if str(local) not in partes:
+        os.environ["PATH"] = os.pathsep.join([str(local), *partes])
+
+
+_usar_ffmpeg_portable()
 
 
 @dataclass
@@ -68,7 +88,8 @@ def require_ffmpeg() -> None:
     if missing:
         raise FFmpegError(
             f"No se encontro {' ni '.join(missing)} en el PATH.\n"
-            "  Windows: winget install Gyan.FFmpeg   (o choco install ffmpeg)\n"
+            "  Windows: doble clic en viralshorts.bat (lo instala solo)\n"
+            "           o bien: winget install Gyan.FFmpeg\n"
             "  macOS:   brew install ffmpeg\n"
             "  Linux:   sudo apt install ffmpeg\n"
             "Comprueba luego con: ffmpeg -version"

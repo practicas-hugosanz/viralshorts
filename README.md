@@ -8,14 +8,36 @@ podcast (YouTube)  ─┐   preselección ─► transcripción ─► puntuaci�
 gameplay (YouTube) ─┘    energía)        zonas calientes)
 ```
 
-Se puede usar con **interfaz visual** (`Abrir interfaz.bat`) o por línea de
+Se puede usar con **interfaz visual** (`viralshorts.bat`) o por línea de
 comandos. Las dos hacen exactamente lo mismo.
 
 ## Instalación
 
+**Windows: doble clic en `viralshorts.bat`.** No hay más. La primera vez busca
+(o instala) Python, crea un entorno virtual dentro de la carpeta, instala las
+dependencias, descarga una copia portable de ffmpeg y abre la interfaz; las
+siguientes veces arranca directamente. No necesita permisos de administrador y
+no toca el Python ni el PATH del sistema.
+
+Si algo falla, `install\Reparar instalacion.bat` lo rehace desde cero y
+`install\log-instalacion.txt` dice qué pasó.
+
+**GPU (opcional).** La transcripción usa la tarjeta NVIDIA si puede, y el
+procesador si no. Para usar la tarjeta hacen falta cuBLAS y cuDNN, que no
+vienen con `faster-whisper`: `install\Activar GPU NVIDIA.bat` los instala
+(~600 MB) y `install\Comprobar GPU.bat` dice en cuál de los dos casos estás.
+Sin ellos el pipeline no falla, solo va más lento.
+
+Para **mandárselo a otra persona**: `Crear paquete para enviar.bat` deja en el
+Escritorio un ZIP con solo lo necesario (sin `.venv`, sin vídeos, sin caché, y
+sin tu clave de API). El que lo recibe descomprime y hace doble clic en
+`viralshorts.bat`.
+
+En macOS o Linux, a mano:
+
 ```bash
 pip install -r requirements.txt
-winget install Gyan.FFmpeg          # Windows. macOS: brew install ffmpeg
+brew install ffmpeg                 # Linux: sudo apt install ffmpeg
 ```
 
 Para la puntuación con Claude (opcional pero recomendada):
@@ -29,7 +51,7 @@ y no genera títulos ni hashtags.
 
 ## Uso: interfaz visual (recomendado)
 
-Doble clic en **`Abrir interfaz.bat`**, o desde la consola:
+Doble clic en **`viralshorts.bat`**, o desde la consola:
 
 ```bash
 python gui.py
@@ -361,7 +383,9 @@ Formato .ASS quemado con libass, palabra por palabra:
 
 | Fichero | Qué es |
 |---|---|
-| `Abrir interfaz.bat` | lanzador de la interfaz visual (doble clic) |
+| `viralshorts.bat` | único punto de entrada: instala si hace falta y abre la interfaz |
+| `install/setup.ps1` | el instalador (Python, entorno virtual, dependencias, ffmpeg) |
+| `install/empaquetar.ps1` | genera el ZIP que se le manda a otra persona |
 | `gui.py` | servidor local de la interfaz |
 | `web/index.html` | la propia interfaz |
 | `pipeline.py` | el pipeline por línea de comandos |
