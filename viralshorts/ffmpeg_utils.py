@@ -318,6 +318,37 @@ def escape_filter_path(path: str | Path) -> str:
     return text.replace(":", r"\:").replace("'", r"\'")
 
 
+_SOPORTA_FILTER_SCRIPT: Optional[bool] = None
+
+
+def supports_filter_complex_script() -> bool:
+    """Indica si el binario acepta la opcion `-filter_complex_script`.
+
+    ffmpeg 7.0 la marco obsoleta en favor de `-/filter_complex` (la forma
+    generica `-/opcion fichero`, que lee el valor de un fichero) y despues de
+    la 8.1 la elimino del todo. Un binario recien compilado de la rama de
+    desarrollo ya no la tiene, y ahi fallaba TODO el montaje con
+    "Unrecognized option 'filter_complex_script'".
+
+    Se pregunta al binario en vez de mirar su version porque las compilaciones
+    de desarrollo no tienen numero de version que valga: se identifican como
+    'N-126435-gf93cd72dde'.
+    """
+    global _SOPORTA_FILTER_SCRIPT
+    if _SOPORTA_FILTER_SCRIPT is None:
+        try:
+            result = subprocess.run(
+                ["ffmpeg", "-hide_banner", "-h", "full"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+            )
+            _SOPORTA_FILTER_SCRIPT = "filter_complex_script" in result.stdout
+        except OSError:
+            # Sin binario esto se resuelve mucho antes, en require_ffmpeg; aqui
+            # basta con no reventar por el camino.
+            _SOPORTA_FILTER_SCRIPT = False
+    return _SOPORTA_FILTER_SCRIPT
+
+
 def write_filter_script(graph: str, path: str | Path) -> List[str]:
     """Guarda el filtergraph en fichero y devuelve los argumentos de ffmpeg.
 
@@ -328,9 +359,17 @@ def write_filter_script(graph: str, path: str | Path) -> List[str]:
     La ruta se devuelve ABSOLUTA a proposito: ffmpeg se lanza con cwd en la
     carpeta de trabajo (para que el filtro subtitles reciba un nombre corto),
     y una ruta relativa se resolveria dos veces contra esa misma carpeta.
+
+    Se prefiere `-filter_complex_script` mientras exista porque la entienden
+    todas las versiones antiguas; `-/filter_complex` solo existe desde la 7.0.
+    Entre las dos se cubre cualquier ffmpeg con el que se encuentre el
+    programa.
     """
     Path(path).write_text(graph, encoding="utf-8")
-    return ["-filter_complex_script", str(Path(path).absolute())]
+    destino = str(Path(path).absolute())
+    if supports_filter_complex_script():
+        return ["-filter_complex_script", destino]
+    return ["-/filter_complex", destino]
 
 
 # ----------------------------------------------------------------------------

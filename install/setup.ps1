@@ -42,6 +42,9 @@ $Log    = Join-Path $PSScriptRoot 'log-instalacion.txt'
 $PyVersion = '3.12.10'
 $PyUrl     = "https://www.python.org/ftp/python/$PyVersion/python-$PyVersion-amd64.exe"
 
+# Version de ffmpeg que se descarga. Fijada a proposito: ver los espejos.
+$FFVersion = '8.0'
+
 # Rango soportado, como major*100+minor. Por debajo faltan cosas del lenguaje;
 # por encima aun no hay ruedas de alguna dependencia y pip intentaria
 # compilarlas desde el codigo fuente (y fallaria sin Visual Studio).
@@ -304,15 +307,19 @@ if (Test-Path -LiteralPath $FFExe) {
 } elseif ($ffSistema) {
     Bien "ffmpeg del sistema"
 } else {
-    Escribe "      descargando ffmpeg portable (~150 MB, solo esta vez)..."
+    Escribe "      descargando ffmpeg portable (~90 MB, solo esta vez)..."
     Escribe "      puede tardar unos minutos; no cierres la ventana" 'DarkGray'
     $zip = Join-Path $env:TEMP 'viralshorts-ffmpeg.zip'
     $tmp = Join-Path $env:TEMP 'viralshorts-ffmpeg-tmp'
-    # GitHub primero: su CDN va a decenas de MB/s. El de gyan.dev es la copia
-    # oficial mas pequena, pero sirve desde un unico servidor que puede bajar
-    # a menos de 100 KB/s, y entonces esto parece colgado.
+    # Version ESTABLE y fijada, servida desde GitHub. Las tres cosas importan:
+    #  - estable: las compilaciones de la rama de desarrollo van quitando
+    #    opciones (asi desaparecio -filter_complex_script) y rompen el montaje;
+    #  - fijada: que la descarga de hoy y la de dentro de un ano sean iguales;
+    #  - GitHub: su CDN va a decenas de MB/s, mientras que el servidor propio
+    #    de gyan.dev puede bajar a menos de 100 KB/s y parecer que esto se ha
+    #    colgado. Ese queda de respaldo, que sirve la misma compilacion.
     $espejos = @(
-        'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
+        "https://github.com/GyanD/codexffmpeg/releases/download/$FFVersion/ffmpeg-$FFVersion-essentials_build.zip",
         'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
     )
     if (-not (Descarga $espejos $zip)) {
