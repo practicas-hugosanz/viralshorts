@@ -14,6 +14,8 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import re
+import unicodedata
 from pathlib import Path
 from typing import List, Optional
 
@@ -21,6 +23,21 @@ log = logging.getLogger(__name__)
 
 _COLUMNS = ["fichero", "titulo", "gancho", "descripcion", "hashtags",
             "duracion", "minuto_original", "podcast", "url_origen", "puntuacion"]
+
+
+def run_folder(base: Path, title: str, tag: str) -> Path:
+    """Carpeta propia de una ejecucion: `<base>/<titulo>_<tag>`.
+
+    Todos los shorts se llaman short_N.mp4, asi que sin una carpeta por
+    ejecucion el segundo podcast pisaba los shorts del primero.
+    """
+    return Path(base) / f"{_slug(title) or 'podcast'}_{tag}"
+
+
+def _slug(text: str, limit: int = 40) -> str:
+    plain = unicodedata.normalize("NFKD", text or "")
+    plain = plain.encode("ascii", "ignore").decode("ascii").lower()
+    return re.sub(r"[^a-z0-9]+", "-", plain).strip("-")[:limit].strip("-")
 
 
 def write_csv(output_dir: Path, name: str = "publicaciones.csv") -> Optional[Path]:

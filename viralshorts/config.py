@@ -118,7 +118,7 @@ class ScoringConfig:
 @dataclass
 class LLMConfig:
     enabled: bool = True
-    model: str = "claude-opus-5"
+    model: str = "claude-opus-5-5"
     effort: str = "medium"           # low | medium | high | xhigh | max
     max_tokens: int = 16000
     # Generar titulo, texto de gancho, descripcion y hashtags por clip.
@@ -331,6 +331,9 @@ class OutputConfig:
     thumbnail_at: float = 1.2        # segundo del que se saca la portada
     # Hoja de calculo con los textos de publicacion de todos los shorts.
     csv: bool = True
+    # Una subcarpeta por ejecucion dentro de `dir`. En False todo va a `dir` y
+    # los shorts nuevos pisan a los de la ejecucion anterior.
+    run_subfolder: bool = True
 
 
 @dataclass

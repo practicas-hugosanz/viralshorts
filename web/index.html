@@ -878,6 +878,7 @@
 
 <script>
 const TOKEN = "__TOKEN__";
+const AUTH = { "X-VS-Token": TOKEN };
 const $ = (id) => document.getElementById(id);
 
 const FIELDS = ["podcast", "background", "output", "clips", "language",
@@ -1445,7 +1446,7 @@ document.querySelectorAll("#st_swatches .swatch[data-color]").forEach(button =>
     paintPhone();
     saveForm();
   }));
-$("reveal").addEventListener("click", () => fetch("/api/reveal"));
+$("reveal").addEventListener("click", () => fetch("/api/reveal", { headers: AUTH }));
 function openHelp() {
   $("help").showModal();
   document.body.classList.add("modal-open");
@@ -1553,7 +1554,7 @@ function addResult(item) {
   const card = document.createElement("div");
   card.className = "result";
   card.innerHTML = `
-    <video controls preload="metadata" src="/api/video?f=${encodeURIComponent(item.fichero)}"></video>
+    <video controls preload="metadata" src="/api/video?f=${encodeURIComponent(item.fichero)}&t=${encodeURIComponent(TOKEN)}"></video>
     <div class="meta">
       ${item.gancho ? `<div class="hook">${escapeHtml(item.gancho)}</div>` : ""}
       <h3>${escapeHtml(item.titulo || item.fichero)}</h3>
@@ -1590,7 +1591,7 @@ function addResult(item) {
 
   const open = document.createElement("button");
   open.textContent = "Ver carpeta";
-  open.addEventListener("click", () => fetch("/api/reveal"));
+  open.addEventListener("click", () => fetch("/api/reveal", { headers: AUTH }));
   foot.appendChild(open);
   $("results").appendChild(card);
 }
@@ -1698,7 +1699,7 @@ events.onerror = () => {
 
 async function loadExisting() {
   try {
-    const { results } = await (await fetch("/api/existing")).json();
+    const { results } = await (await fetch("/api/existing", { headers: AUTH })).json();
     results.forEach(addResult);
   } catch (error) {}
 }

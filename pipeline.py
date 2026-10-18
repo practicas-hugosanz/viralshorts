@@ -330,11 +330,23 @@ def _run(args, cfg: Config, work_dir: Path, output_dir: Path, started: float) ->
 
     progress.stage("metadatos", "Escribiendo titulos y hashtags")
     written = _metadata_for(judge, clips, podcast.title, cfg)
+    output_dir = _run_output_dir(cfg, output_dir, podcast.title,
+                                 time.strftime("%Y%m%d_%H%M%S"))
     results = _render_all(clips, written, podcast, background, cfg,
                           work_dir, output_dir, energy=energy)
 
     _finish(cfg, output_dir)
     return _report_results(results, len(clips), time.perf_counter() - started)
+
+
+def _run_output_dir(cfg: Config, base: Path, title: str, tag: str) -> Path:
+    """Carpeta donde caen los shorts de ESTA ejecucion, y se la dice a la GUI."""
+    folder = base
+    if getattr(cfg.output, "run_subfolder", True):
+        folder = exports.run_folder(base, title, tag)
+    folder.mkdir(parents=True, exist_ok=True)
+    progress.result("salida", ruta=str(folder.absolute()))
+    return folder
 
 
 def _proposed_count(args, cfg: Config) -> int:
@@ -452,6 +464,11 @@ def _run_from_plan(args, cfg: Config, work_dir: Path, output_dir: Path,
             log.error("El %s del plan ya no esta en %s. Vuelve a buscar los "
                       "momentos para descargarlo otra vez.", label, source.path)
             return 2
+
+    # Misma carpeta cada vez que se monta el mismo plan: volver a montarlo
+    # tras corregir un titulo reemplaza sus shorts, no los duplica.
+    output_dir = _run_output_dir(cfg, output_dir, podcast.title,
+                                 saved.path.stem.removeprefix("plan_"))
 
     clips = [saved.clips[n - 1].to_window() for n in wanted]
     written: Dict[int, ClipMetadata] = {

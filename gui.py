@@ -63,6 +63,32 @@ _STYLE_FIELDS = {
     "encoder":      ("output.hardware_encoder", "text"),
 }
 
+# Nombres con los que el navegador puede llegar legitimamente a este servidor.
+# Cualquier otro (un dominio atacante que resuelva a 127.0.0.1: DNS rebinding)
+# se rechaza antes de mirar nada mas.
+_ALLOWED_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
+
+
+def _host_allowed(header: str) -> bool:
+    host = (header or "").strip().lower()
+    if host.startswith("["):
+        host = host.split("]", 1)[0] + "]"
+    elif ":" in host:
+        host = host.rsplit(":", 1)[0]
+    return host in _ALLOWED_HOSTS
+
+
+def _has_shorts(folder: Path) -> bool:
+    return folder.is_dir() and any(folder.glob("short_*.mp4"))
+
+
+def _latest_run_dir(base: Path) -> Path:
+    """Carpeta de la ultima ejecucion con shorts (o `base` si no hay ninguna)."""
+    if _has_shorts(base) or not base.is_dir():
+        return base
+    runs = [d for d in base.iterdir() if _has_shorts(d)]
+    return max(runs, key=lambda d: d.stat().st_mtime) if runs else base
+
 
 # ============================================================================
 # Estado del trabajo en curso
@@ -73,6 +99,11 @@ class Job:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        # Estado de la ejecucion (status, process, pending). Distinto de
+        # `_lock`, que solo protege la lista de suscriptores: aqui hay que
+        # decidir "arranco o encolo" y "pasamos al siguiente" sin que se cuele
+        # otra peticion en medio.
+        self._run_lock = threading.RLock()
         self._subscribers: List[queue.Queue] = []
         self.process: Optional[subprocess.Popen] = None
         self.status = "idle"          # idle | running | done | error | stopped
@@ -81,7 +112,7 @@ class Job:
         self.clips: List[dict] = []
         self.results: List[dict] = []
         self.notices: List[dict] = []
-        self.output_dir = ROOT / "output"
+        self.output_dir = _latest_run_dir(ROOT / "output")
         self.plan_path: Optional[Path] = None
         self.plan_clips: List[dict] = []
         self.pending: List[dict] = []   # cola de formularios por lanzar
@@ -136,12 +167,13 @@ class Job:
     # -- ciclo de vida ---------------------------------------------------
     def enqueue(self, form: dict) -> dict:
         """Lanza el trabajo, o lo deja en la cola si hay otro en marcha."""
-        if self.status == "running":
-            self.pending.append(form)
-            self.publish({"type": "queue", "queue": self.queue_summary()})
-            return {"ok": True, "encolado": True, "posicion": len(self.pending)}
+        with self._run_lock:
+            if self.status == "running":
+                self.pending.append(form)
+                self.publish({"type": "queue", "queue": self.queue_summary()})
+                return {"ok": True, "encolado": True, "posicion": len(self.pending)}
 
-        self._start(form)
+            self._start(form)
         return {"ok": True, "encolado": False}
 
     def _start(self, form: dict) -> None:
@@ -174,40 +206,58 @@ class Job:
         env["PYTHONIOENCODING"] = "utf-8"
         env["PYTHONUNBUFFERED"] = "1"
 
-        self.process = _spawn(args, env)
-        threading.Thread(target=self._pump, daemon=True).start()
+        try:
+            self.process = _spawn(args, env)
+        except OSError as exc:
+            # Sin esto el estado se quedaba en "running" para siempre y la
+            # cola no volvia a arrancar nada.
+            self.status = "error"
+            self._append_log(f"No se pudo lanzar el pipeline: {exc}")
+            self.publish({"type": "job", "status": "error", "code": None,
+                          "queue": self.queue_summary()})
+            return
+        threading.Thread(target=self._pump, args=(self.process,),
+                         daemon=True).start()
 
     def stop(self, clear_queue: bool = True) -> None:
         """Para lo que haya en marcha, con todo lo que haya lanzado."""
-        if clear_queue and self.pending:
-            self.pending.clear()
-            self.publish({"type": "queue", "queue": []})
-        if self.process and self.process.poll() is None:
-            self.status = "stopped"
-            _kill_tree(self.process)
+        with self._run_lock:
+            if clear_queue and self.pending:
+                self.pending.clear()
+                self.publish({"type": "queue", "queue": []})
+            proc = self.process
+            running = proc is not None and proc.poll() is None
+            if running:
+                self.status = "stopped"
+        if running:
+            _kill_tree(proc)
             self._append_log("-- detenido por el usuario --")
 
-    def _pump(self) -> None:
+    def _pump(self, proc: subprocess.Popen) -> None:
         """Lee stderr del pipeline y lo reparte a los navegadores conectados."""
-        assert self.process is not None and self.process.stderr is not None
-        for raw in self.process.stderr:
+        assert proc.stderr is not None
+        for raw in proc.stderr:
             line = raw.rstrip("\n")
             if line.startswith(_EVENT_PREFIX):
                 self._handle_event(line[len(_EVENT_PREFIX):])
             elif line.strip():
                 self._append_log(line)
 
-        code = self.process.wait()
-        if self.status != "stopped":
-            self.status = "done" if code == 0 else "error"
-        self.publish({"type": "job", "status": self.status, "code": code,
-                      "queue": self.queue_summary()})
+        code = proc.wait()
+        # Todo el relevo bajo el cerrojo: si entre "terminado" y "arranca el
+        # siguiente" se colara un enqueue, veria el estado libre y lanzaria su
+        # trabajo a la vez que el que sale de la cola.
+        with self._run_lock:
+            if self.status != "stopped":
+                self.status = "done" if code == 0 else "error"
+            self.publish({"type": "job", "status": self.status, "code": code,
+                          "queue": self.queue_summary()})
 
-        # Siguiente de la cola. Si el usuario ha pulsado Detener, la cola ya
-        # esta vacia y aqui no arranca nada.
-        if self.pending:
-            time.sleep(0.4)           # que el cerrojo de work/ se suelte
-            self._start(self.pending.pop(0))
+            # Siguiente de la cola. Si el usuario ha pulsado Detener, la cola
+            # ya esta vacia y aqui no arranca nada.
+            if self.pending:
+                time.sleep(0.4)           # que el cerrojo de work/ se suelte
+                self._start(self.pending.pop(0))
 
     def _handle_event(self, payload: str) -> None:
         try:
@@ -224,6 +274,9 @@ class Job:
             self.results.append(event)
         elif kind == "aviso":
             self.notices.append(event)
+        elif kind == "salida":
+            # Carpeta de esta ejecucion: de ahi salen los videos que se ven.
+            self.output_dir = Path(event.get("ruta", self.output_dir))
         elif kind == "plan":
             self.plan_path = Path(event.get("ruta", ""))
             self.plan_clips = event.get("clips", [])
@@ -559,10 +612,30 @@ class Handler(BaseHTTPRequestHandler):
     # -- utilidades -----------------------------------------------------
     def _authorised(self, params: Dict[str, List[str]]) -> bool:
         # El token evita que una pagina web cualquiera abierta en el navegador
-        # pueda lanzar procesos contra este servidor local.
-        header = self.headers.get("X-VS-Token", "")
-        return secrets.compare_digest(header, TOKEN) or \
-            secrets.compare_digest((params.get("t") or [""])[0], TOKEN)
+        # pueda lanzar procesos contra este servidor local. Se compara en bytes
+        # porque compare_digest revienta con texto no ASCII.
+        expected = TOKEN.encode("utf-8")
+        for given in (self.headers.get("X-VS-Token", ""),
+                      (params.get("t") or [""])[0]):
+            if secrets.compare_digest(given.encode("utf-8", "replace"), expected):
+                return True
+        return False
+
+    def _allowed(self, params: Dict[str, List[str]]) -> bool:
+        """Host de este equipo Y token, para TODO: paginas, datos y videos.
+
+        Con solo el token en las peticiones POST, una web atacante que
+        resolviera su dominio a 127.0.0.1 (DNS rebinding) podia pedir `/`,
+        leer el token incrustado en la pagina y despues lanzar procesos.
+        """
+        if not _host_allowed(self.headers.get("Host", "")):
+            self.send_error(403, "host no permitido")
+            return False
+        if not self._authorised(params):
+            self.send_error(403, "falta el token: abre la direccion completa "
+                                 "que sale en la consola")
+            return False
+        return True
 
     def _send_json(self, payload, status: int = 200) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -583,6 +656,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         url = urlparse(self.path)
         params = parse_qs(url.query)
+        if not self._allowed(params):
+            return
 
         if url.path == "/":
             self._serve_index()
@@ -716,8 +791,7 @@ class Handler(BaseHTTPRequestHandler):
     # -- POST -----------------------------------------------------------
     def do_POST(self) -> None:
         url = urlparse(self.path)
-        if not self._authorised(parse_qs(url.query)):
-            self.send_error(403, "token invalido")
+        if not self._allowed(parse_qs(url.query)):
             return
 
         try:
@@ -729,7 +803,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"ok": True})
 
             elif url.path == "/api/queue/clear":
-                JOB.pending.clear()
+                with JOB._run_lock:
+                    JOB.pending.clear()
                 JOB.publish({"type": "queue", "queue": []})
                 self._send_json({"ok": True})
 

@@ -124,7 +124,9 @@ python pipeline.py --from-plan work/plans/hoy.json --only 1,4,7
 Tanto `--podcast` como `--background` aceptan una URL o un fichero local.
 `python pipeline.py --help` lista todas las opciones.
 
-Salida en `output/`, por cada clip:
+Salida en `output/<titulo-del-podcast>_<fecha>/` (una carpeta por ejecución, así
+un podcast nuevo no pisa los shorts del anterior; `--set output.run_subfolder=off`
+lo deja todo en `output/`). Por cada clip:
 
 | Fichero | Contenido |
 |---|---|
