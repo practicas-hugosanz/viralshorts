@@ -27,3 +27,4 @@ venv/
 publicaciones.csv
 rust/target/
 dist/
+webview/

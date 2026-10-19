@@ -83,8 +83,9 @@ segundos después de abrir la aplicación se mira si hay una versión mayor y, s
 la hay, sale un aviso con sus notas y el botón **Actualizar ahora**. La
 aplicación descarga el instalador, comprueba que no se ha corrompido (SHA-256),
 lo ejecuta en silencio, se cierra, y el instalador la vuelve a abrir ya
-actualizada. No se actualiza con un trabajo en marcha. Arriba a la derecha, el
-número de versión (`v0.1.0`) es un botón para **buscar actualizaciones** a mano.
+actualizada. No se actualiza con un trabajo en marcha. Abajo a la izquierda, el
+número de versión (`v1.0.0`) es un botón para **buscar actualizaciones** a mano
+(también está en Ajustes).
 
 Funciona igual que Arcia: el código vive en un repositorio privado
 (`practicas-hugosanz/viralshorts`) y cada versión se publica como *release* en
@@ -113,44 +114,46 @@ Abre **viralshorts** (menú Inicio o Escritorio). Si prefieres el navegador:
 viralshorts gui              # --port 8760  --no-browser
 ```
 
-Se abre el navegador con la interfaz, pensada para que se pueda usar sin haber
-visto nunca el código. Son tres pasos numerados: el pódcast, el vídeo de fondo y
-cómo lo quieres. Pulsas **Generar mis shorts** y ya está.
+La ventana tiene una barra lateral con cuatro secciones:
 
-- **Nada de jerga en la superficie.** Eliges entre *Cortos / Normales / Largos*
-  y entre *Rápido / Equilibrado / Máxima calidad*, con el tiempo que tarda cada
-  uno escrito al lado. Detrás, esas dos elecciones rellenan el modelo de
-  Whisper, el `beam_size`, las zonas del preescaneo y las duraciones. Todo eso
-  sigue estando, pero en **Ajustes avanzados**, plegado.
+- **Crear**: el pódcast, el vídeo de fondo, cuántos shorts quieres, su duración y
+  la calidad del análisis, y el estilo de los subtítulos. A la derecha, un
+  **monitor 9:16** que se actualiza al momento (color, tamaño, altura, palabras
+  por línea y fuente; la palabra que suena va cambiando de color) y, debajo,
+  **Generar mis shorts** o **Buscar y revisar antes de montar**.
+- **En curso**: las cinco fases como una lista que se va marcando, con barra de
+  progreso, la cola de trabajos, el detalle técnico plegado y, si pediste revisar,
+  los momentos para elegir y corregir antes de montar.
+- **Mis shorts**: todos los vídeos generados, reproducibles ahí mismo, con su
+  gancho, título y texto, y botones para copiarlo, rehacer un short o abrir la
+  carpeta.
+- **Ajustes**: lo que normalmente no hace falta tocar (Claude, búsqueda rápida,
+  seguir la cara, silencios, zoom, límites de tiempo, modelo de transcripción,
+  rendimiento, carpeta de guardado) y la comprobación de actualizaciones. Sigue
+  el tema claro u oscuro de Windows.
+
+Detalles que ahorran sustos:
+
+- **Nada de jerga en la superficie.** Eliges entre *Corto / Normal / Largo* y
+  entre *Rápida / Equilibrada / Máxima*, con el tiempo que tarda cada una. Detrás,
+  esas elecciones rellenan el modelo de Whisper, el `beam_size`, las zonas del
+  preescaneo y las duraciones, que siguen visibles en Ajustes.
 - **Confirma lo que has pegado**: si el enlace es de YouTube aparecen la
-  miniatura, **el título real del vídeo**, el canal y la duración, así que ves
-  que es el que querías antes de esperar veinte minutos. El título lo consulta
-  el servidor con yt-dlp sin descargar nada (`/api/title`), con medio segundo
-  de espera para no preguntar en cada pulsación y una caché en memoria.
+  miniatura, **el título real del vídeo**, el canal y la duración. El título lo
+  consulta el servidor con yt-dlp sin descargar nada (`/api/title`).
 - **Avisa antes de fallar.** Si falta ffmpeg, la clave de Claude o la fuente de
-  los subtítulos, lo dice nada más abrir, no a mitad de la transcripción. Y si
-  Claude se cae a media ejecución, sale un aviso explicando que la selección
-  continúa con el heatmap y la energía.
+  los subtítulos, lo dice nada más abrir. Y si Claude se cae a media ejecución,
+  sale un aviso explicando que la selección continúa con el heatmap y la energía.
 - **Los errores están traducidos.** «Sign in to confirm you are not a bot» se
   convierte en *YouTube no deja descargar ese vídeo* y te dice qué hacer. El
-  texto crudo sigue disponible en «Ver el detalle técnico».
-- **Progreso legible**: las cinco fases como una lista que se va marcando, no un
-  nombre de etapa suelto.
-- **Buscar y revisar antes de montar**: elige los momentos, te los enseña todos
-  (el triple de los que pediste), y tú marcas cuáles se montan y corriges los
-  títulos y los ganchos. Ver *[Revisar antes de montar](#revisar-antes-de-montar)*.
+  texto crudo sigue en «Ver el detalle técnico».
+- **Revisar antes de montar**: te enseña todos los momentos (el triple de los que
+  pediste) y tú marcas cuáles se montan y corriges títulos y ganchos. Ver
+  *[Revisar antes de montar](#revisar-antes-de-montar)*.
 - **Cola**: si lanzas algo mientras hay otra cosa en marcha, se pone en cola en
-  vez de fallar por el cerrojo de `work/`. Se montan uno detrás de otro.
-- **Estilo de los subtítulos** con vista previa: color de la palabra activa,
-  tamaño, altura en pantalla, palabras por línea y fuente, con una maqueta 9:16
-  al lado que se actualiza al momento. Sin tocar `config.yaml`.
-- **Velocidad**: calidad de descarga, shorts a la vez y uso de la tarjeta
-  gráfica, en Ajustes avanzados.
-- **Elegir archivo** abre el explorador de Windows para un fichero local.
-- Lo que escribes se recuerda entre sesiones.
-
-Al final aparecen **los vídeos reproducibles ahí mismo**, con su título y
-hashtags y un botón para copiarlos.
+  vez de fallar por el cerrojo de `work/`.
+- **Elegir archivo** abre el explorador de Windows. Lo que escribes se recuerda
+  entre sesiones.
 
 Es un servidor local: solo escucha en `127.0.0.1` y exige un token que va en la
 URL, así que ninguna otra página ni ningún otro equipo puede usarlo. Se apaga al

@@ -3,53 +3,78 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
 <title>viralshorts</title>
 <style>
   :root {
-    --bg: #0e1116; --panel: #151a22; --line: #232b36; --text: #e8ecf2; --muted: #8b95a5;
-    --accent: #ffb020; --accent2: #ff7a18; --bad: #ff6b6b;
+    --bg: #0f1218; --surf: #171b23; --raise: #1f2430; --line: #2a303d;
+    --text: #eceff5; --mute: #98a1b3; --faint: #667084;
+    --accent: #ff7a1a; --accent-hi: #ffb347; --accent-ink: #1a0f05;
+    --bad: #ff6a6a; --bad-soft: rgba(255, 106, 106, .12);
+    --ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    --display: "Bahnschrift", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f2f3f7; --surf: #ffffff; --raise: #eff1f5; --line: #d5d9e2;
+      --text: #141821; --mute: #525c70; --faint: #7a8498;
+      --accent: #d85a0b; --accent-hi: #f08a2c; --accent-ink: #ffffff;
+      --bad: #c93030; --bad-soft: rgba(201, 48, 48, .09);
+    }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; }
   body {
     background: var(--bg); color: var(--text);
-    font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+    font: 14px/1.5 var(--ui); -webkit-font-smoothing: antialiased;
     display: grid; place-items: center; padding: 24px;
   }
-  main { width: min(520px, 100%); text-align: center; }
-  .logo {
-    width: 72px; height: 72px; margin: 0 auto 20px; border-radius: 20px;
-    background: linear-gradient(135deg, var(--accent2), var(--accent));
-    display: grid; place-items: center;
+  main {
+    width: min(480px, 100%);
+    background: var(--surf); border: 1px solid var(--line);
+    border-radius: 16px; padding: 34px 34px 26px;
+    box-shadow: 0 30px 70px -34px rgba(0, 0, 0, .6);
   }
-  .logo span { display: block; width: 28px; height: 50px; border-radius: 7px; background: #1c1612; position: relative; }
-  .logo span::after {
-    content: ""; position: absolute; left: 9px; top: 18px;
-    border-left: 12px solid #ffd65a; border-top: 7px solid transparent; border-bottom: 7px solid transparent;
+  .logo { width: 56px; height: 56px; display: block; margin-bottom: 22px; }
+  h1 { font: 600 26px/1.15 var(--display); font-variation-settings: "wdth" 90; margin: 0 0 8px; }
+  p { color: var(--mute); margin: 0 0 26px; }
+  .bar { height: 8px; border-radius: 3px; background: var(--raise); overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-hi)); transition: width .4s ease; }
+  .ruler { height: 7px; margin-top: 3px; opacity: .8; background: repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 10px); -webkit-mask: linear-gradient(transparent, #000); mask: linear-gradient(transparent, #000); }
+  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-top: 14px; }
+  .step { font-weight: 600; min-height: 1.5em; }
+  .pct { font: 600 22px var(--display); color: var(--accent); font-variant-numeric: tabular-nums; }
+  .error {
+    margin-top: 18px; padding: 12px 14px; border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--bad) 40%, transparent); background: var(--bad-soft);
+    color: var(--bad); font-size: 13px; white-space: pre-wrap; word-break: break-word;
   }
-  h1 { font-size: 24px; margin: 0 0 6px; }
-  p { color: var(--muted); margin: 0 0 22px; }
-  .bar { height: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
-  .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width .4s ease; }
-  .step { margin: 14px 0 0; min-height: 1.5em; color: var(--text); font-size: 14px; }
-  .error { display: none; margin-top: 18px; padding: 12px 14px; text-align: left; border: 1px solid #5a2d2d; background: #2a1a1a; border-radius: 10px; color: #ffb3b3; font-size: 13px; white-space: pre-wrap; word-break: break-word; }
   button {
-    display: none; margin: 18px auto 0; padding: 10px 22px; border: 0; border-radius: 10px;
-    background: linear-gradient(135deg, var(--accent2), var(--accent)); color: #1c1612; font: 600 15px inherit; cursor: pointer;
+    margin-top: 18px; padding: 10px 20px; border: 0; border-radius: 8px;
+    background: var(--accent); color: var(--accent-ink); font: 600 14px var(--ui); cursor: pointer;
   }
-  small { display: block; margin-top: 26px; color: var(--muted); font-size: 12px; }
+  button:hover { background: var(--accent-hi); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  small { display: block; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12.5px; }
 </style>
 </head>
 <body>
 <main>
-  <div class="logo"><span></span></div>
+  <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
+    <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a18"/><stop offset="1" stop-color="#ffb020"/></linearGradient></defs>
+    <rect width="64" height="64" rx="16" fill="url(#g)"/>
+    <rect x="20" y="10" width="24" height="44" rx="6" fill="#1c1612"/>
+    <path d="M28 25l10 7-10 7z" fill="#ffd65a"/>
+  </svg>
   <h1>Preparando viralshorts</h1>
-  <p>Es la primera vez: se descargan las herramientas que usa el programa. Solo pasa una vez y no se instala nada fuera de su carpeta.</p>
+  <p>Es la primera vez que se abre: se descargan las herramientas que usa el programa. Solo ocurre una vez y no se instala nada fuera de su carpeta.</p>
   <div class="bar"><i id="fill"></i></div>
-  <div class="step" id="step">Empezando...</div>
-  <div class="error" id="error"></div>
-  <button id="retry">Reintentar</button>
-  <small>Necesita conexión a internet. Pueden ser unos 120 MB.</small>
+  <div class="ruler" aria-hidden="true"></div>
+  <div class="row"><span class="step" id="step">Empezando…</span><span class="pct" id="pct"></span></div>
+  <div class="error" id="error" hidden></div>
+  <button id="retry" hidden>Reintentar</button>
+  <small>Necesita conexión a internet. Se descargan unos 120 MB.</small>
 </main>
 <script>
 const TOKEN = "__TOKEN__";
@@ -66,27 +91,29 @@ async function tick() {
   let state;
   try { state = await call("/api/setup"); } catch (e) { setTimeout(tick, 1000); return; }
 
-  if (state.done) { $("fill").style.width = "100%"; $("step").textContent = "Listo"; location.reload(); return; }
+  if (state.done) { $("fill").style.width = "100%"; $("pct").textContent = "100 %"; $("step").textContent = "Listo"; location.reload(); return; }
   if (state.error) {
-    $("error").style.display = "block";
+    $("error").hidden = false;
     $("error").textContent = state.error;
     $("step").textContent = "No se ha podido terminar";
-    $("retry").style.display = "block";
+    $("retry").hidden = false;
     return;
   }
   if (!state.running && !started) {
     started = true;
     await call("/api/setup/start", {});
   }
-  $("fill").style.width = Math.round((state.overall || 0) * 100) + "%";
+  const pct = Math.round((state.overall || 0) * 100);
+  $("fill").style.width = pct + "%";
+  $("pct").textContent = pct ? pct + " %" : "";
   if (state.step) $("step").textContent = state.step;
   setTimeout(tick, 500);
 }
 
 $("retry").addEventListener("click", async () => {
-  $("error").style.display = "none";
-  $("retry").style.display = "none";
-  $("step").textContent = "Reintentando...";
+  $("error").hidden = true;
+  $("retry").hidden = true;
+  $("step").textContent = "Reintentando…";
   await call("/api/setup/start", {});
   setTimeout(tick, 800);
 });
