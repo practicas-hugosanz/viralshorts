@@ -120,40 +120,55 @@ await run(`(() => {
   $("st_refine").value = ""; afterLook(); 0;
 })()`);
 
-// ------------------------------------------------------------ perfiles y kits (contra el servidor de verdad)
+// ------------------------------------------------------------ pasos, plantillas y resumenes
+const pasos = await run(`(async () => {
+  const out = {};
+  out.empiezaEnContenido = !$("panel-contenido").hidden && $("panel-aspecto").hidden;
+  document.getElementById("tab-aspecto").click();
+  out.pasaAAspecto = $("panel-contenido").hidden && !$("panel-aspecto").hidden && $("tab-aspecto").getAttribute("aria-selected") === "true";
+  document.querySelector('[data-tpl="neon"]').click();
+  out.plantilla = $("st_layout").value === "center" && $("st_sstyle").value === "neon" && $("st_sfx").value === "true";
+  out.plantillaMarcada = document.querySelector('[data-tpl="neon"]').classList.contains("on") && !document.querySelector('[data-tpl="clasico"]').classList.contains("on");
+  out.resumenComp = $("sum-comp").textContent;
+  out.resumenSubs = $("sum-subs").textContent;
+  out.resumenExtras = $("sum-extras").textContent;
+  document.querySelector('input[name="sstyle"][value="box"]').click();
+  out.sinPlantillaAlTocar = !document.querySelector("[data-tpl].on");
+  document.querySelector('[data-tpl="clasico"]').click();
+  out.vuelveAlClasico = $("st_layout").value === "stack" && $("st_sstyle").value === "classic" && $("st_bar").value === "false";
+  // Acordeon: abrir una seccion cierra la otra
+  $("acc-comp").open = true; $("acc-subs").open = true;
+  await new Promise(r => setTimeout(r, 200));
+  out.acordeon = !$("acc-comp").open && $("acc-subs").open;
+  $("acc-subs").open = false;
+  document.getElementById("tab-contenido").click();
+  return out;
+})()`);
+check('al abrir, se empieza por el paso Contenido', pasos.empiezaEnContenido);
+check('se pasa al paso Aspecto', pasos.pasaAAspecto);
+check('una plantilla cambia todo el aspecto de un clic', pasos.plantilla && pasos.plantillaMarcada);
+check('cada seccion resume lo elegido', pasos.resumenComp === 'Franja central · 9:16' && pasos.resumenSubs.startsWith('Neón') && pasos.resumenExtras.includes('whoosh'), `${pasos.resumenComp} | ${pasos.resumenSubs} | ${pasos.resumenExtras}`);
+check('tocar un ajuste desmarca la plantilla', pasos.sinPlantillaAlTocar);
+check('la plantilla Clasico devuelve lo de serie', pasos.vuelveAlClasico);
+check('el acordeon abre una seccion y cierra la otra', pasos.acordeon);
+
+// ------------------------------------------------------------ ajustes guardados (contra el servidor de verdad)
 const profiles = await run(`(async () => {
   const out = {};
-  document.querySelector('input[name="sstyle"][value="neon"]').click();
-  $("st_handle").value = "@kit"; $("st_handle").dispatchEvent(new Event("input", { bubbles: true }));
-  $("kit-save").click(); $("profile-name").value = "Kit de prueba"; $("profile-ok").click();
-  await new Promise(r => setTimeout(r, 700));
-  out.kitGuardado = [...$("kit").options].some(o => o.value === "Kit de prueba");
-  out.kitNoEsPerfil = ![...$("profile").options].some(o => o.value === "Kit de prueba");
-  document.querySelector('input[name="sstyle"][value="classic"]').click();
-  $("st_handle").value = "";
-  $("kit").value = "Kit de prueba"; $("kit").dispatchEvent(new Event("change"));
-  out.kitAplicado = $("st_sstyle").value === "neon" && $("st_handle").value === "@kit";
-  $("kit-del").click();
-  await new Promise(r => setTimeout(r, 700));
-  out.kitBorrado = ![...$("kit").options].some(o => o.value === "Kit de prueba");
-
   setClips(7);
   $("profile-save").click(); $("profile-name").value = "Perfil de prueba"; $("profile-ok").click();
   await new Promise(r => setTimeout(r, 700));
-  out.perfilGuardado = [...$("profile").options].some(o => o.value === "Perfil de prueba");
+  out.guardado = [...$("profile").options].some(o => o.value === "Perfil de prueba");
   setClips(2);
   $("profile").value = "Perfil de prueba"; $("profile").dispatchEvent(new Event("change"));
-  out.perfilAplicado = $("clips").value === "7";
+  out.aplicado = $("clips").value === "7";
   $("profile-del").click();
   await new Promise(r => setTimeout(r, 700));
-  out.perfilBorrado = ![...$("profile").options].some(o => o.value === "Perfil de prueba");
-  setClips(3); document.querySelector('input[name="sstyle"][value="classic"]').click(); $("st_handle").value = ""; afterLook();
+  out.borrado = ![...$("profile").options].some(o => o.value === "Perfil de prueba");
+  setClips(3);
   return out;
 })()`);
-check('un kit de marca se guarda y no aparece como perfil', profiles.kitGuardado && profiles.kitNoEsPerfil);
-check('un kit de marca se aplica', profiles.kitAplicado);
-check('un kit de marca se borra', profiles.kitBorrado);
-check('un perfil se guarda, se aplica y se borra', profiles.perfilGuardado && profiles.perfilAplicado && profiles.perfilBorrado);
+check('unos ajustes se guardan, se aplican y se borran', profiles.guardado && profiles.aplicado && profiles.borrado);
 
 // ------------------------------------------------------------ revision de momentos (edicion por clip)
 const review = await run(`(async () => {

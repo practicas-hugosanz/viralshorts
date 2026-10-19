@@ -114,6 +114,18 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
 
+### 1.3.1 (2026-10-19)
+
+- **Interfaz más sencilla.** *Crear* ahora va en dos pasos: **Contenido** (el
+  pódcast, el fondo y lo básico) y **Aspecto**. En *Aspecto* hay cinco
+  **plantillas** que cambian todo de un clic y secciones plegables (Composición,
+  Subtítulos, Tu marca, Vídeo de fondo, Sonido y extras) que muestran en una línea
+  lo que has elegido, sin abrirlas.
+- *Ajustes* pasa a secciones plegables con una línea que dice qué hay dentro.
+- Un único sitio para guardar tus ajustes («Mis ajustes guardados»): los kits de
+  marca se unen a él.
+- Textos más cortos en toda la pantalla.
+
 ### 1.3.0 (2026-10-19)
 
 - **Formatos**: además de 9:16, salida en 4:5 (feed de Instagram) y 1:1.

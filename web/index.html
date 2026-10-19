@@ -170,7 +170,7 @@ code { font: 12.5px Consolas, monospace; background: var(--raise); padding: 1px 
 
 .card {
   background: var(--surf); border: 1px solid var(--line-soft);
-  border-radius: var(--r); padding: 18px 20px; box-shadow: var(--shadow);
+  border-radius: var(--r); padding: 18px 20px;
 }
 .card > h2, .card-title { font: 600 15px var(--display); letter-spacing: .01em; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
 .card-sub { color: var(--mute); margin: -8px 0 14px; max-width: 64ch; }
@@ -415,8 +415,8 @@ input[type="color"].swatch::-webkit-color-swatch { border: 0; border-radius: 50%
 .ruler { height: 7px; margin-top: 3px; opacity: .8; background: repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 10px); -webkit-mask: linear-gradient(transparent, #000); mask: linear-gradient(transparent, #000); }
 details > summary { cursor: pointer; color: var(--mute); padding: 4px 0; list-style: none; display: flex; align-items: center; gap: 6px; width: fit-content; }
 details > summary::-webkit-details-marker { display: none; }
-details > summary::before { content: ""; width: 7px; height: 7px; border: solid currentColor; border-width: 0 2px 2px 0; transform: rotate(-45deg); transition: transform .15s; }
-details[open] > summary::before { transform: rotate(45deg); }
+details:not(.acc) > summary::before { content: ""; width: 7px; height: 7px; border: solid currentColor; border-width: 0 2px 2px 0; transform: rotate(-45deg); transition: transform .15s; }
+details:not(.acc)[open] > summary::before { transform: rotate(45deg); }
 details > summary:hover { color: var(--text); }
 pre#log { margin: 10px 0 0; max-height: 280px; overflow: auto; padding: 12px; border-radius: var(--r-s); background: var(--bg); border: 1px solid var(--line-soft); font: 12px/1.5 Consolas, monospace; white-space: pre-wrap; word-break: break-word; color: var(--mute); }
 pre#log .err { color: var(--bad); }
@@ -509,6 +509,41 @@ body.modal-open .main { overflow: hidden; }
 .live-line { display: flex; gap: 10px; color: var(--mute); }
 .live-line:last-child { color: var(--text); }
 .live-line time { flex: none; min-width: 52px; font: 500 12px var(--display); color: var(--faint); font-variant-numeric: tabular-nums; padding-top: 2px; }
+
+/* ------------------------------------------------------- pasos, plantillas, acordeones */
+.tabs { display: flex; gap: 6px; padding: 4px; background: var(--surf); border: 1px solid var(--line-soft); border-radius: 12px; width: fit-content; }
+.tabs button { display: flex; align-items: center; gap: 9px; padding: 8px 18px; border: 0; border-radius: 9px; background: transparent; color: var(--mute); font-weight: 600; }
+.tabs button i { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--raise); font: 600 12px var(--display); font-style: normal; color: var(--mute); }
+.tabs button:hover { color: var(--text); }
+.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+.tabs button[aria-selected="true"] i { background: rgba(0,0,0,.18); color: inherit; }
+.btn.next { align-self: flex-start; }
+[role="tabpanel"][hidden] { display: none; }
+
+.templates { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 8px; }
+.tpl { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); text-align: left; color: var(--text); }
+.tpl svg { width: 30px; height: 54px; margin-bottom: 8px; fill: var(--mute); }
+.tpl b { font-weight: 600; }
+.tpl span { color: var(--faint); font-size: 12.5px; line-height: 1.3; }
+.tpl:hover { border-color: var(--faint); }
+.tpl.on { border-color: var(--accent); background: var(--accent-soft); }
+.tpl.on svg { fill: var(--accent); }
+
+.acc-list { display: flex; flex-direction: column; gap: 8px; }
+.acc { border: 1px solid var(--line-soft); border-radius: var(--r); background: var(--surf); overflow: hidden; }
+.acc > summary { display: flex; align-items: center; gap: 14px; padding: 14px 18px; cursor: pointer; width: auto; color: var(--text); }
+.acc > summary::before { display: none; }
+.acc > summary::after { content: ""; width: 8px; height: 8px; border: solid var(--faint); border-width: 0 2px 2px 0; transform: rotate(45deg); transition: transform .15s; flex: none; margin-top: -3px; }
+.acc[open] > summary::after { transform: rotate(-135deg); margin-top: 3px; }
+.acc > summary b { font: 600 15px var(--display); letter-spacing: .01em; flex: 1; }
+.acc > summary:hover { background: var(--raise); }
+.acc .sum { color: var(--mute); font-size: 13px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
+.acc[open] > summary { border-bottom: 1px solid var(--line-soft); }
+.acc-body { padding: 16px 18px 18px; }
+.acc-body .card-sub { margin-top: 0; }
+.saved-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.saved-row select { flex: 1; min-width: 180px; }
+.stack > .card, .acc-list { box-shadow: none; }
 
 /* ------------------------------------------------- modelo, perfiles, biblioteca */
 .model-note { display: flex; align-items: flex-start; gap: 12px; margin-top: 12px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft); border-radius: var(--r-s); }
@@ -632,23 +667,18 @@ body.modal-open .main { overflow: hidden; }
         <header class="view-head">
           <div>
             <h1>Crear shorts</h1>
-            <p>Elige un pódcast y un vídeo de fondo. Viral Shorts encuentra los mejores momentos y los monta en vertical, con subtítulos.</p>
+            <p>Pega un pódcast y un vídeo de fondo; Viral Shorts hace el resto.</p>
           </div>
-          <div class="profiles">
-            <select id="profile" aria-label="Perfil de ajustes"><option value="">Ajustes actuales</option></select>
-            <button type="button" class="btn sm" id="profile-save">Guardar como perfil</button>
-            <button type="button" class="btn sm ghost" id="profile-del" hidden>Borrar perfil</button>
-          </div>
-        </header>
-        <div class="profile-new" id="profile-new" hidden>
-          <input type="text" id="profile-name" placeholder="Nombre del perfil, por ejemplo «Humor»" maxlength="40" aria-label="Nombre del perfil">
-          <button type="button" class="btn sm primary" id="profile-ok">Guardar</button>
-          <button type="button" class="btn sm" id="profile-cancel">Cancelar</button>
-        </div>
+          </header>
 
         <div class="create">
           <form id="form" class="stack" autocomplete="off" novalidate>
+            <div class="tabs" role="tablist" aria-label="Pasos">
+              <button type="button" role="tab" id="tab-contenido" data-tab="contenido" aria-selected="true"><i>1</i>Contenido</button>
+              <button type="button" role="tab" id="tab-aspecto" data-tab="aspecto" aria-selected="false"><i>2</i>Aspecto</button>
+            </div>
 
+            <div id="panel-contenido" class="stack" role="tabpanel">
             <section class="card source" id="step-1">
               <div class="source-top"><label for="podcast"><b>Pódcast</b></label><span>Enlace de YouTube o archivo de tu ordenador</span></div>
               <div class="source-row">
@@ -658,7 +688,6 @@ body.modal-open .main { overflow: hidden; }
               </div>
               <div class="media" id="podcast-preview"><img alt=""><div><b></b><span></span></div></div>
             </section>
-
             <section class="card source" id="step-2">
               <div class="source-top"><label for="background"><b>Vídeo de fondo</b></label><span>Cualquier vídeo que acompañe al pódcast, como un gameplay</span></div>
               <div class="source-row">
@@ -669,8 +698,8 @@ body.modal-open .main { overflow: hidden; }
               <div class="media" id="background-preview"><img alt=""><div><b></b><span></span></div></div>
             </section>
 
-            <section class="card">
-              <h2>Qué quieres obtener</h2>
+              <section class="card">
+                <h2>Qué quieres obtener</h2>
               <div class="fields">
                 <div class="wide count-row">
                   <div class="stepper">
@@ -697,7 +726,7 @@ body.modal-open .main { overflow: hidden; }
                     <label class="choice"><input type="radio" name="preset" value="balanced" checked><b>Equilibrada</b><em>unos 12 min</em></label>
                     <label class="choice"><input type="radio" name="preset" value="best"><b>Máxima</b><em>unos 26 min</em></label>
                   </div>
-                  <p class="hint">Tiempos para un pódcast de unas 2 horas, medidos en un i5-12400F sin tarjeta NVIDIA y sin contar la descarga. Más calidad significa subtítulos más exactos; la máxima además afina el texto de cada clip con un modelo mayor.</p>
+                  <p class="hint">Más calidad significa subtítulos más exactos.</p>
                   <div class="model-note" id="model-note" hidden>
                     <svg class="ico"><use href="#i-download"/></svg>
                     <div class="note-body"><b id="mn-title"></b><p id="mn-text"></p><div class="bar sm" id="mn-bar" hidden><i id="mn-fill"></i></div></div>
@@ -714,10 +743,28 @@ body.modal-open .main { overflow: hidden; }
                   </select>
                 </div>
               </div>
+            
+              </section>
+              <button type="button" class="btn next" data-tab-go="aspecto">Personalizar el aspecto</button>
+            </div>
+
+            <div id="panel-aspecto" class="stack" role="tabpanel" hidden>
+            <section class="card">
+              <h2>Empieza por una plantilla</h2>
+              <p class="card-sub">Un clic cambia el aspecto entero; después ajusta lo que quieras.</p>
+              <div class="templates" id="templates">
+                <button type="button" class="tpl" data-tpl="clasico"><svg viewBox="0 0 34 60" aria-hidden="true"><rect x="1" y="1" width="32" height="28" rx="3" opacity=".6"/><rect x="1" y="31" width="32" height="28" rx="3" opacity=".25"/></svg><b>Clásico</b><span>Pódcast arriba, fondo abajo</span></button>
+                <button type="button" class="tpl" data-tpl="limpio"><svg viewBox="0 0 34 60" aria-hidden="true"><rect x="1" y="1" width="32" height="58" rx="3" opacity=".6"/><rect x="7" y="40" width="20" height="6" rx="2" opacity=".9"/></svg><b>Pódcast limpio</b><span>Solo el pódcast, subtítulos en caja</span></button>
+                <button type="button" class="tpl" data-tpl="gaming"><svg viewBox="0 0 34 60" aria-hidden="true"><rect x="1" y="1" width="32" height="34" rx="3" opacity=".6"/><rect x="1" y="37" width="32" height="22" rx="3" opacity=".25"/><rect x="1" y="56" width="18" height="3" opacity=".95"/></svg><b>Gaming</b><span>Más pódcast, rotulador y barra</span></button>
+                <button type="button" class="tpl" data-tpl="neon"><svg viewBox="0 0 34 60" aria-hidden="true"><rect x="1" y="1" width="32" height="58" rx="3" opacity=".25"/><rect x="1" y="21" width="32" height="18" rx="2" opacity=".65"/></svg><b>Neón</b><span>Franja central y subtítulos con brillo</span></button>
+                <button type="button" class="tpl" data-tpl="sobrio"><svg viewBox="0 0 34 60" aria-hidden="true"><rect x="1" y="1" width="32" height="28" rx="3" opacity=".5"/><rect x="1" y="31" width="32" height="28" rx="3" opacity=".25"/><rect x="9" y="44" width="16" height="2" opacity=".9"/></svg><b>Sobrio</b><span>Subtítulos discretos</span></button>
+              </div>
             </section>
 
-            <section class="card">
-              <h2>Composición</h2>
+              <div class="acc-list">
+              <details class="acc" name="aspecto" id="acc-comp">
+                <summary><b>Composición</b><span class="sum" id="sum-comp"></span></summary>
+                <div class="acc-body">
               <div class="fields">
                 <div class="wide">
                   <span class="lbl-t">Cómo se reparte el vídeo</span>
@@ -748,36 +795,11 @@ body.modal-open .main { overflow: hidden; }
                 </div>
               </div>
               <input type="hidden" id="st_layout" value="stack"><input type="hidden" id="st_top" value="0.5"><input type="hidden" id="st_swap" value="false">
-            </section>
-
-            <section class="card">
-              <h2>Vídeo de fondo</h2>
-              <div class="fields">
-                <div class="wide">
-                  <label class="lbl-t" for="st_bgstart">De dónde sale cada short</label>
-                  <select id="st_bgstart">
-                    <option value="sequence" selected>Uno detrás de otro (cada short sigue donde acabó el anterior)</option>
-                    <option value="random">Un punto distinto cada vez</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="lbl-t" for="st_bgspeed">Velocidad</label>
-                  <div class="slider"><input type="range" id="st_bgspeed" min="0.5" max="2" step="0.05" value="1"><output id="st_bgspeed_out">1.0×</output></div>
-                </div>
-                <div>
-                  <label class="lbl-t" for="st_bgblur">Desenfoque</label>
-                  <div class="slider"><input type="range" id="st_bgblur" min="0" max="100" step="5" value="0"><output id="st_bgblur_out">0%</output></div>
-                </div>
-                <div>
-                  <label class="lbl-t" for="st_bgdim">Oscurecer</label>
-                  <div class="slider"><input type="range" id="st_bgdim" min="0" max="60" step="5" value="0"><output id="st_bgdim_out">0%</output></div>
-                </div>
-              </div>
-              <p class="hint">Un fondo más lento, borroso u oscuro no compite con quien habla.</p>
-            </section>
-
-            <section class="card">
-              <h2>Subtítulos</h2>
+            </div>
+              </details>
+              <details class="acc" name="aspecto" id="acc-subs">
+                <summary><b>Subtítulos</b><span class="sum" id="sum-subs"></span></summary>
+                <div class="acc-body">
               <div class="fields">
                 <div class="wide">
                   <span class="lbl-t">Estilo</span>
@@ -826,16 +848,11 @@ body.modal-open .main { overflow: hidden; }
                   <p class="hint">Tiene que estar instalada en Windows.</p>
                 </div>
               </div>
-            </section>
-
-            <section class="card">
-              <h2>Tu marca</h2>
-              <p class="card-sub">Un logo y tu usuario en una esquina de todos los shorts.</p>
-              <div class="kit-row">
-                <select id="kit" aria-label="Kits de marca"><option value="">Kits de marca guardados</option></select>
-                <button type="button" class="btn sm" id="kit-save">Guardar este aspecto como kit</button>
-                <button type="button" class="btn sm ghost" id="kit-del" hidden>Borrar kit</button>
-              </div>
+            </div>
+              </details>
+              <details class="acc" name="aspecto" id="acc-marca">
+                <summary><b>Tu marca</b><span class="sum" id="sum-marca"></span></summary>
+                <div class="acc-body">
               <div class="fields">
                 <div class="wide">
                   <label class="lbl-t" for="st_logo">Logo</label>
@@ -869,13 +886,41 @@ body.modal-open .main { overflow: hidden; }
                   <p class="hint">Aparece junto al logo, o solo si no pones logo.</p>
                 </div>
               </div>
-            </section>
-
-            <section class="card">
-              <h2>Barra, sonido y final</h2>
+            </div>
+              </details>
+              <details class="acc" name="aspecto" id="acc-fondo">
+                <summary><b>Vídeo de fondo</b><span class="sum" id="sum-fondo"></span></summary>
+                <div class="acc-body">
               <div class="fields">
                 <div class="wide">
-                  <label class="opt compact" style="padding-top:0"><span class="opt-text"><b>Barra de progreso</b><em>Una barra fina que avanza durante el clip: el espectador ve cuánto falta y aguanta más.</em></span><input type="checkbox" class="switch" id="bar-on"></label>
+                  <label class="lbl-t" for="st_bgstart">De dónde sale cada short</label>
+                  <select id="st_bgstart">
+                    <option value="sequence" selected>Uno detrás de otro (cada short sigue donde acabó el anterior)</option>
+                    <option value="random">Un punto distinto cada vez</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="lbl-t" for="st_bgspeed">Velocidad</label>
+                  <div class="slider"><input type="range" id="st_bgspeed" min="0.5" max="2" step="0.05" value="1"><output id="st_bgspeed_out">1.0×</output></div>
+                </div>
+                <div>
+                  <label class="lbl-t" for="st_bgblur">Desenfoque</label>
+                  <div class="slider"><input type="range" id="st_bgblur" min="0" max="100" step="5" value="0"><output id="st_bgblur_out">0%</output></div>
+                </div>
+                <div>
+                  <label class="lbl-t" for="st_bgdim">Oscurecer</label>
+                  <div class="slider"><input type="range" id="st_bgdim" min="0" max="60" step="5" value="0"><output id="st_bgdim_out">0%</output></div>
+                </div>
+              </div>
+              <p class="hint">Un fondo más lento, borroso u oscuro no compite con quien habla.</p>
+            </div>
+              </details>
+              <details class="acc" name="aspecto" id="acc-extras">
+                <summary><b>Sonido y extras</b><span class="sum" id="sum-extras"></span></summary>
+                <div class="acc-body">
+              <div class="fields">
+                <div class="wide">
+                  <label class="opt compact" style="padding-top:0"><span class="opt-text"><b>Barra de progreso</b><em>Una barra fina que avanza durante el clip.</em></span><input type="checkbox" class="switch" id="bar-on"></label>
                   <input type="hidden" id="st_bar" value="false">
                 </div>
                 <div id="bar-opts" class="wide fields" style="grid-template-columns: 1fr 1fr; gap: 16px 20px" hidden>
@@ -889,10 +934,10 @@ body.modal-open .main { overflow: hidden; }
                   </div>
                 </div>
                 <div class="wide opts">
-                  <label class="opt"><span class="opt-text"><b>Whoosh al aparecer el rótulo</b><em>Un efecto de sonido corto cuando salen la tarjeta y el gancho.</em></span><input type="checkbox" class="switch" id="fx-sfx"></label>
-                  <label class="opt"><span class="opt-text"><b>Pitido en vez de la palabrota</b><em>Además de taparla en el texto, se silencia la voz en ese momento y suena un pitido.</em></span><input type="checkbox" class="switch" id="fx-beep"></label>
-                  <label class="opt"><span class="opt-text"><b>Portada con el gancho escrito</b><em>La imagen de portada de cada short lleva el gancho encima.</em></span><input type="checkbox" class="switch" id="fx-cover"></label>
-                  <label class="opt"><span class="opt-text"><b>Pantalla final</b><em>Los últimos segundos se oscurecen y sale un mensaje, por ejemplo «Sígueme para más».</em></span><input type="checkbox" class="switch" id="fx-end"></label>
+                  <label class="opt"><span class="opt-text"><b>Whoosh al aparecer el rótulo</b><em>Sonido corto cuando salen la tarjeta y el gancho.</em></span><input type="checkbox" class="switch" id="fx-sfx"></label>
+                  <label class="opt"><span class="opt-text"><b>Pitido en vez de la palabrota</b><em>La voz se silencia y suena un pitido.</em></span><input type="checkbox" class="switch" id="fx-beep"></label>
+                  <label class="opt"><span class="opt-text"><b>Portada con el gancho escrito</b><em>La portada lleva el gancho escrito.</em></span><input type="checkbox" class="switch" id="fx-cover"></label>
+                  <label class="opt"><span class="opt-text"><b>Pantalla final</b><em>Los últimos segundos muestran un mensaje.</em></span><input type="checkbox" class="switch" id="fx-end"></label>
                 </div>
                 <div class="wide" id="end-opts" hidden>
                   <label class="lbl-t" for="st_endtext">Mensaje de la pantalla final</label>
@@ -906,7 +951,7 @@ body.modal-open .main { overflow: hidden; }
                     <button type="button" class="btn" data-browse="st_music" data-kind="audio"><svg class="ico"><use href="#i-folder"/></svg>Elegir</button>
                     <button type="button" class="btn ghost" id="music-clear" hidden>Quitar</button>
                   </div>
-                  <p class="hint">Usa música con licencia: la de otros puede dar reclamaciones de derechos.</p>
+                  <p class="hint">Usa música con licencia.</p>
                 </div>
                 <div id="music-opts" class="wide fields" style="grid-template-columns: 1fr 1fr; gap: 16px 20px" hidden>
                   <div>
@@ -920,7 +965,25 @@ body.modal-open .main { overflow: hidden; }
                   </div>
                 </div>
               </div>
+            </div>
+              </details>
+              </div>
+            <section class="card">
+              <h2>Mis ajustes guardados</h2>
+              <p class="card-sub">Guarda todo lo que has elegido y recupéralo con un clic.</p>
+              <div class="saved-row">
+                <select id="profile" aria-label="Ajustes guardados"><option value="">Los de ahora</option></select>
+                <button type="button" class="btn" id="profile-save">Guardar</button>
+                <button type="button" class="btn ghost" id="profile-del" hidden>Borrar</button>
+              </div>
+              <div class="profile-new" id="profile-new" hidden>
+                <input type="text" id="profile-name" placeholder="Nombre, por ejemplo «Humor»" maxlength="40" aria-label="Nombre de los ajustes">
+                <button type="button" class="btn sm primary" id="profile-ok">Guardar</button>
+                <button type="button" class="btn sm" id="profile-cancel">Cancelar</button>
+              </div>
             </section>
+
+            </div>
           </form>
 
           <!-- monitor: lo que se ve aquí es lo que sale en el vídeo -->
@@ -938,7 +1001,7 @@ body.modal-open .main { overflow: hidden; }
                 <div class="sub" id="ph_sub"></div>
               </div>
             </div>
-            <p class="hint">Vista previa de los subtítulos. La palabra que suena cambia de color.</p>
+            <p class="hint">Así se verá tu short.</p>
 
             <div class="launch">
               <button type="submit" form="form" class="btn primary lg" id="run">Generar mis shorts</button>
@@ -1048,18 +1111,21 @@ body.modal-open .main { overflow: hidden; }
           </div>
         </header>
 
-        <div class="settings">
-          <section class="card">
-            <h2>Elegir los momentos</h2>
+        <div class="acc-list">
+          <details class="acc" name="ajustes">
+            <summary><b>Elegir los momentos</b><span class="sum">Claude, búsqueda rápida, dónde empezar</span></summary>
+            <div class="acc-body">
             <div class="opts">
               <label class="opt"><span class="opt-text"><b>Que Claude elija y titule</b><em>Lee la transcripción, escoge los momentos con más gancho y redacta título, descripción y hashtags. Necesita una clave de API de Anthropic. Apagado, los textos se extraen de las frases del propio invitado.</em></span><input type="checkbox" class="switch" id="llm" checked></label>
               <label class="opt"><span class="opt-text"><b>Búsqueda rápida de momentos</b><em>Localiza primero las zonas calientes y solo transcribe esas. Sin esto, un pódcast de 3 h tarda casi 2 horas en vez de 10 minutos.</em></span><input type="checkbox" class="switch" id="prescan" checked></label>
               <label class="opt"><span class="opt-text"><b>Empezar donde empieza el tema</b><em>Evita recortes que empiezan a media frase. Apagado, se elige solo por lo más rebobinado.</em></span><input type="checkbox" class="switch" id="context" checked></label>
             </div>
-          </section>
+          </div>
+          </details>
 
-          <section class="card">
-            <h2>Montaje</h2>
+          <details class="acc" name="ajustes">
+            <summary><b>Montaje</b><span class="sum">Seguir la cara, silencios, zoom, palabrotas</span></summary>
+            <div class="acc-body">
             <div class="opts">
               <label class="opt"><span class="opt-text"><b>Seguir la cara</b><em>El encuadre se mueve hacia quien habla en vez de recortar por el centro.</em></span><input type="checkbox" class="switch" id="reframe" checked></label>
               <label class="opt"><span class="opt-text"><b>Quitar los silencios</b><em>Corta las pausas largas para que el clip vaya más rápido.</em></span><input type="checkbox" class="switch" id="jumpcuts" checked></label>
@@ -1067,10 +1133,12 @@ body.modal-open .main { overflow: hidden; }
               <label class="opt"><span class="opt-text"><b>Tarjeta de contexto al empezar</b><em>Durante los primeros 2,5 segundos aparece arriba el título del clip, para que quien llega de golpe entienda de qué se habla.</em></span><input type="checkbox" class="switch" id="title_card" checked></label>
               <label class="opt"><span class="opt-text"><b>Tapar las palabrotas</b><em>En los subtítulos, «puta» sale como «p#ta». Se lee igual, pero deja de ser literal para los filtros de las plataformas. El audio no se toca.</em></span><input type="checkbox" class="switch" id="censor" checked></label>
             </div>
-          </section>
+          </div>
+          </details>
 
-          <section class="card">
-            <h2>Límites de tiempo</h2>
+          <details class="acc" name="ajustes">
+            <summary><b>Límites de tiempo</b><span class="sum">Duración de los clips y qué se ignora</span></summary>
+            <div class="acc-body">
             <div class="fields">
               <div><label class="lbl-t" for="min_duration">Duración mínima (s)</label><input type="number" id="min_duration" value="25" min="5" max="180"></div>
               <div><label class="lbl-t" for="max_duration">Duración máxima (s)</label><input type="number" id="max_duration" value="45" min="5" max="180"></div>
@@ -1078,10 +1146,12 @@ body.modal-open .main { overflow: hidden; }
               <div><label class="lbl-t" for="tail_skip">Ignorar el final (s)</label><input type="number" id="tail_skip" value="30" min="0"></div>
             </div>
             <p class="hint">Se salta la intro y la despedida, donde casi nunca está el mejor momento.</p>
-          </section>
+          </div>
+          </details>
 
-          <section class="card">
-            <h2>Transcripción</h2>
+          <details class="acc" name="ajustes">
+            <summary><b>Transcripción</b><span class="sum">Modelo de voz y precisión</span></summary>
+            <div class="acc-body">
             <div class="fields">
               <div class="wide">
                 <label class="lbl-t" for="model">Modelo</label>
@@ -1111,10 +1181,12 @@ body.modal-open .main { overflow: hidden; }
                 </select>
               </div>
             </div>
-          </section>
+          </div>
+          </details>
 
-          <section class="card">
-            <h2>Acertar más con el texto</h2>
+          <details class="acc" name="ajustes">
+            <summary><b>Acertar más con el texto</b><span class="sum">Afinado, nombres difíciles, correcciones</span></summary>
+            <div class="acc-body">
             <p class="card-sub">Lo que se lee en pantalla sale de la transcripción: estos ajustes la mejoran sin tocar el resto.</p>
             <div class="fields">
               <div class="wide">
@@ -1138,10 +1210,12 @@ body.modal-open .main { overflow: hidden; }
                 <p class="hint">Una por línea, «como lo escribe mal = como debe salir». Se aplican a todos los subtítulos, sin importar mayúsculas.</p>
               </div>
             </div>
-          </section>
+          </div>
+          </details>
 
-          <section class="card">
-            <h2>Rendimiento</h2>
+          <details class="acc" name="ajustes">
+            <summary><b>Rendimiento</b><span class="sum">Calidad de descarga, tarjeta gráfica</span></summary>
+            <div class="acc-body">
             <div class="fields">
               <div class="wide">
                 <label class="lbl-t" for="st_height">Calidad de la descarga</label>
@@ -1169,20 +1243,24 @@ body.modal-open .main { overflow: hidden; }
               </div>
             </div>
             <p class="hint">Con GPU el montaje va varias veces más rápido; los archivos salen algo más grandes.</p>
-          </section>
+          </div>
+          </details>
 
-          <section class="card">
-            <h2>Dónde se guardan</h2>
+          <details class="acc" name="ajustes">
+            <summary><b>Dónde se guardan</b><span class="sum">Carpeta de los shorts</span></summary>
+            <div class="acc-body">
             <label class="lbl-t" for="output">Carpeta de los shorts</label>
             <div class="with-button">
               <input type="text" id="output" value="" placeholder="La de config.yaml" spellcheck="false">
               <button type="button" class="btn" data-browse="output" data-kind="folder"><svg class="ico"><use href="#i-folder"/></svg>Elegir</button>
             </div>
             <p class="hint" id="output-hint">Cada ejecución crea su propia subcarpeta aquí dentro.</p>
-          </section>
+          </div>
+          </details>
 
-          <section class="card">
-            <h2>Descarga de YouTube</h2>
+          <details class="acc" name="ajustes">
+            <summary><b>Descarga de YouTube</b><span class="sum">Cookies del navegador</span></summary>
+            <div class="acc-body">
             <label class="lbl-t" for="st_cookies">Usar las cookies de mi navegador</label>
             <select id="st_cookies">
               <option value="" selected>No</option>
@@ -1192,15 +1270,18 @@ body.modal-open .main { overflow: hidden; }
               <option value="brave">Brave</option>
             </select>
             <p class="hint">Sirve para vídeos con restricción de edad o cuando YouTube pide iniciar sesión. Hay que haber entrado en YouTube con ese navegador. Con Chrome y Edge puede fallar mientras están abiertos; Firefox suele ir mejor.</p>
-          </section>
+          </div>
+          </details>
 
-          <section class="card full">
-            <h2>Aplicación</h2>
+          <details class="acc" name="ajustes">
+            <summary><b>Aplicación</b><span class="sum">Versión y actualizaciones</span></summary>
+            <div class="acc-body">
             <div class="about">
               <div class="grow"><b id="about-version">Viral Shorts</b><br><span id="about-status">Las actualizaciones se descargan solas desde GitHub.</span></div>
               <button type="button" class="btn" id="upd-check"><svg class="ico"><use href="#i-refresh"/></svg>Buscar actualizaciones</button>
             </div>
-          </section>
+          </div>
+          </details>
         </div>
       </section>
 
@@ -1469,6 +1550,7 @@ function paintLook() {
   gamebg.style.filter = `blur(${(+$("st_bgblur").value / 100 * 6).toFixed(1)}px) brightness(${(1 - +$("st_bgdim").value / 100).toFixed(2)})`;
 
   $("end-opts").hidden = $("st_endcard").value !== "true";
+  paintSummaries();
 
   // Barra de progreso y musica.
   const bar = $("ph_bar");
@@ -2298,34 +2380,10 @@ function applyProfile(data) {
   saveForm();
 }
 
-// Un kit de marca es un perfil que solo lleva lo visual: se guarda en el mismo
-// fichero con la marca __kit y se aplica sin tocar el resto de ajustes.
-const KIT_KEYS = ["st_font", "st_size", "st_pos", "st_words", "st_color", "st_sstyle", "st_logo", "st_lpos",
-                  "st_lsize", "st_lop", "st_handle", "st_bar", "st_barpos", "st_barcolor",
-                  "st_endcard", "st_endtext", "st_cover"];
-let savingKit = false;
-const isKit = (data) => !!(data && data.__kit);
-
-function kitSnapshot() {
-  const data = { __kit: true };
-  KIT_KEYS.forEach(k => data[k] = $(k).value);
-  return data;
-}
-
-function fillKits(keep) {
-  const select = $("kit");
-  const names = Object.keys(PROFILES).filter(n => isKit(PROFILES[n])).sort((a, b) => a.localeCompare(b, "es"));
-  select.innerHTML = `<option value="">Kits de marca guardados</option>` +
-    names.map(name => `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`).join("");
-  select.value = names.includes(keep) ? keep : "";
-  $("kit-del").hidden = !select.value;
-}
-
 function fillProfiles(keep) {
-  fillKits($("kit").value);
   const select = $("profile");
-  const names = Object.keys(PROFILES).filter(n => !isKit(PROFILES[n])).sort((a, b) => a.localeCompare(b, "es"));
-  select.innerHTML = `<option value="">Ajustes actuales</option>` +
+  const names = Object.keys(PROFILES).sort((a, b) => a.localeCompare(b, "es"));
+  select.innerHTML = `<option value="">Los de ahora</option>` +
     names.map(name => `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`).join("");
   select.value = names.includes(keep) ? keep : "";
   $("profile-del").hidden = !select.value;
@@ -2343,34 +2401,7 @@ $("profile").addEventListener("change", () => {
   $("profile-del").hidden = !name;
   if (name && PROFILES[name]) applyProfile(PROFILES[name]);
 });
-$("kit").addEventListener("change", () => {
-  const name = $("kit").value;
-  $("kit-del").hidden = !name;
-  const data = PROFILES[name];
-  if (!name || !data) return;
-  KIT_KEYS.forEach(k => { if (data[k] !== undefined) $(k).value = data[k]; });
-  afterLook();
-});
-$("kit-save").addEventListener("click", () => {
-  savingKit = true;
-  $("profile-new").hidden = false;
-  $("profile-name").placeholder = "Nombre del kit, por ejemplo «Mi canal»";
-  $("profile-name").value = $("kit").value;
-  $("profile-name").focus();
-});
-$("kit-del").addEventListener("click", async () => {
-  const name = $("kit").value;
-  if (!name) return;
-  try {
-    PROFILES = (await post("/api/profiles/delete", { name })).profiles || {};
-    fillProfiles($("profile").value);
-  } catch (error) {
-    showBanner($("banner"), "No se pudo borrar el kit", escapeHtml(error.message));
-  }
-});
 $("profile-save").addEventListener("click", () => {
-  savingKit = false;
-  $("profile-name").placeholder = "Nombre del perfil, por ejemplo «Humor»";
   $("profile-new").hidden = false;
   $("profile-name").value = $("profile").value;
   $("profile-name").focus();
@@ -2380,16 +2411,12 @@ async function saveProfile() {
   const name = $("profile-name").value.trim();
   if (!name) { $("profile-name").focus(); return; }
   try {
-    const answer = await post("/api/profiles/save", { name, data: savingKit ? kitSnapshot() : snapshot() });
+    const answer = await post("/api/profiles/save", { name, data: snapshot() });
     PROFILES = answer.profiles || PROFILES;
-    fillProfiles(savingKit ? $("profile").value : name);
-    if (savingKit) $("kit").value = name;
-    $("kit-del").hidden = !$("kit").value;
+    fillProfiles(name);
     $("profile-new").hidden = true;
-    showBanner($("tip"), savingKit ? `Kit «${escapeHtml(name)}» guardado` : `Perfil «${escapeHtml(name)}» guardado`,
-      savingKit
-        ? "Elígelo en «Tu marca» para recuperar el logo, el usuario, los subtítulos y la pantalla final de un clic."
-        : "Elígelo en el desplegable para recuperar estos ajustes: cantidad, duración, calidad, subtítulos y todo lo de Ajustes.");
+    showBanner($("tip"), `Ajustes «${escapeHtml(name)}» guardados`,
+      "Elígelos en «Mis ajustes guardados» (pestaña Aspecto) para recuperar todo de un clic.");
   } catch (error) {
     showBanner($("banner"), "No se pudo guardar el perfil", escapeHtml(error.message));
   }
@@ -2409,6 +2436,78 @@ $("profile-del").addEventListener("click", async () => {
     showBanner($("banner"), "No se pudo borrar el perfil", escapeHtml(error.message));
   }
 });
+
+// ===========================================================================
+// Pasos (Contenido / Aspecto), plantillas y resumenes
+// ===========================================================================
+function showTab(name) {
+  ["contenido", "aspecto"].forEach(tab => {
+    $("panel-" + tab).hidden = tab !== name;
+    $("tab-" + tab).setAttribute("aria-selected", tab === name ? "true" : "false");
+  });
+  if (name === "aspecto") paintPhone();
+}
+document.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+document.querySelectorAll("[data-tab-go]").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tabGo)));
+
+// Cada plantilla fija todo el aspecto (no toca lo de "Contenido").
+const LOOK_DEFAULTS = {
+  st_layout: "stack", st_top: "0.5", st_swap: "false", st_format: "9:16",
+  st_sstyle: "classic", st_color: "#FFF200", st_size: "92", st_pos: "30", st_words: "3",
+  st_bar: "false", st_barpos: "bottom", st_barcolor: "#ff7a18", st_sfx: "false", st_endcard: "false",
+  st_bgstart: "sequence", st_bgspeed: "1", st_bgblur: "0", st_bgdim: "0",
+};
+const TEMPLATES = {
+  clasico: {},
+  limpio:  { st_layout: "full", st_sstyle: "box", st_color: "#FFF200", st_size: "80", st_words: "4", st_pos: "22" },
+  gaming:  { st_top: "0.6", st_sstyle: "marker", st_bar: "true", st_barcolor: "#ff7a18", st_sfx: "true", st_bgdim: "10" },
+  neon:    { st_layout: "center", st_sstyle: "neon", st_color: "#40C4FF", st_sfx: "true", st_bgblur: "30", st_bgdim: "25" },
+  sobrio:  { st_sstyle: "minimal", st_color: "#FFFFFF", st_size: "80", st_words: "4", st_pos: "25" },
+};
+
+function applyTemplate(name) {
+  const values = { ...LOOK_DEFAULTS, ...TEMPLATES[name] };
+  Object.entries(values).forEach(([id, value]) => { $(id).value = value; });
+  afterLook();
+}
+document.querySelectorAll("[data-tpl]").forEach(b => b.addEventListener("click", () => applyTemplate(b.dataset.tpl)));
+
+function currentTemplate() {
+  return Object.keys(TEMPLATES).find(name => {
+    const values = { ...LOOK_DEFAULTS, ...TEMPLATES[name] };
+    return Object.entries(values).every(([id, value]) => String($(id).value).toLowerCase() === String(value).toLowerCase());
+  });
+}
+
+const STYLE_NAMES = { classic: "Clásico", box: "Caja", marker: "Rotulador", neon: "Neón", minimal: "Sobrio" };
+const COMP_NAMES = { stack: "Dividido", full: "Solo el pódcast", center: "Franja central" };
+
+/** Lo elegido en cada seccion, en una linea: se ve sin abrirla. */
+function paintSummaries() {
+  const mode = $("st_layout").value;
+  const comp = [COMP_NAMES[mode], $("st_format").value];
+  if (mode === "stack") comp.push(Math.round(+$("st_top").value * 100) + " % pódcast");
+  $("sum-comp").textContent = comp.join(" · ");
+  $("sum-subs").textContent = `${STYLE_NAMES[$("st_sstyle").value]} · ${$("st_font").value} · ${$("st_words").value} palabras`;
+  const brand = [$("st_logo").value.trim() ? "Logo" : "Sin logo"];
+  if ($("st_handle").value.trim()) brand.push($("st_handle").value.trim());
+  $("sum-marca").textContent = brand.join(" · ");
+  const bg = [$("st_bgstart").value === "random" ? "Punto aleatorio" : "En orden"];
+  if (+$("st_bgspeed").value !== 1) bg.push(+$("st_bgspeed").value + "×");
+  if (+$("st_bgblur").value) bg.push("desenfocado");
+  if (+$("st_bgdim").value) bg.push("oscurecido");
+  $("sum-fondo").textContent = bg.join(" · ");
+  const extras = [];
+  if ($("st_bar").value === "true") extras.push("barra");
+  if ($("st_music").value.trim()) extras.push("música");
+  if ($("st_sfx").value === "true") extras.push("whoosh");
+  if ($("st_beep").value === "true") extras.push("pitido");
+  if ($("st_cover").value === "true") extras.push("portada");
+  if ($("st_endcard").value === "true") extras.push("pantalla final");
+  $("sum-extras").textContent = extras.length ? extras.join(" · ") : "Nada activado";
+  const current = currentTemplate();
+  document.querySelectorAll("[data-tpl]").forEach(b => b.classList.toggle("on", b.dataset.tpl === current));
+}
 
 // ===========================================================================
 // Cableado
