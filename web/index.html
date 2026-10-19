@@ -313,6 +313,41 @@ input[type="color"].swatch::-webkit-color-swatch { border: 0; border-radius: 50%
     linear-gradient(160deg, #1f7a63, #3a2b78 70%, #1b1536);
 }
 .seam { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(255,255,255,.18); }
+
+/* Composicion: el monitor refleja como se reparte el video. */
+.screen { --top: 50%; }
+.pod { inset: 0 0 calc(100% - var(--top)) 0; z-index: 1; }
+.gamebg { inset: var(--top) 0 0 0; }
+.seam { top: var(--top); z-index: 2; }
+.screen.swap .pod { inset: calc(100% - var(--top)) 0 0 0; }
+.screen.swap .gamebg { inset: 0 0 var(--top) 0; }
+.screen.swap .seam { top: calc(100% - var(--top)); }
+.screen.mode-full .pod { inset: 0; }
+.screen.mode-full .gamebg, .screen.mode-full .seam { display: none; }
+.screen.mode-center .gamebg { inset: 0; z-index: 0; }
+.screen.mode-center .pod { inset: 34.2% 0 34.2% 0; }
+.screen.mode-center .seam { display: none; }
+
+/* Marca: logo y usuario en una esquina. */
+.ph-brand { position: absolute; z-index: 4; display: flex; flex-direction: column; gap: 1.2cqw; width: var(--logo-w, 14%); pointer-events: none; }
+.ph-brand img { width: 100%; display: block; }
+.ph-brand .handle { font: 700 3.2cqw/1.1 "Segoe UI", Arial, sans-serif; color: #fff; white-space: nowrap; text-shadow: 0 0 .5cqw #000, 0 0 .5cqw #000; }
+.ph-brand.tl { top: 4cqw; left: 4cqw; align-items: flex-start; }
+.ph-brand.tr { top: 4cqw; right: 4cqw; align-items: flex-end; }
+.ph-brand.bl { bottom: 4cqw; left: 4cqw; align-items: flex-start; flex-direction: column-reverse; }
+.ph-brand.br { bottom: 4cqw; right: 4cqw; align-items: flex-end; flex-direction: column-reverse; }
+
+/* Plantillas de subtitulos. */
+.sub { --hot: #fff200; z-index: 3; }
+.sub .hot { color: var(--hot); }
+.sub.s-box { left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: 92%; background: rgba(0,0,0,.5); padding: .12em .4em; border-radius: .08em; -webkit-text-stroke: 0; text-shadow: none; }
+.sub.s-marker .hot { background: var(--hot); color: #000; -webkit-text-stroke: 0; text-shadow: none; border-radius: .12em; padding: 0 .1em; }
+.sub.s-neon { -webkit-text-stroke: 0; text-shadow: 0 0 .2em var(--hot), 0 0 .45em var(--hot); }
+.sub.s-neon .hot { color: var(--hot); text-shadow: 0 0 .15em #fff, 0 0 .4em #fff; }
+.sub.s-minimal { -webkit-text-stroke: .03em #000; text-shadow: 0 .03em .06em rgba(0,0,0,.8); }
+.seg.four { grid-template-columns: repeat(4, 1fr); }
+.seg.auto { grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); }
+.opt.compact { padding: 10px 0 0; border: 0; }
 .hooktag {
   position: absolute; top: 6%; left: 50%; transform: translateX(-50%);
   max-width: 88%; padding: .5em .9em; border-radius: .5em;
@@ -665,8 +700,44 @@ body.modal-open .main { overflow: hidden; }
             </section>
 
             <section class="card">
+              <h2>Composición</h2>
+              <div class="fields">
+                <div class="wide">
+                  <span class="lbl-t">Cómo se reparte el vídeo</span>
+                  <div class="seg" role="radiogroup" aria-label="Composición">
+                    <label class="choice"><input type="radio" name="comp" value="stack" checked><b>Dividido</b><em>pódcast y fondo apilados</em></label>
+                    <label class="choice"><input type="radio" name="comp" value="full"><b>Solo el pódcast</b><em>a pantalla completa</em></label>
+                    <label class="choice"><input type="radio" name="comp" value="center"><b>En el centro</b><em>franja sobre el fondo</em></label>
+                  </div>
+                </div>
+                <div class="wide" id="comp-stack">
+                  <span class="lbl-t">Cuánto ocupa el pódcast</span>
+                  <div class="seg four" role="radiogroup" aria-label="Altura del pódcast">
+                    <label class="choice"><input type="radio" name="ratio" value="40"><b>40 %</b><em>más fondo</em></label>
+                    <label class="choice"><input type="radio" name="ratio" value="50" checked><b>50 %</b><em>mitad y mitad</em></label>
+                    <label class="choice"><input type="radio" name="ratio" value="60"><b>60 %</b><em>más cara</em></label>
+                    <label class="choice"><input type="radio" name="ratio" value="70"><b>70 %</b><em>casi todo</em></label>
+                  </div>
+                  <label class="opt compact"><span class="opt-text"><b>Pódcast abajo y fondo arriba</b></span><input type="checkbox" class="switch" id="comp-swap"></label>
+                </div>
+              </div>
+              <input type="hidden" id="st_layout" value="stack"><input type="hidden" id="st_top" value="0.5"><input type="hidden" id="st_swap" value="false">
+            </section>
+
+            <section class="card">
               <h2>Subtítulos</h2>
               <div class="fields">
+                <div class="wide">
+                  <span class="lbl-t">Estilo</span>
+                  <div class="seg auto" role="radiogroup" aria-label="Estilo de los subtítulos">
+                    <label class="choice"><input type="radio" name="sstyle" value="classic" checked><b>Clásico</b><em>contorno negro</em></label>
+                    <label class="choice"><input type="radio" name="sstyle" value="box"><b>Caja</b><em>fondo oscuro</em></label>
+                    <label class="choice"><input type="radio" name="sstyle" value="marker"><b>Rotulador</b><em>palabra marcada</em></label>
+                    <label class="choice"><input type="radio" name="sstyle" value="neon"><b>Neón</b><em>con brillo</em></label>
+                    <label class="choice"><input type="radio" name="sstyle" value="minimal"><b>Sobrio</b><em>discreto</em></label>
+                  </div>
+                  <input type="hidden" id="st_sstyle" value="classic">
+                </div>
                 <div class="wide">
                   <span class="lbl-t">Color de la palabra que suena</span>
                   <div class="swatches" id="st_swatches">
@@ -704,6 +775,44 @@ body.modal-open .main { overflow: hidden; }
                 </div>
               </div>
             </section>
+
+            <section class="card">
+              <h2>Tu marca</h2>
+              <p class="card-sub">Un logo y tu usuario en una esquina de todos los shorts.</p>
+              <div class="fields">
+                <div class="wide">
+                  <label class="lbl-t" for="st_logo">Logo</label>
+                  <div class="with-button">
+                    <input type="text" id="st_logo" placeholder="Elige un PNG con fondo transparente" spellcheck="false">
+                    <button type="button" class="btn" data-browse="st_logo" data-kind="image"><svg class="ico"><use href="#i-folder"/></svg>Elegir</button>
+                    <button type="button" class="btn ghost" id="logo-clear" hidden>Quitar</button>
+                  </div>
+                </div>
+                <div class="wide">
+                  <span class="lbl-t">Esquina</span>
+                  <div class="seg four" role="radiogroup" aria-label="Esquina del logo">
+                    <label class="choice"><input type="radio" name="lpos" value="tl"><b>Arriba</b><em>izquierda</em></label>
+                    <label class="choice"><input type="radio" name="lpos" value="tr" checked><b>Arriba</b><em>derecha</em></label>
+                    <label class="choice"><input type="radio" name="lpos" value="bl"><b>Abajo</b><em>izquierda</em></label>
+                    <label class="choice"><input type="radio" name="lpos" value="br"><b>Abajo</b><em>derecha</em></label>
+                  </div>
+                  <input type="hidden" id="st_lpos" value="tr">
+                </div>
+                <div>
+                  <label class="lbl-t" for="st_lsize">Tamaño del logo</label>
+                  <div class="slider"><input type="range" id="st_lsize" min="6" max="30" step="1" value="14"><output id="st_lsize_out">14%</output></div>
+                </div>
+                <div>
+                  <label class="lbl-t" for="st_lop">Opacidad</label>
+                  <div class="slider"><input type="range" id="st_lop" min="20" max="100" step="5" value="90"><output id="st_lop_out">90%</output></div>
+                </div>
+                <div class="wide">
+                  <label class="lbl-t" for="st_handle">Usuario o nombre del canal</label>
+                  <input type="text" id="st_handle" maxlength="40" placeholder="@micanal" spellcheck="false">
+                  <p class="hint">Aparece junto al logo, o solo si no pones logo.</p>
+                </div>
+              </div>
+            </section>
           </form>
 
           <!-- monitor: lo que se ve aquí es lo que sale en el vídeo -->
@@ -715,6 +824,7 @@ body.modal-open .main { overflow: hidden; }
                   <path d="M15 80c0-17 13-25 30-25s30 8 30 25z" fill="url(#pod-g)"/>
                   <circle cx="45" cy="37" r="12.5" fill="url(#pod-g)"/>
                 </svg></div><div class="gamebg"></div><div class="seam"></div>
+                <div class="ph-brand tr" id="ph_brand" hidden><img id="ph_logo" alt="" hidden><div class="handle" id="ph_handle"></div></div>
                 <div class="hooktag" id="ph_hook">¿POR QUÉ NADIE LO DICE?</div>
                 <div class="sub" id="ph_sub"></div>
               </div>
@@ -1033,8 +1143,12 @@ const STYLE  = { st_color: "color_active", st_size: "font_size",
                  st_pos: "position", st_words: "words", st_font: "font_name",
                  st_height: "max_height", st_workers: "workers",
                  st_encoder: "encoder", st_cookies: "cookies",
-                 st_refine: "refine", st_vocab: "vocab", st_corrections: "corrections" };
-const LOOK   = ["st_color", "st_size", "st_pos", "st_words", "st_font"];
+                 st_refine: "refine", st_vocab: "vocab", st_corrections: "corrections",
+                 st_layout: "layout_mode", st_top: "top_ratio", st_swap: "swap",
+                 st_sstyle: "sub_style", st_logo: "logo", st_lpos: "logo_pos",
+                 st_lsize: "logo_size", st_lop: "logo_opacity", st_handle: "handle" };
+const LOOK   = ["st_color", "st_size", "st_pos", "st_words", "st_font",
+                "st_logo", "st_lsize", "st_lop", "st_handle"];
 
 // ===========================================================================
 // Navegacion
@@ -1131,6 +1245,7 @@ function loadForm() {
   FLAGS.forEach(k  => { if (data[k] !== undefined) $(k).checked = data[k]; });
   RADIOS.forEach(k => { if (data[k]) setRadio(k, data[k]); });
   Object.keys(STYLE).forEach(k => { if (data[k]) $(k).value = data[k]; });
+  syncLook();
 }
 
 // ===========================================================================
@@ -1140,7 +1255,8 @@ function styleValues() {
   const out = {};
   Object.entries(STYLE).forEach(([id, key]) => {
     let value = $(id).value;
-    if (key === "position") value = (+value) / 100;     // el servidor lo quiere 0..1
+    // El servidor quiere estas en 0..1; en la pagina son porcentajes.
+    if (["position", "logo_size", "logo_opacity"].includes(key)) value = (+value) / 100;
     out[key] = value;
   });
   return out;
@@ -1169,6 +1285,7 @@ function paintPhone() {
   document.querySelectorAll("#st_swatches .swatch[data-color]").forEach(button =>
     button.classList.toggle("on", button.dataset.color.toUpperCase() === color.toUpperCase()));
 
+  paintLook();
   const width = $("screen").clientWidth;
   if (!width) return;                       // la vista esta oculta
   // El video mide 1080 px de ancho: el mismo factor para el cuerpo de letra
@@ -1180,13 +1297,66 @@ function paintPhone() {
   const line = SAMPLE.slice(0, words);
   hotIndex = hotIndex % line.length;
   sub.innerHTML = line.map(word => `<span>${word}</span>`).join(" ");
-  paintHot(color);
+  sub.className = "sub s-" + $("st_sstyle").value;
+  sub.style.setProperty("--hot", color);
+  paintHot();
 }
 
-function paintHot(color) {
-  [...$("ph_sub").children].forEach((span, i) => {
-    span.style.color = i === hotIndex ? (color || $("st_color").value) : "";
-  });
+/** Composicion y marca del monitor, segun los controles de Crear. */
+function paintLook() {
+  const mode = $("st_layout").value;
+  const screen = $("screen");
+  screen.classList.toggle("mode-full", mode === "full");
+  screen.classList.toggle("mode-center", mode === "center");
+  screen.classList.toggle("swap", mode === "stack" && $("st_swap").value === "true");
+  screen.style.setProperty("--top", (+$("st_top").value * 100) + "%");
+
+  $("st_lsize_out").textContent = $("st_lsize").value + "%";
+  $("st_lop_out").textContent = $("st_lop").value + "%";
+  ["st_lsize", "st_lop"].forEach(id => fillRange($(id)));
+  const logo = $("st_logo").value.trim();
+  const handle = $("st_handle").value.trim();
+  $("logo-clear").hidden = !logo;
+
+  const brand = $("ph_brand");
+  brand.className = "ph-brand " + $("st_lpos").value;
+  brand.style.setProperty("--logo-w", $("st_lsize").value + "%");
+  const image = $("ph_logo");
+  image.style.opacity = (+$("st_lop").value / 100).toString();
+  if (!logo) {
+    image.hidden = true;
+    image.removeAttribute("src");
+  } else {
+    const url = `/api/image?src=${encodeURIComponent(logo)}&t=${encodeURIComponent(TOKEN)}`;
+    if (image.dataset.url !== url) {
+      image.dataset.url = url;
+      image.onload = () => { image.hidden = false; brand.hidden = false; };
+      image.onerror = () => { image.hidden = true; brand.hidden = !handle; };
+      image.src = url;
+    }
+  }
+  $("ph_handle").textContent = handle;
+  brand.hidden = !handle && (image.hidden || !logo);
+}
+
+/** Lleva los valores guardados de composicion, plantilla y esquina a sus controles. */
+function syncLook() {
+  setRadio("comp", $("st_layout").value);
+  setRadio("ratio", String(Math.round(+$("st_top").value * 100)));
+  $("comp-swap").checked = $("st_swap").value === "true";
+  $("comp-stack").hidden = $("st_layout").value !== "stack";
+  setRadio("sstyle", $("st_sstyle").value);
+  setRadio("lpos", $("st_lpos").value);
+}
+
+function afterLook() {
+  syncLook();
+  paintPhone();
+  saveForm();
+}
+
+function paintHot() {
+  [...$("ph_sub").children].forEach((span, i) => span.classList.toggle("hot", i === hotIndex));
 }
 
 // La palabra que suena avanza sola: asi se ve que hace el color.
@@ -1893,6 +2063,7 @@ function applyProfile(data) {
   FLAGS.forEach(k => { if (data[k] !== undefined) $(k).checked = data[k]; });
   RADIOS.forEach(k => { if (data[k]) setRadio(k, data[k]); });
   Object.keys(STYLE).forEach(k => { if (data[k] !== undefined) $(k).value = data[k]; });
+  syncLook();
   refreshClipsUnit();
   updateEta();
   paintPhone();
@@ -2004,7 +2175,8 @@ document.querySelectorAll("[data-browse]").forEach(button => {
       const { path } = await post("/api/browse", { kind: button.dataset.kind || "file" });
       if (path) {
         $(target).value = path;
-        if (target !== "output") refreshPreview(target);
+        if (target === "podcast" || target === "background") refreshPreview(target);
+        else if (target === "st_logo") afterLook();
         saveForm();
       }
     } catch (error) {
@@ -2036,6 +2208,18 @@ document.querySelectorAll("#st_swatches .swatch[data-color]").forEach(button =>
     paintPhone();
     saveForm();
   }));
+
+// -- composicion, plantilla y marca -------------------------------------------
+document.querySelectorAll('input[name="comp"]').forEach(r =>
+  r.addEventListener("change", () => { $("st_layout").value = radio("comp"); afterLook(); }));
+document.querySelectorAll('input[name="ratio"]').forEach(r =>
+  r.addEventListener("change", () => { $("st_top").value = String(+radio("ratio") / 100); afterLook(); }));
+$("comp-swap").addEventListener("change", () => { $("st_swap").value = $("comp-swap").checked ? "true" : "false"; afterLook(); });
+document.querySelectorAll('input[name="sstyle"]').forEach(r =>
+  r.addEventListener("change", () => { $("st_sstyle").value = radio("sstyle"); afterLook(); }));
+document.querySelectorAll('input[name="lpos"]').forEach(r =>
+  r.addEventListener("change", () => { $("st_lpos").value = radio("lpos"); afterLook(); }));
+$("logo-clear").addEventListener("click", () => { $("st_logo").value = ""; afterLook(); });
 
 // -- ayuda -------------------------------------------------------------------
 function openHelp() {

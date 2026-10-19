@@ -14,7 +14,7 @@
 
 use std::path::Path;
 
-use crate::config::{HookConfig, SubtitlesConfig, TitleCardConfig};
+use crate::config::{BrandConfig, HookConfig, SubtitlesConfig, TitleCardConfig};
 use crate::words::Word;
 
 /// Si entre dos palabras hay mas silencio que esto, empieza un bloque nuevo:
@@ -110,6 +110,37 @@ pub fn build_ass(
     Ok(header(width, height, cfg_subs, cfg_hook, cfg_title)? + &all.join("\n") + "\n")
 }
 
+/// Anade el usuario del canal como una linea suelta que dura todo el video.
+/// `logo` = (ancho, alto) con que se dibuja el logo, si hay: el usuario se pone
+/// justo debajo (o encima, en las esquinas de abajo) de el.
+pub fn append_handle(content: &mut String, brand: &BrandConfig, width: i64, height: i64, duration: f64, subs: &SubtitlesConfig, logo: Option<(i64, i64)>) {
+    let handle = brand.handle.trim();
+    if handle.is_empty() {
+        return;
+    }
+    let margin = crate::ffmpeg::even((width as f64 * 0.04).round() as i64); // el mismo que usa el logo
+    let size = ((subs.font_size as f64) * 0.42).round().max(24.0) as i64;
+    let gap = if logo.is_some() { 10 } else { 0 };
+    let logo_h = logo.map_or(0, |(_, h)| h);
+    let (left, top) = (brand.position.ends_with('l'), brand.position.starts_with('t'));
+    let x = if left { margin } else { width - margin };
+    let y = if top { margin + logo_h + gap } else { height - margin - logo_h - gap };
+    // \an7 arriba-izquierda, \an9 arriba-derecha, \an1 abajo-izquierda, \an3 abajo-derecha.
+    let anchor = match (top, left) {
+        (true, true) => 7,
+        (true, false) => 9,
+        (false, true) => 1,
+        (false, false) => 3,
+    };
+    let end = if duration > 0.0 { duration } else { 3600.0 };
+    content.push_str(&format!(
+        "Dialogue: 3,{},{},Main,,0,0,0,,{{\\an{anchor}\\pos({x},{y})\\fs{size}\\bord3\\shad0\\blur0\\c&HFFFFFF&\\3c&H000000&\\alpha&H25&}}{}\n",
+        format_time(0.0),
+        format_time(end),
+        escape_ass_text(handle)
+    ));
+}
+
 pub fn write_ass(content: &str, path: &Path) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -132,9 +163,18 @@ fn header(
     let side = (width as f64 * 0.07) as i64;
 
     // Alignment 2 = abajo centrado; MarginV se mide desde el borde inferior.
+    // Cada plantilla cambia el tipo de borde, su grosor y sus colores.
+    let active = hex_to_ass_color(&subs.color_active, 0)?;
+    let (border_style, outline_width, shadow_depth, outline_colour, back_colour) = match subs.style.as_str() {
+        // Caja translucida detras del texto (el "grosor" es el relleno de la caja).
+        "box" => (3, 14, 0, hex_to_ass_color("#000000", 110)?, hex_to_ass_color("#000000", 255)?),
+        "minimal" => (1, 2.min(subs.outline_width), 1, outline.clone(), shadow.clone()),
+        "neon" => (1, subs.outline_width.max(4), 0, active.clone(), active.clone()),
+        _ => (1, subs.outline_width, subs.shadow_depth, outline.clone(), shadow.clone()),
+    };
     let mut styles = vec![format!(
-        "Style: Main,{},{},{primary},{primary},{outline},{shadow},-1,0,0,0,100,100,0,0,1,{},{},2,{side},{side},{margin_v},1",
-        subs.font_name, subs.font_size, subs.outline_width, subs.shadow_depth
+        "Style: Main,{},{},{primary},{primary},{outline_colour},{back_colour},-1,0,0,0,100,100,0,0,{border_style},{outline_width},{shadow_depth},2,{side},{side},{margin_v},1",
+        subs.font_name, subs.font_size
     )];
 
     if let Some(hook) = hook {
@@ -158,8 +198,10 @@ fn header(
         // cae en la costura entre el panel del podcast y el del gameplay, que
         // es el punto donde primero mira el ojo. BorderStyle 1 (contorno, no
         // caja) para que se vea como los subtitulos y no como un cartel.
+        // Con una sola imagen a pantalla completa no hay costura: arriba.
+        let (alignment, title_margin) = if title.anchor == "top" { (8, (height as f64 * 0.12) as i64) } else { (5, 0) };
         styles.push(format!(
-            "Style: Titulo,{font},{},{color},{color},{card_outline},{card_outline},-1,0,0,0,100,100,0,0,1,{},{},5,{side},{side},0,1",
+            "Style: Titulo,{font},{},{color},{color},{card_outline},{card_outline},-1,0,0,0,100,100,0,0,1,{},{},{alignment},{side},{side},{title_margin},1",
             title.font_size, title.outline_width, title.shadow_depth
         ));
     }
@@ -178,7 +220,11 @@ fn header(
 fn subtitle_events(groups: &[Group], cfg: &SubtitlesConfig, width: i64) -> Result<Vec<String>, SubtitleError> {
     let active = hex_to_ass_color(&cfg.color_active, 0)?;
     let normal = hex_to_ass_color(&cfg.color_normal, 0)?;
+    let outline = hex_to_ass_color(&cfg.color_outline, 0)?;
+    let ink = hex_to_ass_color("#000000", 0)?;
+    let white = hex_to_ass_color("#FFFFFF", 0)?;
     let pop_ms = (cfg.pop_duration * 1000.0) as i64;
+    let style = cfg.style.as_str();
 
     let mut lines = Vec::new();
     for (group_index, group) in groups.iter().enumerate() {
@@ -206,16 +252,23 @@ fn subtitle_events(groups: &[Group], cfg: &SubtitlesConfig, width: i64) -> Resul
                 .iter()
                 .enumerate()
                 .map(|(j, text)| {
-                    if j == i {
-                        let pop = if cfg.pop_scale != 100 && pop_ms > 0 {
-                            format!("\\fscx{0}\\fscy{0}\\t(0,{pop_ms},\\fscx100\\fscy100)", cfg.pop_scale)
-                        } else {
-                            String::new()
-                        };
-                        format!("{{\\c{active}{pop}}}{text}")
+                    let hot = j == i;
+                    let pop = if hot && style != "minimal" && cfg.pop_scale != 100 && pop_ms > 0 {
+                        format!("\\fscx{0}\\fscy{0}\\t(0,{pop_ms},\\fscx100\\fscy100)", cfg.pop_scale)
                     } else {
-                        format!("{{\\c{normal}}}{text}")
-                    }
+                        String::new()
+                    };
+                    let tags = match (style, hot) {
+                        // Rotulador: la palabra que suena lleva un bloque de color detras.
+                        ("marker", true) => format!("\\c{ink}\\3c{active}\\bord{}{pop}", cfg.outline_width + 9),
+                        ("marker", false) => format!("\\c{normal}\\3c{outline}\\bord{}", cfg.outline_width),
+                        // Neon: brillo del color de acento alrededor de todo el texto.
+                        ("neon", true) => format!("\\c{active}\\3c{white}\\bord{}\\blur3{pop}", cfg.outline_width.max(4)),
+                        ("neon", false) => format!("\\c{normal}\\3c{active}\\bord{}\\blur3", cfg.outline_width.max(4)),
+                        (_, true) => format!("\\c{active}{pop}"),
+                        (_, false) => format!("\\c{normal}"),
+                    };
+                    format!("{{{tags}}}{text}")
                 })
                 .collect();
 
@@ -720,6 +773,54 @@ mod tests {
         assert_eq!(render_word(&Word::new("...", 0.0, 1.0), &cfg), "...");
         let sin_quitar = SubtitlesConfig { remove_punctuation: false, uppercase: false, ..Default::default() };
         assert_eq!(render_word(&Word::new("¿Hola,", 0.0, 1.0), &sin_quitar), "¿Hola,");
+    }
+
+    fn con_estilo(estilo: &str) -> String {
+        let cfg = SubtitlesConfig { style: estilo.into(), ..SubtitlesConfig::default() };
+        build_ass(&doce(), 1080, 1920, &cfg, None, None, 6.0, None, None).unwrap()
+    }
+
+    #[test]
+    fn cada_plantilla_cambia_el_estilo_y_las_etiquetas() {
+        let clasico = con_estilo("classic");
+        assert!(clasico.contains(",-1,0,0,0,100,100,0,0,1,5,2,2,"), "borde 1, contorno 5, sombra 2: {clasico}");
+
+        let caja = con_estilo("box");
+        assert!(caja.contains(",0,0,3,14,0,2,"), "BorderStyle 3 con relleno 14: {caja}");
+        assert!(caja.contains("&H6E000000&"), "caja translucida");
+
+        let rotulador = con_estilo("marker");
+        assert!(rotulador.contains("\\3c&H0000F2FF&\\bord14"), "la palabra que suena lleva el bloque amarillo: {rotulador}");
+        assert!(rotulador.contains("\\c&H00000000&"), "con el texto en negro");
+
+        let neon = con_estilo("neon");
+        assert!(neon.contains("\\blur3") && neon.contains("\\3c&H0000F2FF&"), "{neon}");
+
+        let minimo = con_estilo("minimal");
+        assert!(minimo.contains(",0,0,1,2,1,2,"), "contorno 2, sombra 1: {minimo}");
+        assert!(!minimo.contains("\\fscx118"), "sin pop");
+
+        // Una plantilla desconocida se queda como la clasica.
+        assert_eq!(con_estilo("inventada"), clasico);
+    }
+
+    #[test]
+    fn el_usuario_del_canal_se_pega_junto_al_logo() {
+        let subs = SubtitlesConfig::default();
+        let mut marca = BrandConfig { position: "tr".into(), handle: "  @micanal ".into(), ..BrandConfig::default() };
+        let mut ass = String::new();
+        append_handle(&mut ass, &marca, 1080, 1920, 10.0, &subs, Some((151, 100)));
+        assert!(ass.contains("\\an9\\pos(1038,152)") && ass.contains("}@micanal\n"), "debajo del logo, a la derecha: {ass}");
+
+        let mut ass = String::new();
+        marca.position = "bl".into();
+        append_handle(&mut ass, &marca, 1080, 1920, 10.0, &subs, None);
+        assert!(ass.contains("\\an1\\pos(42,1878)"), "{ass}");
+
+        let mut vacio = String::new();
+        marca.handle = "  ".into();
+        append_handle(&mut vacio, &marca, 1080, 1920, 10.0, &subs, None);
+        assert!(vacio.is_empty());
     }
 
     fn bloque(textos: &[&str]) -> Vec<String> {

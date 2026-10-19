@@ -194,6 +194,18 @@ pub fn apply_overrides(cfg: &mut Config, args: &Args) -> Result<(), ConfigError>
         cfg.set(item)?;
     }
 
+    // Con el podcast a pantalla completa o en una franja no hay costura donde
+    // poner la tarjeta de contexto: va arriba.
+    if cfg.layout.mode != "stack" && cfg.title_card.anchor == "center" {
+        cfg.title_card.anchor = "top".into();
+    }
+    if !["stack", "full", "center"].contains(&cfg.layout.mode.as_str()) {
+        return Err(ConfigError::Invalid(format!("layout.mode '{}' no existe: usa stack, full o center.", cfg.layout.mode)));
+    }
+    if !["classic", "box", "marker", "neon", "minimal"].contains(&cfg.subtitles.style.as_str()) {
+        return Err(ConfigError::Invalid(format!("subtitles.style '{}' no existe: usa classic, box, marker, neon o minimal.", cfg.subtitles.style)));
+    }
+
     if cfg.clips.min_duration > cfg.clips.max_duration {
         return Err(ConfigError::Invalid("clips.min_duration no puede ser mayor que clips.max_duration.".into()));
     }
@@ -840,9 +852,9 @@ fn render_one(
 
     // 4. Subtitulos + rotulo de gancho.
     let mut ass_name = None;
-    if cfg.subtitles.enabled {
+    if cfg.subtitles.enabled || !cfg.brand.handle.trim().is_empty() {
         let title_text = metadata::card_text(&podcast.title, meta.map_or("", |m| m.title.as_str()), cfg);
-        let content = subtitles::build_ass(
+        let mut content = subtitles::build_ass(
             &words,
             cfg.layout.width,
             cfg.layout.height,
@@ -854,6 +866,15 @@ fn render_one(
             Some(&title_text),
         )
         .map_err(|e| e.to_string())?;
+        // El usuario del canal va junto al logo, asi que hace falta su tamano.
+        let logo_size = (!cfg.brand.logo.is_empty())
+            .then(|| ffmpeg::image_size(Path::new(&cfg.brand.logo)))
+            .flatten()
+            .map(|(logo_w, logo_h)| {
+                let w = ffmpeg::even((cfg.layout.width as f64 * cfg.brand.scale.clamp(0.03, 0.6)).round() as i64);
+                (w, (w as f64 * logo_h as f64 / logo_w as f64).round() as i64)
+            });
+        subtitles::append_handle(&mut content, &cfg.brand, cfg.layout.width, cfg.layout.height, cuts.output_duration(), &cfg.subtitles, logo_size);
         let name = format!("short_{number}.ass");
         subtitles::write_ass(&content, &work_dir.join(&name)).map_err(|e| format!("No se pudo escribir {name}: {e}"))?;
         ass_name = Some(name);

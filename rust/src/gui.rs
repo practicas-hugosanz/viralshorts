@@ -69,11 +69,15 @@ enum Kind {
     Model,
     /// Texto libre y largo (vocabulario, correcciones), sin saltos de linea.
     Long,
+    /// Una de estas opciones.
+    Choice(&'static [&'static str]),
+    /// Verdadero o falso.
+    Flag,
 }
 
 /// La lista es cerrada a proposito: el navegador no decide que ajuste del
 /// pipeline se cambia, solo elige entre estos.
-const STYLE_FIELDS: [(&str, &str, Kind); 13] = [
+const STYLE_FIELDS: [(&str, &str, Kind); 22] = [
     ("font_name", "subtitles.font_name", Kind::Text),
     ("font_size", "subtitles.font_size", Kind::Int),
     ("color_active", "subtitles.color_active", Kind::Color),
@@ -87,6 +91,15 @@ const STYLE_FIELDS: [(&str, &str, Kind); 13] = [
     ("refine", "transcribe.refine_model", Kind::Model),
     ("vocab", "transcribe.initial_prompt", Kind::Long),
     ("corrections", "transcribe.corrections", Kind::Long),
+    ("layout_mode", "layout.mode", Kind::Choice(&["stack", "full", "center"])),
+    ("top_ratio", "layout.top_ratio", Kind::Ratio),
+    ("swap", "layout.swap", Kind::Flag),
+    ("sub_style", "subtitles.style", Kind::Choice(&["classic", "box", "marker", "neon", "minimal"])),
+    ("logo", "brand.logo", Kind::Long),
+    ("logo_pos", "brand.position", Kind::Choice(&["tl", "tr", "bl", "br"])),
+    ("logo_size", "brand.scale", Kind::Ratio),
+    ("logo_opacity", "brand.opacity", Kind::Ratio),
+    ("handle", "brand.handle", Kind::Text),
 ];
 
 /// Navegadores de los que yt-dlp sabe leer las cookies.
@@ -120,6 +133,12 @@ pub fn style_pairs(form: &Value) -> Vec<(String, Value)> {
                 (name.is_empty() || setup::MODELS.iter().any(|(m, _)| *m == name)).then(|| json!(name))
             }
             Kind::Long => Some(json!(raw.as_str().unwrap_or("").chars().map(|c| if c == '\n' || c == '\r' { ';' } else { c }).filter(|c| !c.is_control()).take(600).collect::<String>().trim())),
+            Kind::Choice(options) => raw.as_str().map(|o| o.trim().to_lowercase()).filter(|o| options.contains(&o.as_str())).map(|o| json!(o)),
+            Kind::Flag => match raw {
+                Value::Bool(b) => Some(json!(*b)),
+                Value::String(text) if text == "true" || text == "false" => Some(json!(text == "true")),
+                _ => None,
+            },
             Kind::Browser => raw.as_str().map(|b| b.trim().to_lowercase()).filter(|b| BROWSERS.contains(&b.as_str())).map(|b| json!(b)),
         };
         if let Some(value) = value {
@@ -938,6 +957,8 @@ pub fn new_token() -> String {
 fn native_picker(kind: &str) -> Option<String> {
     let path = if kind == "folder" {
         rfd::FileDialog::new().set_title("Elige la carpeta de salida").pick_folder()
+    } else if kind == "image" {
+        rfd::FileDialog::new().set_title("Elige tu logo").add_filter("Imágenes", &["png", "jpg", "jpeg", "webp"]).pick_file()
     } else {
         rfd::FileDialog::new().set_title("Elige un video").add_filter("Videos", &["mp4", "mkv", "webm", "mov", "m4v", "avi"]).add_filter("Todos", &["*"]).pick_file()
     };
@@ -1106,8 +1127,28 @@ fn handle_get(app: &Arc<App>, request: &Request, mut stream: TcpStream) {
         "/api/existing" => respond_json(&mut stream, 200, &json!({"results": library::scan_library(&app.job.base_dir())})),
         "/api/profiles" => respond_json(&mut stream, 200, &json!({"profiles": library::load_profiles(&app.root)})),
         "/api/frame" => serve_frame(request.query.get("src").map_or("", String::as_str), &mut stream),
+        "/api/image" => serve_image(request.query.get("src").map_or("", String::as_str), &mut stream),
         "/api/reveal" => reveal(app, request, &mut stream),
         _ => respond_error(&mut stream, 404, "no encontrado"),
+    }
+}
+
+/// Una imagen local (el logo) tal cual, para la vista previa. Solo formatos de
+/// imagen y de hasta 8 MB.
+fn serve_image(source: &str, stream: &mut TcpStream) {
+    let path = Path::new(source);
+    let mime = match path.extension().map(|e| e.to_string_lossy().to_lowercase()).as_deref() {
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("webp") => "image/webp",
+        _ => return respond_error(stream, 400, "formato no admitido"),
+    };
+    match std::fs::metadata(path) {
+        Ok(meta) if meta.is_file() && meta.len() <= 8 * 1024 * 1024 => match std::fs::read(path) {
+            Ok(bytes) => respond(stream, 200, &[("Content-Type", mime.into()), ("Cache-Control", "private, max-age=60".into())], &bytes),
+            Err(_) => respond_error(stream, 404, "no encontrado"),
+        },
+        _ => respond_error(stream, 404, "no encontrado"),
     }
 }
 
@@ -1886,6 +1927,52 @@ la guapa=La Guapa"}));
         assert!(con(json!({"refine": ""})).is_empty(), "vacio = no se manda y vale lo de config.yaml");
         let largo = con(json!({"vocab": "x".repeat(2000)}));
         assert_eq!(largo["transcribe.initial_prompt"].as_str().unwrap().len(), 600);
+    }
+
+    #[test]
+    fn los_ajustes_de_aspecto_pasan_filtrados() {
+        let con = |style: Value| -> std::collections::HashMap<String, Value> { style_pairs(&json!({"style": style})).into_iter().collect() };
+        let ok = con(json!({
+            "layout_mode": "Center", "top_ratio": "0.6", "swap": "true", "sub_style": "marker",
+            "logo": "C:/marca/logo.png", "logo_pos": "bl", "logo_size": 0.14, "logo_opacity": "0.9", "handle": "@micanal"
+        }));
+        assert_eq!(ok["layout.mode"], "center");
+        assert_eq!(ok["layout.top_ratio"], 0.6);
+        assert_eq!(ok["layout.swap"], true);
+        assert_eq!(ok["subtitles.style"], "marker");
+        assert_eq!(ok["brand.logo"], "C:/marca/logo.png");
+        assert_eq!(ok["brand.position"], "bl");
+        assert_eq!(ok["brand.scale"], 0.14);
+        assert_eq!(ok["brand.handle"], "@micanal");
+        // Lo que no es una opcion conocida no llega al pipeline.
+        let mal = con(json!({"layout_mode": "diagonal", "sub_style": "arcoiris", "logo_pos": "centro", "swap": "quizas"}));
+        assert!(mal.is_empty(), "{mal:?}");
+        // Y el pipeline entiende todo lo que manda la interfaz.
+        let mut cfg = Config::default();
+        for (ajuste, valor) in style_pairs(&json!({"style": {"layout_mode": "full", "swap": true, "sub_style": "neon", "logo_opacity": 0.5, "logo_pos": "br"}})) {
+            cfg.set(&format!("{ajuste}={}", value_text(&valor))).unwrap();
+        }
+        assert_eq!((cfg.layout.mode.as_str(), cfg.layout.swap, cfg.subtitles.style.as_str()), ("full", true, "neon"));
+        assert_eq!((cfg.brand.opacity, cfg.brand.position.as_str()), (0.5, "br"));
+    }
+
+    /// Codifica para una URL todo lo que no sea alfanumerico.
+    fn url_encode(text: &str) -> String {
+        text.bytes().map(|b| if b.is_ascii_alphanumeric() { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
+    }
+
+    #[test]
+    fn la_imagen_del_logo_se_sirve_solo_si_es_una_imagen() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("logo.png"), b"\x89PNG....").unwrap();
+        std::fs::write(dir.path().join("notas.txt"), b"hola").unwrap();
+        let (_app, puerto, _b) = app_de_prueba();
+        let t = Some("token-de-prueba");
+        let pedir_img = |ruta: &str| pedir(puerto, "GET", &format!("/api/image?src={}", url_encode(&dir.path().join(ruta).to_string_lossy())), "127.0.0.1", t, "", &[]);
+        assert_eq!(pedir_img("logo.png").0, 200);
+        assert_eq!(pedir_img("notas.txt").0, 400, "un .txt no es una imagen");
+        assert_eq!(pedir_img("no_esta.png").0, 404);
+        assert_eq!(pedir(puerto, "GET", "/api/image?src=x.png", "127.0.0.1", None, "", &[]).0, 403, "sin token no");
     }
 
     #[test]

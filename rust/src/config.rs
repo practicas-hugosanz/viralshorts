@@ -365,11 +365,39 @@ pub struct LayoutConfig {
     /// Proporcion de altura para el panel del podcast.
     pub top_ratio: f64,
     pub fps: i64,
+    /// `stack`: dos paneles apilados (podcast y fondo). `full`: solo el podcast,
+    /// a pantalla completa. `center`: el fondo a pantalla completa y el podcast
+    /// en una franja central.
+    pub mode: String,
+    /// Solo con `stack`: el podcast abajo y el fondo arriba.
+    pub swap: bool,
 }
 
 impl Default for LayoutConfig {
     fn default() -> Self {
-        Self { width: 1080, height: 1920, top_ratio: 0.5, fps: 30 }
+        Self { width: 1080, height: 1920, top_ratio: 0.5, fps: 30, mode: "stack".into(), swap: false }
+    }
+}
+
+/// Marca del canal: logo (PNG) y usuario en una esquina de todos los shorts.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BrandConfig {
+    /// Ruta de una imagen (PNG con transparencia, mejor). Vacio = sin logo.
+    pub logo: String,
+    /// `tl`, `tr`, `bl` o `br`.
+    pub position: String,
+    /// Ancho del logo, como fraccion del ancho del video.
+    pub scale: f64,
+    /// 0 (invisible) a 1 (opaco).
+    pub opacity: f64,
+    /// Usuario o nombre del canal, por ejemplo `@micanal`. Va junto al logo.
+    pub handle: String,
+}
+
+impl Default for BrandConfig {
+    fn default() -> Self {
+        Self { logo: String::new(), position: "tr".into(), scale: 0.14, opacity: 0.9, handle: String::new() }
     }
 }
 
@@ -415,6 +443,8 @@ pub struct SubtitlesConfig {
     pub censor_words: Vec<String>,
     /// Carpeta con .ttf propios (opcional).
     pub fonts_dir: Option<String>,
+    /// `classic`, `box`, `marker`, `neon` o `minimal`.
+    pub style: String,
 }
 
 impl Default for SubtitlesConfig {
@@ -440,6 +470,7 @@ impl Default for SubtitlesConfig {
             censor_char: "#".into(),
             censor_words: Vec::new(),
             fonts_dir: None,
+            style: "classic".into(),
         }
     }
 }
@@ -496,6 +527,8 @@ pub struct TitleCardConfig {
     pub shadow_depth: i64,
     pub max_chars: i64,
     pub wrap_chars: i64,
+    /// `center` (en la costura entre los paneles) o `top`.
+    pub anchor: String,
 }
 
 impl Default for TitleCardConfig {
@@ -514,6 +547,7 @@ impl Default for TitleCardConfig {
             shadow_depth: 2,
             max_chars: 90,
             wrap_chars: 22,
+            anchor: "center".into(),
         }
     }
 }
@@ -594,6 +628,7 @@ pub struct Config {
     pub zoom: ZoomConfig,
     pub jumpcuts: JumpCutsConfig,
     pub layout: LayoutConfig,
+    pub brand: BrandConfig,
     pub audio: AudioConfig,
     pub subtitles: SubtitlesConfig,
     pub hook: HookConfig,

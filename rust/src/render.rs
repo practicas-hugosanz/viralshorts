@@ -61,9 +61,16 @@ pub fn render(request: &RenderRequest, cfg: &Config) -> Result<PathBuf> {
     let podcast_info = ffmpeg::probe(&request.podcast)?;
     let background_info = ffmpeg::probe(&request.background)?;
 
+    // Un logo que no existe no debe romper el montaje: se quita.
+    let mut cfg = cfg.clone();
+    if !cfg.brand.logo.is_empty() && !Path::new(&cfg.brand.logo).is_file() {
+        log::warn!("El logo '{}' no existe; se monta sin logo.", cfg.brand.logo);
+        cfg.brand.logo.clear();
+    }
+    let cfg = &cfg;
+
     let layout = &cfg.layout;
-    let top_height = even((layout.height as f64 * layout.top_ratio) as i64);
-    let bottom_height = layout.height - top_height;
+    let (top_height, bottom_height) = panel_heights(cfg);
     let duration = request.plan.output_duration();
 
     let graph = build_graph(
@@ -93,6 +100,9 @@ pub fn render(request: &RenderRequest, cfg: &Config) -> Result<PathBuf> {
         "-ss".into(), format!("{:.3}", request.background_offset),
         "-i".into(), abs(&request.background),
     ];
+    if !cfg.brand.logo.is_empty() {
+        args.extend(["-i".into(), abs(Path::new(&cfg.brand.logo))]);
+    }
     args.extend(filter_args);
     args.extend(["-map", "[vout]", "-map", "[aout]"].map(String::from));
     args.extend(video_encoder_args(&cfg.output, &resolve_encoder(&cfg.output)));
@@ -119,6 +129,28 @@ pub fn render(request: &RenderRequest, cfg: &Config) -> Result<PathBuf> {
 
     log::info!("Listo: {} ({duration:.1}s)", request.output.display());
     Ok(request.output.clone())
+}
+
+/// Alto del panel del podcast y del panel de fondo segun la composicion.
+pub fn panel_heights(cfg: &Config) -> (i64, i64) {
+    let layout = &cfg.layout;
+    match layout.mode.as_str() {
+        // Todo el fotograma es el podcast.
+        "full" => (layout.height, 0),
+        // Franja 16:9 en el centro; el fondo ocupa el fotograma entero.
+        "center" => (even((layout.width as f64 * 9.0 / 16.0).round() as i64), layout.height),
+        _ => {
+            let top = even((layout.height as f64 * layout.top_ratio) as i64);
+            (top, layout.height - top)
+        }
+    }
+}
+
+/// Posicion (x, y) del logo en una expresion de `overlay`.
+fn logo_position(position: &str, margin: i64) -> (String, String) {
+    let x = if position.ends_with('l') { margin.to_string() } else { format!("W-w-{margin}") };
+    let y = if position.starts_with('t') { margin.to_string() } else { format!("H-h-{margin}") };
+    (x, y)
 }
 
 fn io_error(e: std::io::Error) -> FfmpegError {
@@ -166,24 +198,46 @@ pub fn build_graph(
     chains.push(format!("{}[top]", top.join(",")));
 
     // --- panel inferior: el gameplay --------------------------------------
-    let mut bottom = vec!["[1:v]setpts=PTS-STARTPTS".to_string(), format!("fps={fps}")];
-    bottom.extend(square_pixels(background_info));
-    bottom.push(center_crop(background_info, width, bottom_height));
-    bottom.extend(cover(width, bottom_height));
-    bottom.push("setsar=1".into());
-    chains.push(format!("{}[bottom]", bottom.join(",")));
+    let mode = cfg.layout.mode.as_str();
+    if mode != "full" {
+        let mut bottom = vec!["[1:v]setpts=PTS-STARTPTS".to_string(), format!("fps={fps}")];
+        bottom.extend(square_pixels(background_info));
+        bottom.push(center_crop(background_info, width, bottom_height));
+        bottom.extend(cover(width, bottom_height));
+        bottom.push("setsar=1".into());
+        chains.push(format!("{}[bottom]", bottom.join(",")));
+    }
 
-    // --- apilado + subtitulos ---------------------------------------------
-    let stack = "[top][bottom]vstack=inputs=2";
-    match &request.ass_name {
+    // --- composicion + subtitulos -----------------------------------------
+    let compose = match mode {
+        "full" => "[top]null".to_string(),
+        "center" => format!("[bottom][top]overlay=x=0:y={}", (cfg.layout.height - top_height) / 2),
+        _ if cfg.layout.swap => "[bottom][top]vstack=inputs=2".to_string(),
+        _ => "[top][bottom]vstack=inputs=2".to_string(),
+    };
+    let composed = match &request.ass_name {
         Some(ass) => {
             let mut subtitles = format!("subtitles=filename={ass}");
             if let Some(dir) = cfg.subtitles.fonts_dir.as_deref().filter(|d| !d.is_empty()) {
                 subtitles.push_str(&format!(":fontsdir={}", ffmpeg::escape_filter_path(Path::new(dir))));
             }
-            chains.push(format!("{stack},{subtitles},format=yuv420p[vout]"));
+            format!("{compose},{subtitles}")
         }
-        None => chains.push(format!("{stack},format=yuv420p[vout]")),
+        None => compose,
+    };
+    if cfg.brand.logo.is_empty() {
+        chains.push(format!("{composed},format=yuv420p[vout]"));
+    } else {
+        // El logo es la tercera entrada y va por encima de todo, subtitulos incluidos.
+        let logo_width = even((width as f64 * cfg.brand.scale.clamp(0.03, 0.6)).round() as i64);
+        let margin = even((width as f64 * 0.04).round() as i64);
+        let (x, y) = logo_position(&cfg.brand.position, margin);
+        chains.push(format!("{composed}[base]"));
+        chains.push(format!(
+            "[2:v]format=rgba,scale={logo_width}:-1,colorchannelmixer=aa={}[logo]",
+            fl(cfg.brand.opacity.clamp(0.0, 1.0))
+        ));
+        chains.push(format!("[base][logo]overlay=x={x}:y={y},format=yuv420p[vout]"));
     }
 
     // --- audio: solo el del podcast, normalizado --------------------------
@@ -449,6 +503,51 @@ mod tests {
 
     fn grafo() -> String {
         grafo_con(&Config::default(), None, None, Some("short_1.ass"), false)
+    }
+
+    /// Como `grafo_con`, pero con las alturas que da la composicion elegida.
+    fn grafo_compuesto(cfg: &Config) -> String {
+        let (arriba, abajo) = panel_heights(cfg);
+        build_graph(&peticion(None, None, Some("short_1.ass")), &video(1920, 1080, 1.0), &video(1920, 1080, 1.0), arriba, abajo, cfg, GraphOptions { crop_has_eval: false })
+    }
+
+    #[test]
+    fn las_composiciones_dan_otros_grafos() {
+        let mut cfg = Config::default();
+        assert!(grafo_compuesto(&cfg).contains("[top][bottom]vstack=inputs=2"));
+
+        cfg.layout.swap = true;
+        assert!(grafo_compuesto(&cfg).contains("[bottom][top]vstack=inputs=2"), "con swap el fondo va arriba");
+
+        cfg.layout.swap = false;
+        cfg.layout.top_ratio = 0.6;
+        assert_eq!(panel_heights(&cfg), (1152, 768));
+
+        cfg.layout.mode = "full".into();
+        let completo = grafo_compuesto(&cfg);
+        assert!(completo.contains("[top]null,subtitles=") && !completo.contains("[bottom]") && !completo.contains("vstack"), "{completo}");
+        assert!(completo.contains("crop=w=608:h=1080"), "el recorte vertical sigue la cara: {completo}");
+        assert_eq!(panel_heights(&cfg), (1920, 0));
+
+        cfg.layout.mode = "center".into();
+        assert_eq!(panel_heights(&cfg), (608, 1920));
+        let centro = grafo_compuesto(&cfg);
+        assert!(centro.contains("[bottom][top]overlay=x=0:y=656"), "{centro}");
+        assert!(centro.contains("scale=1080:1920:force_original_aspect_ratio=increase"), "el fondo llena el fotograma: {centro}");
+    }
+
+    #[test]
+    fn el_logo_va_encima_de_todo_y_en_su_esquina() {
+        let mut cfg = Config::default();
+        assert!(!grafo_compuesto(&cfg).contains("[2:v]"), "sin logo no hay tercera entrada");
+        cfg.brand.logo = "logo.png".into();
+        cfg.brand.position = "tr".into();
+        let g = grafo_compuesto(&cfg);
+        assert!(g.contains("vstack=inputs=2,subtitles=filename=short_1.ass[base]"), "{g}");
+        assert!(g.contains("[2:v]format=rgba,scale=150:-1,colorchannelmixer=aa=0.9[logo]"), "{g}");
+        assert!(g.contains("[base][logo]overlay=x=W-w-42:y=42,format=yuv420p[vout]"), "{g}");
+        cfg.brand.position = "bl".into();
+        assert!(grafo_compuesto(&cfg).contains("overlay=x=42:y=H-h-42"));
     }
 
     // -- geometria -----------------------------------------------------------

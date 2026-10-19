@@ -285,6 +285,20 @@ pub fn probe(path: &Path) -> Result<MediaInfo> {
     media_info_from_json(&path.display().to_string(), &data)
 }
 
+/// Ancho y alto de una imagen (o del primer fotograma de un video). `probe` no
+/// vale para un PNG: pide una duracion que una imagen no tiene.
+pub fn image_size(path: &Path) -> Option<(i64, i64)> {
+    let output = command("ffprobe")
+        .args(["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0"])
+        .arg(path)
+        .output()
+        .ok()?;
+    let text = text(&output.stdout);
+    let (w, h) = text.trim().split_once(',')?;
+    let (w, h) = (w.trim().parse::<i64>().ok()?, h.trim().parse::<i64>().ok()?);
+    (output.status.success() && w > 0 && h > 0).then_some((w, h))
+}
+
 pub fn media_info_from_json(path: &str, data: &Value) -> Result<MediaInfo> {
     let streams: &[Value] = data["streams"].as_array().map(Vec::as_slice).unwrap_or(&[]);
     let kind = |s: &Value| s["codec_type"].as_str().map(str::to_owned);
