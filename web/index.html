@@ -464,6 +464,7 @@
 <header>
   <div class="brand"><span class="mark">&#9889;</span>viral<span>shorts</span></div>
   <button type="button" class="ghost-link" id="help-open">&#9432;&nbsp; Cómo funciona</button>
+  <button type="button" class="ghost-link" id="version-btn" title="Buscar actualizaciones"></button>
   <div class="pill" id="status"><span class="dot"></span><span id="status-text">listo</span></div>
 </header>
 
@@ -477,6 +478,7 @@
 
   <div class="banner tip" id="tip"></div>
   <div class="banner tip" id="gpu"></div>
+  <div class="banner tip" id="upd"></div>
   <div class="banner" id="banner"></div>
 
   <!-- ==================================================== formulario ==== -->
@@ -1152,11 +1154,76 @@ function showNotice(event) {
 }
 
 function showBanner(node, title, body) {
-  node.innerHTML = `<div class="ic">${node.id === "tip" ? "ℹ" : "⚠"}</div>
+  node.innerHTML = `<div class="ic">${node.classList.contains("tip") ? "ℹ" : "⚠"}</div>
                     <div><b>${title}</b><p>${body}</p></div>`;
   node.classList.add("on");
 }
 function clearBanner(node) { node.classList.remove("on"); node.innerHTML = ""; }
+
+// ===========================================================================
+// Actualizaciones
+// ===========================================================================
+const updState = async () => (await fetch("/api/update", { headers: AUTH })).json();
+let updBusy = false;
+
+function renderUpdate(state) {
+  const node = $("upd");
+  $("version-btn").textContent = "v" + state.current;
+  if (state.phase === "descargando") {
+    showBanner(node, "Descargando la actualización",
+      `${Math.round((state.pct || 0) * 100)} %. No cierres la aplicación.`);
+  } else if (state.phase === "instalando") {
+    showBanner(node, "Instalando la actualización",
+      "La aplicación se va a cerrar y se volverá a abrir sola en unos segundos.");
+  } else if (state.available) {
+    const notes = state.available.notes ? `<br>${escapeHtml(state.available.notes)}` : "";
+    showBanner(node, `Hay una versión nueva: ${escapeHtml(state.available.version)}`,
+      `Tienes la ${escapeHtml(state.current)}.${notes}<br>` +
+      `<button type="button" id="upd-go" style="margin-top:8px">Actualizar ahora</button>`);
+    $("upd-go").addEventListener("click", installUpdate);
+  } else {
+    clearBanner(node);
+  }
+}
+
+async function installUpdate() {
+  if (updBusy) return;
+  updBusy = true;
+  try {
+    await post("/api/update/install", {});
+    for (;;) {                     // hasta que la aplicación se cierre sola
+      await new Promise(r => setTimeout(r, 600));
+      const state = await updState();
+      if (state.error) throw new Error(state.error);
+      renderUpdate(state);
+    }
+  } catch (error) {
+    // Si la aplicación se ha cerrado para instalar, el fetch falla: es lo esperado.
+    if (error instanceof TypeError) return;
+    updBusy = false;
+    showBanner($("upd"), "No se pudo actualizar", escapeHtml(error.message));
+  }
+}
+
+async function watchUpdates(manual) {
+  if (manual) await post("/api/update/check", {}).catch(() => {});
+  for (let i = 0; i < 20; i++) {
+    await new Promise(r => setTimeout(r, i === 0 && !manual ? 800 : 1200));
+    const state = await updState().catch(() => null);
+    if (!state) return;
+    renderUpdate(state);
+    if (state.checked && !state.checking) {
+      if (manual && !state.available) {
+        showBanner($("upd"), state.error ? "No se pudo mirar" : "Estás al día",
+          state.error ? escapeHtml(state.error) : `Tienes la última versión (${escapeHtml(state.current)}).`);
+        setTimeout(() => { if (!updBusy && !state.available) clearBanner($("upd")); }, 5000);
+      }
+      return;
+    }
+  }
+}
+$("version-btn").addEventListener("click", () => watchUpdates(true));
+watchUpdates(false);
 
 // Tarjeta NVIDIA sin el motor de GPU: se ofrece instalarlo desde aquí.
 let gpuBusy = false;

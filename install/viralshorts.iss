@@ -49,7 +49,9 @@ Name: "{autoprograms}\viralshorts"; Filename: "{app}\viralshorts.exe"
 Name: "{autodesktop}\viralshorts"; Filename: "{app}\viralshorts.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\viralshorts.exe"; Description: "Abrir viralshorts"; Flags: nowait postinstall skipifsilent
+; Sin skipifsilent: una actualizacion en silencio (la lanza la propia aplicacion)
+; tiene que volver a abrirla al terminar.
+Filename: "{app}\viralshorts.exe"; Description: "Abrir viralshorts"; Flags: nowait postinstall
 
 [Code]
 { Al desinstalar se pregunta por lo descargado: las herramientas y los modelos

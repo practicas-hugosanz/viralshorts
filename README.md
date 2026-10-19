@@ -76,6 +76,35 @@ set ANTHROPIC_API_KEY=sk-ant-...    # PowerShell: $env:ANTHROPIC_API_KEY="sk-ant
 Sin clave el pipeline sigue funcionando: puntúa con heatmap + energía + densidad
 y no genera títulos ni hashtags.
 
+## Actualizaciones
+
+Quien ya lo tiene instalado recibe las versiones nuevas sin hacer nada: unos
+segundos después de abrir la aplicación se mira si hay una versión mayor y, si
+la hay, sale un aviso con sus notas y el botón **Actualizar ahora**. La
+aplicación descarga el instalador, comprueba que no se ha corrompido (SHA-256),
+lo ejecuta en silencio, se cierra, y el instalador la vuelve a abrir ya
+actualizada. No se actualiza con un trabajo en marcha. Arriba a la derecha, el
+número de versión (`v0.1.0`) es un botón para **buscar actualizaciones** a mano.
+
+Funciona igual que Arcia: el código vive en un repositorio privado
+(`practicas-hugosanz/viralshorts`) y cada versión se publica como *release* en
+uno público solo de publicaciones
+([`viralshorts-releases`](https://github.com/practicas-hugosanz/viralshorts-releases)),
+con el instalador y un `latest.json` (versión, notas, dirección y huella). La
+aplicación lee ese `latest.json` de la última release.
+
+**Para publicar una versión nueva** (hace falta `gh` con sesión iniciada):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install\publicar.ps1 -Version 0.2.0 -Notas "Qué cambia"
+```
+
+Pone la versión en `rust\Cargo.toml`, compila el instalador, escribe
+`latest.json`, guarda y etiqueta el cambio (`v0.2.0`) en el repositorio de código
+y crea la release en el de publicaciones. Con `-SoloPreparar` hace todo menos
+subir nada. Para probar las actualizaciones sin publicar, `VIRALSHORTS_UPDATE_URL`
+apunta la aplicación a otro `latest.json`.
+
 ## Uso: interfaz visual (recomendado)
 
 Abre **viralshorts** (menú Inicio o Escritorio). Si prefieres el navegador:

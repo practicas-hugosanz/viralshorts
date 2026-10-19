@@ -32,7 +32,7 @@ use crate::config::Config;
 use crate::ffmpeg;
 use crate::pipeline;
 use crate::plan;
-use crate::{fonts, progress, setup};
+use crate::{fonts, progress, setup, update};
 
 pub const DEFAULT_PORT: u16 = 8760;
 const INDEX_HTML: &str = include_str!("../../web/index.html");
@@ -623,6 +623,7 @@ pub fn environment(root: &Path) -> Value {
         "font": font,
         "font_ok": font_ok,
         "font_alternative": if font_ok { String::new() } else { fonts::suggest_alternative(&font) },
+        "version": update::CURRENT,
         "nvidia": nvidia_present(),
         "cuda_engine": setup::cuda_installed(root),
     })
@@ -746,18 +747,34 @@ pub struct App {
     /// Con true, mientras falten herramientas la pagina principal es la de
     /// instalacion. En las pruebas va apagado.
     setup_required: bool,
+    /// Actualizaciones: estado, donde mirar, y como lanzar el instalador y
+    /// cerrar la aplicacion (inyectables para las pruebas).
+    updates: Arc<update::Shared>,
+    update_url: String,
+    run_installer: Arc<dyn Fn(&Path) -> std::io::Result<()> + Send + Sync>,
+    quit: Arc<dyn Fn() + Send + Sync>,
 }
 
 impl App {
     pub fn new(root: &Path, spawner: Spawner) -> Arc<Self> {
+        let job = Job::new(root, spawner);
+        let job_to_stop = job.clone();
         Arc::new(Self {
             token: new_token(),
             root: root.to_path_buf(),
-            job: Job::new(root, spawner),
+            job,
             titles: Mutex::new(HashMap::new()),
             picker: Some(Box::new(native_picker)),
             setup: Arc::new(Mutex::new(setup::State::default())),
             setup_required: true,
+            updates: Arc::new(Mutex::new(update::State::default())),
+            update_url: update::manifest_url(),
+            run_installer: Arc::new(update::launch_installer),
+            // Un trabajo a medias no se queda huerfano al cerrar para actualizar.
+            quit: Arc::new(move || {
+                job_to_stop.stop();
+                std::process::exit(0);
+            }),
         })
     }
 
@@ -770,7 +787,27 @@ impl App {
             picker: None,
             setup: Arc::new(Mutex::new(setup::State::default())),
             setup_required: false,
+            updates: Arc::new(Mutex::new(update::State::default())),
+            update_url: String::new(),
+            run_installer: Arc::new(|_| Ok(())),
+            quit: Arc::new(|| {}),
         })
+    }
+
+    /// Mira en segundo plano si hay una version nueva.
+    fn start_update_check(&self) {
+        let (state, url) = (self.updates.clone(), self.update_url.clone());
+        std::thread::spawn(move || update::run_check(&state, &url, update::CURRENT));
+    }
+
+    /// Baja e instala la version que se ofrece, si no hay un trabajo en marcha.
+    fn start_update_install(&self) -> Result<(), String> {
+        if self.job.status() == "running" {
+            return Err("Hay un trabajo en marcha. Espera a que termine (o detenlo) y actualiza despues.".into());
+        }
+        let (state, launch, quit) = (self.updates.clone(), self.run_installer.clone(), self.quit.clone());
+        std::thread::spawn(move || update::run_install(&state, &*launch, &*quit));
+        Ok(())
     }
 
     /// Lanza la instalacion de lo que falte (o del motor de GPU) en un hilo.
@@ -960,6 +997,7 @@ fn handle_get(app: &Arc<App>, request: &Request, mut stream: TcpStream) {
             )
         }
         "/api/setup" => respond_json(&mut stream, 200, &app.setup.lock().unwrap_or_else(|e| e.into_inner()).to_json(&app.root)),
+        "/api/update" => respond_json(&mut stream, 200, &app.updates.lock().unwrap_or_else(|e| e.into_inner()).to_json()),
         "/api/state" => respond_json(&mut stream, 200, &app.job.snapshot()),
         "/api/events" => serve_events(app, stream),
         "/api/video" => serve_file(app, request.query.get("f").map_or("", String::as_str), request, &mut stream),
@@ -1112,6 +1150,14 @@ fn handle_post(app: &Arc<App>, request: &Request, stream: &mut TcpStream) {
         "/api/plan/save" => save_plan(app, &body),
         "/api/plan/render" => render_plan(app, &body),
         "/api/title" => (200, probe_title(body["url"].as_str().unwrap_or(""), &app.titles)),
+        "/api/update/check" => {
+            app.start_update_check();
+            (200, json!({"ok": true}))
+        }
+        "/api/update/install" => match app.start_update_install() {
+            Ok(()) => (200, json!({"ok": true})),
+            Err(error) => (400, json!({"ok": false, "error": error})),
+        },
         "/api/setup/start" => {
             app.start_setup(body["gpu"].as_bool().unwrap_or(false));
             (200, json!({"ok": true}))
@@ -1261,6 +1307,12 @@ pub fn launch(port: u16) -> Result<Running, String> {
     let _ = progress::mode(); // se resuelve aqui, no a mitad de un trabajo
     let serving = app.clone();
     std::thread::spawn(move || serve_forever(serving, listener));
+    // Sin prisa: que el arranque y la primera pantalla no esperen a la red.
+    let checking = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(3));
+        checking.start_update_check();
+    });
     Ok(Running { app, port, url })
 }
 
@@ -1863,6 +1915,28 @@ mod tests {
         assert_eq!(save_plan(&app, &json!({"ruta": "no/existe.json"})).0, 400);
         let sin_plan = App::with_job(dir.path(), banco(vec![], 0, false).job, "t");
         assert_eq!(plan_state(&sin_plan)["plan"], Value::Null);
+    }
+
+    #[test]
+    fn el_estado_de_las_actualizaciones_pide_token_y_cuenta_la_version() {
+        let (_app, puerto, _b) = app_de_prueba();
+        assert_eq!(pedir(puerto, "GET", "/api/update", "127.0.0.1", None, "", &[]).0, 403);
+        let (codigo, _, cuerpo) = pedir(puerto, "GET", "/api/update", "127.0.0.1", Some("token-de-prueba"), "", &[]);
+        let datos: Value = serde_json::from_str(&cuerpo).unwrap();
+        assert_eq!((codigo, datos["current"].clone(), datos["available"].clone()), (200, json!(update::CURRENT), Value::Null));
+        assert_eq!(pedir(puerto, "POST", "/api/update/check", "evil.example", Some("token-de-prueba"), "{}", &[]).0, 403);
+    }
+
+    #[test]
+    fn no_se_actualiza_con_un_trabajo_en_marcha() {
+        let b = banco(vec![], 0, false);
+        let app = App::with_job(&std::env::temp_dir(), b.job.clone(), "t");
+        b.job.enqueue(formulario(1));
+        let error = app.start_update_install().unwrap_err();
+        assert!(error.contains("trabajo en marcha"), "{error}");
+        b.job.stop();
+        assert!(wait_for_status(&b.job, "stopped", Duration::from_secs(5)));
+        assert!(app.start_update_install().is_ok(), "sin trabajo en marcha si se puede");
     }
 
     #[test]

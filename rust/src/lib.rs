@@ -27,5 +27,6 @@ pub mod scoring;
 pub mod setup;
 pub mod subtitles;
 pub mod transcribe;
+pub mod update;
 pub mod words;
 pub mod worklock;
