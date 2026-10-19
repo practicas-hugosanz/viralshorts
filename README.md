@@ -173,6 +173,15 @@ Detalles que ahorran sustos:
   reintentar con las cookies de Firefox, Edge o Chrome (`download.cookies_from_browser`
   de yt-dlp). También está en Ajustes. Con Chrome y Edge puede fallar mientras
   están abiertos.
+- **Acertar más con el texto** (Ajustes): *afinar los clips elegidos* vuelve a
+  transcribir solo el trozo de cada clip con un modelo mayor (`large-v3-turbo`
+  por ejemplo: son decenas de segundos por clip, no el pódcast entero; la calidad
+  *Máxima* lo activa). Una prueba con `tiny` + afinado con `small` pasó de
+  «cuando compártelo tiempo» a «cuando compartes tiempo». Además, *nombres y
+  palabras difíciles* (va como `--prompt` de whisper) y *correcciones fijas*
+  (`mal = bien`, una por línea, sin importar mayúsculas).
+- **Transcripción en directo**: mientras whisper trabaja, *En curso* va enseñando
+  cada frase con su minuto del pódcast (la lee del stdout de `whisper-cli`).
 - **Actualizaciones**: además de al abrir, la aplicación vuelve a mirar cada 3 horas.
 - **Subtítulos que caben**: un bloque de palabras largas se parte en dos líneas y,
   si ni así cabe (una sola palabra enorme), se reduce el tamaño solo en ese bloque.

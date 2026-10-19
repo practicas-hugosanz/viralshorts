@@ -74,6 +74,14 @@ pub struct TranscribeConfig {
     pub condition_on_previous_text: bool,
     pub batched: bool,
     pub batch_size: i64,
+    /// Modelo mejor con el que se vuelve a transcribir SOLO el trozo de cada clip
+    /// elegido (unos segundos de audio, no horas). "" = no se afina.
+    pub refine_model: String,
+    /// Nombres propios y palabras raras del pódcast, para que whisper las escriba
+    /// bien. Va como `--prompt`.
+    pub initial_prompt: String,
+    /// Correcciones fijas, `mal=bien;otra mal=otra bien`, que se aplican al texto.
+    pub corrections: String,
 }
 
 impl Default for TranscribeConfig {
@@ -89,6 +97,9 @@ impl Default for TranscribeConfig {
             condition_on_previous_text: false,
             batched: true,
             batch_size: 8,
+            refine_model: String::new(),
+            initial_prompt: String::new(),
+            corrections: String::new(),
         }
     }
 }

@@ -65,11 +65,15 @@ enum Kind {
     Color,
     Text,
     Browser,
+    /// Un modelo de voz de la lista (o vacio).
+    Model,
+    /// Texto libre y largo (vocabulario, correcciones), sin saltos de linea.
+    Long,
 }
 
 /// La lista es cerrada a proposito: el navegador no decide que ajuste del
 /// pipeline se cambia, solo elige entre estos.
-const STYLE_FIELDS: [(&str, &str, Kind); 10] = [
+const STYLE_FIELDS: [(&str, &str, Kind); 13] = [
     ("font_name", "subtitles.font_name", Kind::Text),
     ("font_size", "subtitles.font_size", Kind::Int),
     ("color_active", "subtitles.color_active", Kind::Color),
@@ -80,6 +84,9 @@ const STYLE_FIELDS: [(&str, &str, Kind); 10] = [
     ("workers", "output.render_workers", Kind::Int),
     ("encoder", "output.hardware_encoder", Kind::Text),
     ("cookies", "download.cookies_from_browser", Kind::Browser),
+    ("refine", "transcribe.refine_model", Kind::Model),
+    ("vocab", "transcribe.initial_prompt", Kind::Long),
+    ("corrections", "transcribe.corrections", Kind::Long),
 ];
 
 /// Navegadores de los que yt-dlp sabe leer las cookies.
@@ -108,6 +115,11 @@ pub fn style_pairs(form: &Value) -> Vec<(String, Value)> {
                 valid.then(|| json!(text.to_uppercase()))
             }
             Kind::Text => Some(json!(raw.as_str().unwrap_or("").trim().chars().take(60).collect::<String>())),
+            Kind::Model => {
+                let name = raw.as_str().unwrap_or("").trim();
+                (name.is_empty() || setup::MODELS.iter().any(|(m, _)| *m == name)).then(|| json!(name))
+            }
+            Kind::Long => Some(json!(raw.as_str().unwrap_or("").chars().map(|c| if c == '\n' || c == '\r' { ';' } else { c }).filter(|c| !c.is_control()).take(600).collect::<String>().trim())),
             Kind::Browser => raw.as_str().map(|b| b.trim().to_lowercase()).filter(|b| BROWSERS.contains(&b.as_str())).map(|b| json!(b)),
         };
         if let Some(value) = value {
@@ -300,6 +312,8 @@ struct State {
     clips: Vec<Value>,
     results: Vec<Value>,
     notices: Vec<Value>,
+    /// Ultimas frases transcritas, para quien abre la ventana a mitad.
+    live: Vec<Value>,
     output_dir: PathBuf,
     /// Carpeta de la que cuelgan las de cada ejecucion: la biblioteca la recorre.
     base_dir: PathBuf,
@@ -357,6 +371,7 @@ impl Job {
             "clips": state.clips,
             "results": state.results,
             "notices": state.notices,
+            "live": state.live,
             "output_dir": state.output_dir.to_string_lossy(),
             "plan": plan_summary(&state),
             "queue": queue_summary(&state),
@@ -481,6 +496,7 @@ impl Job {
         state.clips.clear();
         state.results.clear();
         state.notices.clear();
+        state.live.clear();
         state.base_dir = match form["output"].as_str().filter(|o| !o.is_empty()) {
             Some(output) => {
                 let output = PathBuf::from(output);
@@ -586,6 +602,12 @@ impl Job {
                 "clips" => state.clips = event["clips"].as_array().cloned().unwrap_or_default(),
                 "clip_done" => state.results.push(event.clone()),
                 "aviso" => state.notices.push(event.clone()),
+                "texto" => {
+                    state.live.push(event.clone());
+                    if state.live.len() > 40 {
+                        state.live.remove(0);
+                    }
+                }
                 // Carpeta de esta ejecucion: de ahi salen los videos que se ven.
                 "salida" => {
                     if let Some(ruta) = event["ruta"].as_str() {
@@ -619,6 +641,7 @@ fn empty_state() -> State {
         clips: Vec::new(),
         results: Vec::new(),
         notices: Vec::new(),
+        live: Vec::new(),
         output_dir: PathBuf::from("output"),
         base_dir: PathBuf::from("output"),
         plan_path: None,
@@ -1848,6 +1871,21 @@ mod tests {
         let con = |cookies: &str| style_pairs(&json!({"style": {"cookies": cookies}}));
         assert_eq!(con("Firefox"), vec![("download.cookies_from_browser".to_string(), json!("firefox"))]);
         assert!(con("").is_empty() && con("chrome --evil").is_empty() && con("../x").is_empty());
+    }
+
+    #[test]
+    fn los_ajustes_de_transcripcion_pasan_filtrados() {
+        let con = |style: Value| -> std::collections::HashMap<String, Value> { style_pairs(&json!({"style": style})).into_iter().collect() };
+        let ok = con(json!({"refine": "large-v3-turbo", "vocab": "Ibai, Auron", "corrections": "spotifai=Spotify
+la guapa=La Guapa"}));
+        assert_eq!(ok["transcribe.refine_model"], "large-v3-turbo");
+        assert_eq!(ok["transcribe.initial_prompt"], "Ibai, Auron");
+        assert_eq!(ok["transcribe.corrections"], "spotifai=Spotify;la guapa=La Guapa", "los saltos de linea pasan a ;");
+        // Un modelo inventado no llega al pipeline.
+        assert!(!con(json!({"refine": "gigante"})).contains_key("transcribe.refine_model"));
+        assert!(con(json!({"refine": ""})).is_empty(), "vacio = no se manda y vale lo de config.yaml");
+        let largo = con(json!({"vocab": "x".repeat(2000)}));
+        assert_eq!(largo["transcribe.initial_prompt"].as_str().unwrap().len(), 600);
     }
 
     #[test]

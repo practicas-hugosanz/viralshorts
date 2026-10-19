@@ -47,6 +47,11 @@ pub struct EngineOptions {
     pub model_size: String,
     pub beam_size: i64,
     pub threads: usize,
+    /// Segundo del video donde empieza el audio que se le pasa: los tiempos que
+    /// whisper imprime son relativos a ese trozo.
+    pub offset: f64,
+    /// Texto inicial (vocabulario) para orientar a whisper.
+    pub prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -95,6 +100,8 @@ pub struct Transcriber {
     /// Se pone a true cuando la GPU ya ha fallado una vez: a partir de ahi no
     /// se vuelve a intentar en esta ejecucion.
     cpu_only: bool,
+    /// Inicio (en el video) del trozo que se esta transcribiendo.
+    offset: f64,
 }
 
 impl Transcriber {
@@ -102,7 +109,7 @@ impl Transcriber {
         let cache_dir = cache_dir.into();
         std::fs::create_dir_all(&cache_dir)
             .map_err(|e| TranscribeError(format!("No se pudo crear {}: {e}", cache_dir.display())))?;
-        Ok(Self { cfg, cache_dir, engine, cpu_only: false })
+        Ok(Self { cfg, cache_dir, engine, cpu_only: false, offset: 0.0 })
     }
 
     fn resolve_device(&self) -> Device {
@@ -133,6 +140,8 @@ impl Transcriber {
             model_size: self.cfg.model_size.clone(),
             beam_size: self.cfg.beam_size,
             threads: self.threads(),
+            offset: self.offset,
+            prompt: vocabulary_prompt(&self.cfg.initial_prompt),
         }
     }
 
@@ -225,12 +234,19 @@ impl Transcriber {
     fn transcribe_range(&mut self, path: &Path, start: Option<f64>, span: f64, done_before: f64, total: f64) -> Result<EngineOutput> {
         let wav = self.cache_dir.join(format!("tmp-{}-{}.wav", std::process::id(), start.map_or(0, |s| (s * 10.0) as i64)));
         ffmpeg::extract_wav(path, start, Some(span), 16_000, &wav).map_err(|e| TranscribeError(e.to_string()))?;
+        self.offset = start.unwrap_or(0.0);
         let result = self.run(&wav, &mut |fraction| progress_step(done_before + fraction * span, total, false));
         let _ = std::fs::remove_file(&wav);
         result
     }
 
-    fn finish(&self, segments: Vec<Segment>, language: Option<String>, duration: f64, path: &Path) -> Result<Transcript> {
+    fn finish(&self, mut segments: Vec<Segment>, language: Option<String>, duration: f64, path: &Path) -> Result<Transcript> {
+        let corrections = Corrections::parse(&self.cfg.corrections);
+        if !corrections.is_empty() {
+            for segment in &mut segments {
+                corrections.apply_segment(segment);
+            }
+        }
         if segments.is_empty() {
             return Err(TranscribeError(format!(
                 "La transcripcion de '{}' no devolvio ninguna palabra. Comprueba que el video tenga audio audible.",
@@ -256,6 +272,8 @@ impl Transcriber {
         };
         let payload = [
             "whispercpp".to_string(),
+            self.cfg.initial_prompt.clone(),
+            self.cfg.corrections.clone(),
             resolved.display().to_string(),
             meta.len().to_string(),
             mtime.to_string(),
@@ -267,6 +285,80 @@ impl Transcriber {
         .join("|");
         let digest = Sha1::digest(payload.as_bytes());
         Ok(format!("{digest:x}")[..16].to_string())
+    }
+}
+
+/// Frase de arranque para whisper a partir del vocabulario del usuario.
+fn vocabulary_prompt(vocabulary: &str) -> Option<String> {
+    let clean: String = vocabulary.chars().filter(|c| !c.is_control()).collect::<String>().trim().to_string();
+    (!clean.is_empty()).then(|| format!("Nombres y términos de la conversación: {}.", clean.trim_end_matches(['.', ',', ';'])))
+}
+
+/// Correcciones fijas `mal=bien;otra mal=otra bien`. Se buscan palabra a palabra
+/// (sin importar mayusculas ni la puntuacion pegada) y pueden ser de varias palabras.
+#[derive(Debug, Default, Clone)]
+pub struct Corrections {
+    /// (palabras a buscar en minuscula, sustitucion)
+    rules: Vec<(Vec<String>, String)>,
+}
+
+fn core_of(word: &str) -> String {
+    word.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase()
+}
+
+impl Corrections {
+    pub fn parse(text: &str) -> Self {
+        let rules = text
+            .split(|c| c == ';' || c == '\n')
+            .filter_map(|item| {
+                let (bad, good) = item.split_once('=')?;
+                let words: Vec<String> = bad.split_whitespace().map(core_of).filter(|w| !w.is_empty()).collect();
+                let good = good.trim().to_string();
+                (!words.is_empty() && !good.is_empty()).then_some((words, good))
+            })
+            .collect();
+        Self { rules }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.rules.is_empty()
+    }
+
+    /// Aplica las reglas a una lista de palabras. Conserva la puntuacion de
+    /// delante y de detras, y el tiempo de la primera a la ultima palabra.
+    pub fn apply_words(&self, words: Vec<Word>) -> Vec<Word> {
+        let mut out: Vec<Word> = Vec::with_capacity(words.len());
+        let mut i = 0;
+        'next: while i < words.len() {
+            for (pattern, good) in &self.rules {
+                let end = i + pattern.len();
+                if end <= words.len() && words[i..end].iter().zip(pattern).all(|(w, p)| &core_of(&w.text) == p) {
+                    let first = &words[i];
+                    let last = &words[end - 1];
+                    let lead: String = first.text.chars().take_while(|c| !c.is_alphanumeric()).collect();
+                    let trail: String = {
+                        let mut tail: Vec<char> = last.text.chars().rev().take_while(|c| !c.is_alphanumeric()).collect();
+                        tail.reverse();
+                        tail.into_iter().collect()
+                    };
+                    out.push(Word { text: format!("{lead}{good}{trail}"), start: first.start, end: last.end, probability: 1.0 });
+                    i = end;
+                    continue 'next;
+                }
+            }
+            out.push(words[i].clone());
+            i += 1;
+        }
+        out
+    }
+
+    pub fn apply_segment(&self, segment: &mut Segment) {
+        let words = std::mem::take(&mut segment.words);
+        let before = words.len();
+        segment.words = self.apply_words(words);
+        if !segment.words.is_empty() && (before != segment.words.len() || !segment.text.is_empty()) {
+            segment.text = segment.words.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ");
+        }
     }
 }
 
@@ -413,20 +505,38 @@ impl Engine for WhisperCpp {
         let mut cmd = command(&exe);
         cmd.arg("-m").arg(&model).arg("-f").arg(wav).arg("-of").arg(&out_base);
         // -sns: sin tokens de "no habla" ([Musica], aplausos...) que luego habria que filtrar.
-        cmd.args(["-ojf", "-pp", "-np", "-sns"]);
+        // Sin -np whisper escribe cada frase por stdout segun la reconoce: asi la
+        // interfaz la puede ensenar en directo.
+        cmd.args(["-ojf", "-pp", "-sns"]);
         cmd.args(["-l", options.language.as_deref().unwrap_or("auto")]);
         cmd.args(["-bs", &options.beam_size.max(1).to_string()]);
         cmd.args(["-t", &options.threads.max(1).to_string()]);
         // Sin arrastrar el texto anterior como contexto: es lento y en
         // podcasts largos provoca bucles de repeticion.
         cmd.args(["-mc", "0"]);
+        if let Some(prompt) = options.prompt.as_deref() {
+            // Con --carry-initial-prompt el vocabulario vale en todo el audio y no
+            // solo en la primera ventana (sin contexto previo: -mc 0).
+            cmd.args(["--prompt", prompt, "--carry-initial-prompt"]);
+        }
         if device == Device::Cpu && self.cpu_exe.as_ref() != Some(&exe) {
             cmd.arg("-ng"); // motor CUDA usado como CPU
         }
-        cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped());
+        cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
         log::debug!("Ejecutando: {cmd:?}");
 
         let mut child = cmd.spawn().map_err(|e| TranscribeError(format!("No se pudo lanzar {}: {e}", exe.display())))?;
+        // stdout en su hilo: con el tubo sin vaciar, whisper se bloquearia.
+        let live = child.stdout.take().map(|out| {
+            let offset = options.offset;
+            std::thread::spawn(move || {
+                for line in BufReader::new(out).lines().map_while(std::result::Result::ok) {
+                    if let Some((start, text)) = parse_live_line(&line) {
+                        crate::progress::result("texto", serde_json::json!({"t": offset + start, "texto": text}));
+                    }
+                }
+            })
+        });
         let mut tail: Vec<String> = Vec::new();
         if let Some(stderr) = child.stderr.take() {
             for line in BufReader::new(stderr).lines().map_while(std::result::Result::ok) {
@@ -441,6 +551,9 @@ impl Engine for WhisperCpp {
             }
         }
         let status = child.wait().map_err(|e| TranscribeError(format!("whisper-cli no termino: {e}")))?;
+        if let Some(handle) = live {
+            let _ = handle.join();
+        }
         if !status.success() {
             let detail = if status.code() == Some(DLL_NOT_FOUND) {
                 "una DLL de CUDA is not found or cannot be loaded".to_string()
@@ -455,6 +568,20 @@ impl Engine for WhisperCpp {
         let _ = std::fs::remove_file(&json_path);
         parse_whisper_json(&text)
     }
+}
+
+/// Una frase que whisper.cpp escribe por stdout mientras transcribe:
+/// `[00:01:02.500 --> 00:01:05.000]   Hola, esto es una prueba.` -> (62.5, "Hola, ...").
+pub fn parse_live_line(line: &str) -> Option<(f64, String)> {
+    let rest = line.trim().strip_prefix('[')?;
+    let (stamps, text) = rest.split_once(']')?;
+    let (from, _) = stamps.split_once("-->")?;
+    let mut seconds = 0.0;
+    for part in from.trim().split(':') {
+        seconds = seconds * 60.0 + part.trim().parse::<f64>().ok()?;
+    }
+    let text = text.trim();
+    (!is_annotation(text) && !text.is_empty()).then(|| (seconds, text.to_string()))
 }
 
 /// "whisper_print_progress_callback: progress =  45%" -> 0.45
@@ -589,6 +716,38 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cfg = TranscribeConfig { device: dispositivo.into(), ..Default::default() };
         (Transcriber::new(cfg, dir.path().join("cache"), Box::new(motor)).unwrap(), dir)
+    }
+
+    fn pal(texto: &str, a: f64) -> Word {
+        Word::new(texto, a, a + 0.4)
+    }
+
+    #[test]
+    fn las_correcciones_cambian_palabras_y_conservan_la_puntuacion() {
+        let c = Corrections::parse("spotifai=Spotify; la guapa=La Guapa ;roto;=nada;x=");
+        assert!(!c.is_empty());
+        let fuera = c.apply_words(vec![pal("Oye,", 0.0), pal("Spotifai.", 0.5), pal("y", 1.0), pal("la", 1.5), pal("guapa", 2.0), pal("de", 2.5), pal("redes", 3.0)]);
+        let textos: Vec<&str> = fuera.iter().map(|w| w.text.as_str()).collect();
+        assert_eq!(textos, ["Oye,", "Spotify.", "y", "La Guapa", "de", "redes"]);
+        let guapa = &fuera[3];
+        assert!((guapa.start - 1.5).abs() < 1e-9 && (guapa.end - 2.4).abs() < 1e-9, "una sola palabra que cubre las dos");
+        assert!(Corrections::parse("").is_empty() && Corrections::parse("sin igual").is_empty());
+    }
+
+    #[test]
+    fn el_vocabulario_se_convierte_en_una_frase_para_whisper() {
+        assert_eq!(vocabulary_prompt("   "), None);
+        assert_eq!(vocabulary_prompt("Ibai, Auronplay, Twitch."), Some("Nombres y términos de la conversación: Ibai, Auronplay, Twitch.".into()));
+        assert!(!vocabulary_prompt("a\nb").unwrap().contains('\n'));
+    }
+
+    #[test]
+    fn las_frases_en_directo_se_leen_con_su_tiempo() {
+        assert_eq!(parse_live_line("[00:01:02.500 --> 00:01:05.000]   Hola, esto es una prueba."), Some((62.5, "Hola, esto es una prueba.".to_string())));
+        assert_eq!(parse_live_line("[01:00:00.000 --> 01:00:02.000] Una hora").map(|l| l.0), Some(3600.0));
+        for no in ["", "whisper_init: loading model", "[00:00:01.000 --> 00:00:02.000]   [Música]", "[00:00:01.000 --> 00:00:02.000]   ", "[sin tiempos] hola"] {
+            assert_eq!(parse_live_line(no), None, "{no}");
+        }
     }
 
     #[test]

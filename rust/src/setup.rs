@@ -41,7 +41,7 @@ const YTDLP_URL: &str = "https://github.com/yt-dlp/yt-dlp/releases/latest/downlo
 /// Modelos de voz que ofrece la interfaz: (nombre, MB aproximados). Pesan desde
 /// decenas de MB hasta varios GB, asi que se bajan a peticion y no en el primer
 /// arranque.
-pub const MODELS: &[(&str, u64)] = &[("tiny", 75), ("small", 466), ("medium", 1500), ("large-v3", 3100)];
+pub const MODELS: &[(&str, u64)] = &[("tiny", 75), ("small", 466), ("medium", 1500), ("large-v3-turbo", 1620), ("large-v3", 3100)];
 
 pub fn model_path(root: &Path, size: &str) -> PathBuf {
     root.join("bin").join("models").join(format!("ggml-{size}.bin"))
@@ -83,6 +83,7 @@ impl Tool {
             Tool::Model("tiny") => "modelo de voz tiny",
             Tool::Model("small") => "modelo de voz small",
             Tool::Model("medium") => "modelo de voz medium",
+            Tool::Model("large-v3-turbo") => "modelo de voz large-v3-turbo",
             Tool::Model("large-v3") => "modelo de voz large-v3",
             Tool::Model(_) => "modelo de voz",
         }

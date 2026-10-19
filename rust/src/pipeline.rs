@@ -476,11 +476,68 @@ fn select_clips(args: &Args, cfg: &Config, work_dir: &Path, limit: Option<usize>
         clips = windows;
     }
 
-    let picked = scoring::finalise(&mut clips, &cfg.scoring, &cfg.clips, limit);
+    let mut picked = scoring::finalise(&mut clips, &cfg.scoring, &cfg.clips, limit);
     if picked.is_empty() {
         return Err("No se selecciono ningun clip.".into());
     }
+    refine_clips(cfg, &podcast.path, podcast.duration, &mut picked);
     Ok(Selection { clips: picked, podcast, background, judge, energy })
+}
+
+/// Vuelve a transcribir SOLO el trozo de cada clip elegido con un modelo mejor.
+/// La pasada larga (todo el podcast) tiene que ser rapida para poder elegir; el
+/// texto que acaba en pantalla son unas decenas de segundos por clip, asi que
+/// ahi si compensa gastar el modelo grande. Si algo falla se queda lo de antes.
+fn refine_clips(cfg: &Config, podcast: &Path, duration: f64, clips: &mut [Window]) {
+    let model = cfg.transcribe.refine_model.trim();
+    if model.is_empty() || clips.is_empty() {
+        return;
+    }
+    progress::stage("transcripcion", "Afinando el texto de los clips elegidos");
+    log::info!("Afinando el texto de {} clips con el modelo '{model}' (solo sus segundos, no el pódcast entero).", clips.len());
+
+    let outcome = (|| -> Result<Vec<Option<(Vec<crate::words::Word>, String)>>, String> {
+        let mut refine = cfg.transcribe.clone();
+        refine.model_size = model.to_string();
+        refine.beam_size = refine.beam_size.max(5);
+        let engine = WhisperCpp::discover(&ffmpeg::project_root()).map_err(|e| e.to_string())?;
+        let mut transcriber = Transcriber::new(refine, &cfg.paths.cache_dir, Box::new(engine)).map_err(|e| e.to_string())?;
+        let regions: Vec<(f64, f64)> = clips.iter().map(|c| ((c.start - 1.0).max(0.0), (c.end + 1.0).min(duration))).collect();
+        let transcript = transcriber.transcribe_regions(podcast, duration, &regions).map_err(|e| e.to_string())?;
+        let all: Vec<&crate::words::Word> = transcript.segments.iter().flat_map(|s| s.words.iter()).collect();
+        Ok(clips
+            .iter()
+            .map(|clip| {
+                let mut words: Vec<crate::words::Word> =
+                    all.iter().filter(|w| w.start >= clip.start - 0.25 && w.end <= clip.end + 0.25).map(|w| (*w).clone()).collect();
+                words.sort_by(|a, b| a.start.total_cmp(&b.start));
+                words.dedup_by(|a, b| (a.start - b.start).abs() < 0.05 && a.text == b.text);
+                // Una pasada que devuelve la mitad de las palabras ha ido mal.
+                (words.len() >= 3 && words.len() * 2 >= clip.words.len()).then(|| {
+                    let text = words.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ");
+                    (words, text)
+                })
+            })
+            .collect())
+    })();
+
+    match outcome {
+        Ok(results) => {
+            let mut refined = 0;
+            for (clip, result) in clips.iter_mut().zip(results) {
+                match result {
+                    Some((words, text)) => {
+                        clip.words = words;
+                        clip.text = text;
+                        refined += 1;
+                    }
+                    None => log::warn!("El clip de {} no se pudo afinar; se queda el texto de la primera pasada.", hms(clip.start)),
+                }
+            }
+            log::info!("Texto afinado en {refined} de {} clips.", clips.len());
+        }
+        Err(error) => log::warn!("No se pudo afinar el texto ({error}). Se sigue con el de la primera pasada."),
+    }
 }
 
 // ----------------------------------------------------------------------------
