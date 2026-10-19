@@ -337,6 +337,9 @@ input[type="color"].swatch::-webkit-color-swatch { border: 0; border-radius: 50%
 .ph-brand.bl { bottom: 4cqw; left: 4cqw; align-items: flex-start; flex-direction: column-reverse; }
 .ph-brand.br { bottom: 4cqw; right: 4cqw; align-items: flex-end; flex-direction: column-reverse; }
 
+.ph-bar { position: absolute; left: 0; width: 46%; height: 1.2cqw; z-index: 4; background: var(--bar, #ff7a18); bottom: 0; }
+.ph-bar.top { top: 0; bottom: auto; }
+
 /* Plantillas de subtitulos. */
 .sub { --hot: #fff200; z-index: 3; }
 .sub .hot { color: var(--hot); }
@@ -443,6 +446,14 @@ pre#log .warn { color: var(--accent-hi); }
 .review-head .meta { display: flex; gap: 6px; flex: none; }
 .review-body { padding: 4px 16px 16px 50px; display: flex; flex-direction: column; gap: 12px; }
 .review-body label { display: block; font-size: 12.5px; color: var(--mute); margin-bottom: 4px; }
+.clip-edit { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line-soft); border-radius: var(--r-s); background: var(--bg); }
+.clip-edit textarea { min-height: 96px; background: var(--surf); }
+.clip-edit .sub-hint { color: var(--faint); font-size: 12.5px; margin: -2px 0 0; }
+.trim-row { display: flex; gap: 14px 18px; flex-wrap: wrap; align-items: flex-end; }
+.trim-row label { display: flex; flex-direction: column; gap: 3px; margin: 0; }
+.trim-row input[type="number"] { width: 92px; }
+.trim-row select { width: auto; min-width: 150px; }
+.trim-row .link { margin-left: auto; }
 .counted { display: flex; justify-content: flex-end; font: 500 12px var(--display); color: var(--faint); margin-top: 3px; font-variant-numeric: tabular-nums; }
 .counted .over { color: var(--bad); }
 .review-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; position: sticky; bottom: -1px; margin-top: 4px; padding: 14px 0; background: linear-gradient(transparent, var(--bg) 28%); }
@@ -813,6 +824,46 @@ body.modal-open .main { overflow: hidden; }
                 </div>
               </div>
             </section>
+
+            <section class="card">
+              <h2>Barra y música</h2>
+              <div class="fields">
+                <div class="wide">
+                  <label class="opt compact" style="padding-top:0"><span class="opt-text"><b>Barra de progreso</b><em>Una barra fina que avanza durante el clip: el espectador ve cuánto falta y aguanta más.</em></span><input type="checkbox" class="switch" id="bar-on"></label>
+                  <input type="hidden" id="st_bar" value="false">
+                </div>
+                <div id="bar-opts" class="wide fields" style="grid-template-columns: 1fr 1fr; gap: 16px 20px" hidden>
+                  <div>
+                    <label class="lbl-t" for="st_barpos">Dónde</label>
+                    <select id="st_barpos"><option value="bottom" selected>Abajo del todo</option><option value="top">Arriba del todo</option></select>
+                  </div>
+                  <div>
+                    <label class="lbl-t" for="st_barcolor">Color</label>
+                    <input type="color" id="st_barcolor" value="#ff7a18" style="width:100%;height:38px;padding:2px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-s)">
+                  </div>
+                </div>
+                <div class="wide">
+                  <label class="lbl-t" for="st_music">Música de fondo</label>
+                  <div class="with-button">
+                    <input type="text" id="st_music" placeholder="Elige un mp3, wav o m4a" spellcheck="false">
+                    <button type="button" class="btn" data-browse="st_music" data-kind="audio"><svg class="ico"><use href="#i-folder"/></svg>Elegir</button>
+                    <button type="button" class="btn ghost" id="music-clear" hidden>Quitar</button>
+                  </div>
+                  <p class="hint">Usa música con licencia: la de otros puede dar reclamaciones de derechos.</p>
+                </div>
+                <div id="music-opts" class="wide fields" style="grid-template-columns: 1fr 1fr; gap: 16px 20px" hidden>
+                  <div>
+                    <label class="lbl-t" for="st_mvol">Volumen de la música</label>
+                    <div class="slider"><input type="range" id="st_mvol" min="5" max="60" step="1" value="18"><output id="st_mvol_out">18%</output></div>
+                  </div>
+                  <div>
+                    <span class="lbl-t">Cuando habla alguien</span>
+                    <label class="opt compact" style="padding-top:4px"><span class="opt-text"><b>Bajar la música</b></span><input type="checkbox" class="switch" id="duck-on" checked></label>
+                    <input type="hidden" id="st_mduck" value="true">
+                  </div>
+                </div>
+              </div>
+            </section>
           </form>
 
           <!-- monitor: lo que se ve aquí es lo que sale en el vídeo -->
@@ -824,6 +875,7 @@ body.modal-open .main { overflow: hidden; }
                   <path d="M15 80c0-17 13-25 30-25s30 8 30 25z" fill="url(#pod-g)"/>
                   <circle cx="45" cy="37" r="12.5" fill="url(#pod-g)"/>
                 </svg></div><div class="gamebg"></div><div class="seam"></div>
+                <div class="ph-bar" id="ph_bar" hidden></div>
                 <div class="ph-brand tr" id="ph_brand" hidden><img id="ph_logo" alt="" hidden><div class="handle" id="ph_handle"></div></div>
                 <div class="hooktag" id="ph_hook">¿POR QUÉ NADIE LO DICE?</div>
                 <div class="sub" id="ph_sub"></div>
@@ -1146,9 +1198,12 @@ const STYLE  = { st_color: "color_active", st_size: "font_size",
                  st_refine: "refine", st_vocab: "vocab", st_corrections: "corrections",
                  st_layout: "layout_mode", st_top: "top_ratio", st_swap: "swap",
                  st_sstyle: "sub_style", st_logo: "logo", st_lpos: "logo_pos",
-                 st_lsize: "logo_size", st_lop: "logo_opacity", st_handle: "handle" };
+                 st_lsize: "logo_size", st_lop: "logo_opacity", st_handle: "handle",
+                 st_bar: "bar", st_barpos: "bar_pos", st_barcolor: "bar_color",
+                 st_music: "music", st_mvol: "music_volume", st_mduck: "music_duck" };
 const LOOK   = ["st_color", "st_size", "st_pos", "st_words", "st_font",
-                "st_logo", "st_lsize", "st_lop", "st_handle"];
+                "st_logo", "st_lsize", "st_lop", "st_handle", "st_barpos", "st_barcolor",
+                "st_music", "st_mvol"];
 
 // ===========================================================================
 // Navegacion
@@ -1256,7 +1311,7 @@ function styleValues() {
   Object.entries(STYLE).forEach(([id, key]) => {
     let value = $(id).value;
     // El servidor quiere estas en 0..1; en la pagina son porcentajes.
-    if (["position", "logo_size", "logo_opacity"].includes(key)) value = (+value) / 100;
+    if (["position", "logo_size", "logo_opacity", "music_volume"].includes(key)) value = (+value) / 100;
     out[key] = value;
   });
   return out;
@@ -1337,6 +1392,18 @@ function paintLook() {
   }
   $("ph_handle").textContent = handle;
   brand.hidden = !handle && (image.hidden || !logo);
+
+  // Barra de progreso y musica.
+  const bar = $("ph_bar");
+  bar.hidden = $("st_bar").value !== "true";
+  bar.className = "ph-bar" + ($("st_barpos").value === "top" ? " top" : "");
+  bar.style.setProperty("--bar", $("st_barcolor").value);
+  $("bar-opts").hidden = bar.hidden;
+  const music = $("st_music").value.trim();
+  $("music-clear").hidden = !music;
+  $("music-opts").hidden = !music;
+  $("st_mvol_out").textContent = $("st_mvol").value + "%";
+  fillRange($("st_mvol"));
 }
 
 /** Lleva los valores guardados de composicion, plantilla y esquina a sus controles. */
@@ -1347,6 +1414,8 @@ function syncLook() {
   $("comp-stack").hidden = $("st_layout").value !== "stack";
   setRadio("sstyle", $("st_sstyle").value);
   setRadio("lpos", $("st_lpos").value);
+  $("bar-on").checked = $("st_bar").value === "true";
+  $("duck-on").checked = $("st_mduck").value !== "false";
 }
 
 function afterLook() {
@@ -1920,7 +1989,8 @@ function renderReview(plan) {
   $("clips-panel").hidden = true;   // lo sustituye este panel, mas util
   if (STATE !== "running") $("progress-panel").hidden = true;
   $("review-list").innerHTML = clips.map(clip => `
-    <div class="review ${clip.seleccionado ? "on" : "off"}" data-n="${clip.n}">
+    <div class="review ${clip.seleccionado ? "on" : "off"}" data-n="${clip.n}"
+         data-cut-start="${(clip.recorte && clip.recorte.inicio) || 0}" data-cut-end="${(clip.recorte && clip.recorte.fin) || 0}">
       <label class="review-head">
         <input type="checkbox" data-role="pick" ${clip.seleccionado ? "checked" : ""}>
         <span class="who"><b>${escapeHtml(clip.titulo || "Momento " + clip.n)}</b></span>
@@ -1932,7 +2002,23 @@ function renderReview(plan) {
       </label>
       <div class="review-body">
         ${clip.motivo ? `<p class="why" style="margin:0">${escapeHtml(clip.motivo)}</p>` : ""}
-        <p class="said" style="margin:0">«${escapeHtml(clip.texto || "")}»</p>
+        <div class="clip-edit">
+          <label>Texto de los subtítulos${clip.editado ? ' <span class="chip hot">editado</span>' : ""}</label>
+          <textarea data-role="palabras" rows="4" spellcheck="true" data-orig="${escapeAttr(clip.palabras || clip.texto || "")}">${escapeHtml(clip.palabras || clip.texto || "")}</textarea>
+          <p class="sub-hint">Corrige lo que se haya entendido mal: cada palabra conserva su momento. Si cambias el recorte, el texto vuelve al original de ese tramo.</p>
+          <div class="trim-row">
+            <label>Empezar más tarde (s)<input type="number" data-role="trim-start" min="0" max="20" step="0.5" value="${(clip.recorte && clip.recorte.inicio) || 0}"></label>
+            <label>Terminar antes (s)<input type="number" data-role="trim-end" min="0" max="20" step="0.5" value="${(clip.recorte && clip.recorte.fin) || 0}"></label>
+            <label>Estilo de subtítulos
+              <select data-role="estilo">
+                <option value="">El de los ajustes</option>
+                ${[["classic", "Clásico"], ["box", "Caja"], ["marker", "Rotulador"], ["neon", "Neón"], ["minimal", "Sobrio"]]
+                  .map(([value, label]) => `<option value="${value}" ${clip.estilo === value ? "selected" : ""}>${label}</option>`).join("")}
+              </select>
+            </label>
+            ${clip.editado ? '<button type="button" class="link" data-role="restore">Deshacer los cambios del clip</button>' : ""}
+          </div>
+        </div>
         <div>
           <label>Título de la publicación</label>
           <input type="text" data-role="titulo" value="${escapeAttr(clip.titulo)}" maxlength="120">
@@ -1961,6 +2047,15 @@ function renderReview(plan) {
       const input = card.querySelector(`[data-role="${role}"]`);
       input.addEventListener("input", () => countChars(card, role));
       countChars(card, role);
+    });
+    ["trim-start", "trim-end"].forEach(role =>
+      card.querySelector(`[data-role="${role}"]`).addEventListener("change", saveAndRefresh));
+    const restore = card.querySelector('[data-role="restore"]');
+    if (restore) restore.addEventListener("click", () => {
+      card.querySelector('[data-role="trim-start"]').value = 0;
+      card.querySelector('[data-role="trim-end"]').value = 0;
+      card.dataset.restore = "1";
+      saveAndRefresh();
     });
   });
   updateTally();
@@ -1992,16 +2087,39 @@ function pickedNumbers() {
 }
 
 function reviewChanges() {
-  return [...$("review-list").querySelectorAll(".review")].map(card => ({
-    n: +card.dataset.n,
-    seleccionado: card.querySelector('[data-role="pick"]').checked,
-    publicacion: {
-      title: card.querySelector('[data-role="titulo"]').value.trim(),
-      hook: card.querySelector('[data-role="gancho"]').value.trim(),
-      hashtags: card.querySelector('[data-role="hashtags"]').value
-                    .split(/[\s,]+/).filter(Boolean),
-    },
-  }));
+  return [...$("review-list").querySelectorAll(".review")].map(card => {
+    const field = (role) => card.querySelector(`[data-role="${role}"]`);
+    const cutStart = +field("trim-start").value || 0;
+    const cutEnd = +field("trim-end").value || 0;
+    const change = {
+      n: +card.dataset.n,
+      seleccionado: field("pick").checked,
+      publicacion: {
+        title: field("titulo").value.trim(),
+        hook: field("gancho").value.trim(),
+        hashtags: field("hashtags").value.split(/[\s,]+/).filter(Boolean),
+      },
+      recorte: { inicio: cutStart, fin: cutEnd },
+      estilo: field("estilo").value,
+    };
+    // El texto se manda solo si se ha tocado, y no si a la vez cambia el
+    // recorte: el texto de antes ya no corresponde al tramo nuevo.
+    const trimmed = cutStart !== +card.dataset.cutStart || cutEnd !== +card.dataset.cutEnd;
+    const text = field("palabras");
+    if (!trimmed && text.value.trim() !== text.dataset.orig.trim()) change.texto_palabras = text.value;
+    if (card.dataset.restore === "1") change.restaurar = true;
+    return change;
+  });
+}
+
+/** Guarda y vuelve a pintar la revision con lo que devuelve el servidor (nuevo
+ *  texto, duracion...), sin perder el sitio en la pagina. */
+async function saveAndRefresh() {
+  const top = $("main").scrollTop;
+  if (await saveReview(true)) {
+    renderReview(PLAN);
+    $("main").scrollTop = top;
+  }
 }
 
 async function saveReview(quiet) {
@@ -2176,7 +2294,7 @@ document.querySelectorAll("[data-browse]").forEach(button => {
       if (path) {
         $(target).value = path;
         if (target === "podcast" || target === "background") refreshPreview(target);
-        else if (target === "st_logo") afterLook();
+        else if (target === "st_logo" || target === "st_music") afterLook();
         saveForm();
       }
     } catch (error) {
@@ -2220,6 +2338,9 @@ document.querySelectorAll('input[name="sstyle"]').forEach(r =>
 document.querySelectorAll('input[name="lpos"]').forEach(r =>
   r.addEventListener("change", () => { $("st_lpos").value = radio("lpos"); afterLook(); }));
 $("logo-clear").addEventListener("click", () => { $("st_logo").value = ""; afterLook(); });
+$("bar-on").addEventListener("change", () => { $("st_bar").value = $("bar-on").checked ? "true" : "false"; afterLook(); });
+$("duck-on").addEventListener("change", () => { $("st_mduck").value = $("duck-on").checked ? "true" : "false"; afterLook(); });
+$("music-clear").addEventListener("click", () => { $("st_music").value = ""; afterLook(); });
 
 // -- ayuda -------------------------------------------------------------------
 function openHelp() {

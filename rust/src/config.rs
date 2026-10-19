@@ -409,11 +409,36 @@ pub struct AudioConfig {
     pub target_i: f64,
     pub target_tp: f64,
     pub target_lra: f64,
+    /// Pista de musica de fondo (mp3, wav, m4a...). Vacio = sin musica.
+    pub music: String,
+    /// Volumen de la musica, de 0 a 1, respecto al de la voz.
+    pub music_volume: f64,
+    /// La musica baja sola mientras alguien habla.
+    pub music_duck: bool,
 }
 
 impl Default for AudioConfig {
     fn default() -> Self {
-        Self { loudnorm: true, target_i: -14.0, target_tp: -1.5, target_lra: 11.0 }
+        Self { loudnorm: true, target_i: -14.0, target_tp: -1.5, target_lra: 11.0, music: String::new(), music_volume: 0.18, music_duck: true }
+    }
+}
+
+/// Barra fina que avanza durante el clip: el espectador ve cuanto falta.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProgressBarConfig {
+    pub enabled: bool,
+    /// `top` o `bottom`.
+    pub position: String,
+    /// Grosor en pixeles.
+    pub height: i64,
+    pub color: String,
+    pub opacity: f64,
+}
+
+impl Default for ProgressBarConfig {
+    fn default() -> Self {
+        Self { enabled: false, position: "bottom".into(), height: 10, color: "#FF7A18".into(), opacity: 0.95 }
     }
 }
 
@@ -629,6 +654,7 @@ pub struct Config {
     pub jumpcuts: JumpCutsConfig,
     pub layout: LayoutConfig,
     pub brand: BrandConfig,
+    pub progress_bar: ProgressBarConfig,
     pub audio: AudioConfig,
     pub subtitles: SubtitlesConfig,
     pub hook: HookConfig,

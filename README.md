@@ -44,6 +44,8 @@
 - **Composición**: dividido (con el reparto que quieras), solo el pódcast a pantalla completa, o el pódcast en una franja sobre el fondo.
 - **Cinco estilos de subtítulos**: Clásico, Caja, Rotulador, Neón y Sobrio.
 - **Tu marca**: logo y usuario del canal en la esquina que prefieras.
+- **Música de fondo** que baja sola cuando habla alguien, y una **barra de progreso** sobre el vídeo.
+- **Edición por clip**: corrige el texto de los subtítulos, recorta cada clip y elige su estilo antes de montar.
 - **Perfiles**: guarda todos tus ajustes con un nombre y recupéralos con un clic.
 - **Acertar más con el texto**: vuelve a transcribir los clips elegidos con un modelo mayor, y añade nombres difíciles y correcciones fijas.
 
@@ -109,6 +111,17 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
+
+### 1.2.0 (2026-10-19)
+
+- **Edición por clip** en la revisión: corrige el texto de los subtítulos (cada
+  palabra conserva su momento), recorta el principio y el final del clip, elige
+  una plantilla de subtítulos solo para ese clip y deshaz los cambios cuando
+  quieras.
+- **Música de fondo** con bajada automática: una pista tuya que baja sola mientras
+  alguien habla, con volumen ajustable.
+- **Barra de progreso** que avanza durante el clip, arriba o abajo y del color que
+  elijas.
 
 ### 1.1.0 (2026-10-19)
 

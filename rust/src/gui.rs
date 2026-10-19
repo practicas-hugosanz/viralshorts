@@ -77,7 +77,7 @@ enum Kind {
 
 /// La lista es cerrada a proposito: el navegador no decide que ajuste del
 /// pipeline se cambia, solo elige entre estos.
-const STYLE_FIELDS: [(&str, &str, Kind); 22] = [
+const STYLE_FIELDS: [(&str, &str, Kind); 28] = [
     ("font_name", "subtitles.font_name", Kind::Text),
     ("font_size", "subtitles.font_size", Kind::Int),
     ("color_active", "subtitles.color_active", Kind::Color),
@@ -100,6 +100,12 @@ const STYLE_FIELDS: [(&str, &str, Kind); 22] = [
     ("logo_size", "brand.scale", Kind::Ratio),
     ("logo_opacity", "brand.opacity", Kind::Ratio),
     ("handle", "brand.handle", Kind::Text),
+    ("bar", "progress_bar.enabled", Kind::Flag),
+    ("bar_pos", "progress_bar.position", Kind::Choice(&["top", "bottom"])),
+    ("bar_color", "progress_bar.color", Kind::Color),
+    ("music", "audio.music", Kind::Long),
+    ("music_volume", "audio.music_volume", Kind::Ratio),
+    ("music_duck", "audio.music_duck", Kind::Flag),
 ];
 
 /// Navegadores de los que yt-dlp sabe leer las cookies.
@@ -957,6 +963,8 @@ pub fn new_token() -> String {
 fn native_picker(kind: &str) -> Option<String> {
     let path = if kind == "folder" {
         rfd::FileDialog::new().set_title("Elige la carpeta de salida").pick_folder()
+    } else if kind == "audio" {
+        rfd::FileDialog::new().set_title("Elige la música").add_filter("Audio", &["mp3", "wav", "m4a", "aac", "ogg", "flac"]).pick_file()
     } else if kind == "image" {
         rfd::FileDialog::new().set_title("Elige tu logo").add_filter("Imágenes", &["png", "jpg", "jpeg", "webp"]).pick_file()
     } else {

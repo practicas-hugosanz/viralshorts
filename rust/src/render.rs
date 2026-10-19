@@ -67,6 +67,10 @@ pub fn render(request: &RenderRequest, cfg: &Config) -> Result<PathBuf> {
         log::warn!("El logo '{}' no existe; se monta sin logo.", cfg.brand.logo);
         cfg.brand.logo.clear();
     }
+    if !cfg.audio.music.is_empty() && !Path::new(&cfg.audio.music).is_file() {
+        log::warn!("La musica '{}' no existe; se monta sin musica.", cfg.audio.music);
+        cfg.audio.music.clear();
+    }
     let cfg = &cfg;
 
     let layout = &cfg.layout;
@@ -102,6 +106,10 @@ pub fn render(request: &RenderRequest, cfg: &Config) -> Result<PathBuf> {
     ];
     if !cfg.brand.logo.is_empty() {
         args.extend(["-i".into(), abs(Path::new(&cfg.brand.logo))]);
+    }
+    if !cfg.audio.music.is_empty() {
+        // En bucle: da igual que la pista sea mas corta que el clip.
+        args.extend(["-stream_loop".into(), "-1".into(), "-i".into(), abs(Path::new(&cfg.audio.music))]);
     }
     args.extend(filter_args);
     args.extend(["-map", "[vout]", "-map", "[aout]"].map(String::from));
@@ -225,19 +233,42 @@ pub fn build_graph(
         }
         None => compose,
     };
-    if cfg.brand.logo.is_empty() {
+    let clip_seconds = request.plan.output_duration();
+    let bar = cfg.progress_bar.enabled && clip_seconds > 0.5;
+    let has_logo = !cfg.brand.logo.is_empty();
+    if !bar && !has_logo {
         chains.push(format!("{composed},format=yuv420p[vout]"));
     } else {
-        // El logo es la tercera entrada y va por encima de todo, subtitulos incluidos.
-        let logo_width = even((width as f64 * cfg.brand.scale.clamp(0.03, 0.6)).round() as i64);
-        let margin = even((width as f64 * 0.04).round() as i64);
-        let (x, y) = logo_position(&cfg.brand.position, margin);
         chains.push(format!("{composed}[base]"));
-        chains.push(format!(
-            "[2:v]format=rgba,scale={logo_width}:-1,colorchannelmixer=aa={}[logo]",
-            fl(cfg.brand.opacity.clamp(0.0, 1.0))
-        ));
-        chains.push(format!("[base][logo]overlay=x={x}:y={y},format=yuv420p[vout]"));
+        let mut label = "base";
+        if bar {
+            // Una barra de color que entra deslizandose desde la izquierda: en el
+            // ultimo fotograma llena todo el ancho.
+            let thickness = cfg.progress_bar.height.clamp(2, 40);
+            let y = if cfg.progress_bar.position == "top" { 0 } else { cfg.layout.height - thickness };
+            let color = cfg.progress_bar.color.trim_start_matches('#');
+            chains.push(format!(
+                "color=c=0x{color}@{}:s={width}x{thickness}:r={fps}:d={clip_seconds:.3},format=rgba[bar]",
+                fl(cfg.progress_bar.opacity.clamp(0.0, 1.0))
+            ));
+            let target = if has_logo { "barred" } else { "vout_bar" };
+            let tail = if has_logo { String::new() } else { ",format=yuv420p".to_string() };
+            chains.push(format!("[{label}][bar]overlay=x='-w+w*t/{clip_seconds:.3}':y={y}:eval=frame{tail}[{}]", if has_logo { target } else { "vout" }));
+            label = target;
+        }
+        if has_logo {
+            // El logo es la tercera entrada y va por encima de todo, subtitulos y barra incluidos.
+            let logo_width = even((width as f64 * cfg.brand.scale.clamp(0.03, 0.6)).round() as i64);
+            let margin = even((width as f64 * 0.04).round() as i64);
+            let (x, y) = logo_position(&cfg.brand.position, margin);
+            chains.push(format!(
+                "[2:v]format=rgba,scale={logo_width}:-1,colorchannelmixer=aa={}[logo]",
+                fl(cfg.brand.opacity.clamp(0.0, 1.0))
+            ));
+            chains.push(format!("[{label}][logo]overlay=x={x}:y={y},format=yuv420p[vout]"));
+        } else if !bar {
+            unreachable!("sin barra ni logo se resolvio arriba");
+        }
     }
 
     // --- audio: solo el del podcast, normalizado --------------------------
@@ -258,7 +289,26 @@ pub fn build_graph(
     }
     audio.push("aresample=48000".into());
     audio.push("aformat=sample_fmts=fltp:channel_layouts=stereo".into());
-    chains.push(format!("{}[aout]", audio.join(",")));
+    if cfg.audio.music.is_empty() {
+        chains.push(format!("{}[aout]", audio.join(",")));
+    } else {
+        chains.push(format!("{}[voice]", audio.join(",")));
+        // La musica es la ultima entrada: tras el logo, si lo hay.
+        let music_input = 2 + usize::from(has_logo);
+        let fade_out_at = (clip_seconds - 1.5).max(0.0);
+        chains.push(format!(
+            "[{music_input}:a]volume={},afade=t=in:st=0:d=1,afade=t=out:st={fade_out_at:.3}:d=1.5,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[music]",
+            fl(cfg.audio.music_volume.clamp(0.0, 1.0))
+        ));
+        if cfg.audio.music_duck {
+            // La voz manda: cuando suena, comprime la musica (sidechain).
+            chains.push("[voice]asplit=2[voice_mix][voice_key]".into());
+            chains.push("[music][voice_key]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=400[ducked]".into());
+            chains.push("[voice_mix][ducked]amix=inputs=2:duration=first:normalize=0:dropout_transition=0,alimiter=limit=0.97[aout]".into());
+        } else {
+            chains.push("[voice][music]amix=inputs=2:duration=first:normalize=0:dropout_transition=0,alimiter=limit=0.97[aout]".into());
+        }
+    }
 
     chains.join(";\n") + "\n"
 }
@@ -534,6 +584,39 @@ mod tests {
         let centro = grafo_compuesto(&cfg);
         assert!(centro.contains("[bottom][top]overlay=x=0:y=656"), "{centro}");
         assert!(centro.contains("scale=1080:1920:force_original_aspect_ratio=increase"), "el fondo llena el fotograma: {centro}");
+    }
+
+    #[test]
+    fn la_barra_de_progreso_avanza_con_el_tiempo_del_clip() {
+        let mut cfg = Config::default();
+        assert!(!grafo_compuesto(&cfg).contains("[bar]"), "apagada de serie");
+        cfg.progress_bar.enabled = true;
+        let g = grafo_compuesto(&cfg);
+        assert!(g.contains("color=c=0xFF7A18@0.95:s=1080x10:r=30:d=30.000,format=rgba[bar]"), "{g}");
+        assert!(g.contains("[base][bar]overlay=x='-w+w*t/30.000':y=1910:eval=frame,format=yuv420p[vout]"), "abajo del todo: {g}");
+        cfg.progress_bar.position = "top".into();
+        assert!(grafo_compuesto(&cfg).contains(":y=0:eval=frame"));
+        // Con logo, el logo va encima de la barra.
+        cfg.brand.logo = "logo.png".into();
+        let con_logo = grafo_compuesto(&cfg);
+        assert!(con_logo.contains("[base][bar]overlay=x='-w+w*t/30.000':y=0:eval=frame[barred]"), "{con_logo}");
+        assert!(con_logo.contains("[barred][logo]overlay="), "{con_logo}");
+    }
+
+    #[test]
+    fn la_musica_baja_cuando_habla_la_voz() {
+        let mut cfg = Config::default();
+        assert!(grafo_compuesto(&cfg).contains("[aout]") && !grafo_compuesto(&cfg).contains("sidechaincompress"));
+        cfg.audio.music = "m.mp3".into();
+        let g = grafo_compuesto(&cfg);
+        assert!(g.contains("aformat=sample_fmts=fltp:channel_layouts=stereo[voice]"), "{g}");
+        assert!(g.contains("[2:a]volume=0.18,afade=t=in:st=0:d=1,afade=t=out:st=28.500:d=1.5"), "sin logo la musica es la entrada 2: {g}");
+        assert!(g.contains("[music][voice_key]sidechaincompress=") && g.contains("alimiter=limit=0.97[aout]"), "{g}");
+        cfg.brand.logo = "logo.png".into();
+        assert!(grafo_compuesto(&cfg).contains("[3:a]volume="), "con logo pasa a la entrada 3");
+        cfg.audio.music_duck = false;
+        let sin_bajar = grafo_compuesto(&cfg);
+        assert!(!sin_bajar.contains("sidechaincompress") && sin_bajar.contains("[voice][music]amix="), "{sin_bajar}");
     }
 
     #[test]

@@ -672,6 +672,13 @@ pub fn plan_events(saved: &plan::Plan) -> Vec<Value> {
                 "puntuacion": round(clip.score, 3),
                 "motivo": clip.reason,
                 "texto": clip.text,
+                "palabras": clip.words.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" "),
+                "recorte": {
+                    "inicio": round(clip.original.as_ref().map_or(0.0, |o| clip.start - o.start), 2),
+                    "fin": round(clip.original.as_ref().map_or(0.0, |o| o.end - clip.end), 2),
+                },
+                "editado": clip.original.is_some(),
+                "estilo": clip.style,
                 "seleccionado": clip.selected,
                 "titulo": meta.map_or("", |m| m.title.as_str()),
                 "gancho": meta.map_or("", |m| m.hook.as_str()),
@@ -828,6 +835,17 @@ fn render_one(
     output_dir: &Path,
     energy: Option<&EnergyTrack>,
 ) -> Result<PathBuf, String> {
+    // La plantilla de subtitulos puede ser propia de este clip.
+    let own_cfg;
+    let cfg = if clip.style.is_empty() || clip.style == cfg.subtitles.style {
+        cfg
+    } else {
+        let mut copy = cfg.clone();
+        copy.subtitles.style = clip.style.clone();
+        own_cfg = copy;
+        &own_cfg
+    };
+
     // 1. Palabras del clip, con el tiempo relativo a su inicio.
     let words: Vec<_> = clip.words.iter().map(|w| w.shifted(-clip.start)).collect();
 

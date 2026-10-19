@@ -40,6 +40,8 @@ pub struct Window {
     pub llm_hook: f64,
     pub reason: String,
     pub score: f64,
+    /// Plantilla de subtitulos propia de este clip (vacio = la de la configuracion).
+    pub style: String,
 }
 
 impl Window {
