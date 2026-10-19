@@ -15,9 +15,9 @@
 
 [Setup]
 AppId={{B2F0D1E4-6C1B-4B0B-9C8A-5A7B0F1E2D33}
-AppName=viralshorts
+AppName=Viral Shorts
 AppVersion={#AppVersion}
-AppPublisher=viralshorts
+AppPublisher=Viral Shorts
 DefaultDirName={autopf}\viralshorts
 DisableProgramGroupPage=yes
 DisableDirPage=yes
@@ -26,7 +26,7 @@ OutputDir=..\dist
 OutputBaseFilename=viralshorts-setup-{#AppVersion}
 SetupIconFile=..\rust\assets\icon.ico
 UninstallDisplayIcon={app}\viralshorts.exe
-UninstallDisplayName=viralshorts
+UninstallDisplayName=Viral Shorts
 Compression=lzma2/ultra
 SolidCompression=yes
 WizardStyle=modern
@@ -45,15 +45,36 @@ Name: "desktopicon"; Description: "Crear un acceso directo en el &Escritorio"; G
 Source: "{#ExePath}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\viralshorts"; Filename: "{app}\viralshorts.exe"
-Name: "{autodesktop}\viralshorts"; Filename: "{app}\viralshorts.exe"; Tasks: desktopicon
+Name: "{autoprograms}\Viral Shorts"; Filename: "{app}\viralshorts.exe"
+Name: "{autodesktop}\Viral Shorts"; Filename: "{app}\viralshorts.exe"; Tasks: desktopicon
+
+[InstallDelete]
+; Hasta la 1.0.2 el acceso directo del menu Inicio se llamaba "viralshorts".
+Type: files; Name: "{autoprograms}\viralshorts.lnk"
 
 [Run]
 ; Sin skipifsilent: una actualizacion en silencio (la lanza la propia aplicacion)
 ; tiene que volver a abrirla al terminar.
-Filename: "{app}\viralshorts.exe"; Description: "Abrir viralshorts"; Flags: nowait postinstall
+Filename: "{app}\viralshorts.exe"; Description: "Abrir Viral Shorts"; Flags: nowait postinstall
 
 [Code]
+{ El acceso directo del Escritorio de las versiones anteriores se llamaba
+  "viralshorts". Si el usuario lo tenia, se conserva con el nombre nuevo (y si
+  esta instalacion ya ha creado el nuevo, se quita el viejo). }
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Viejo, Nuevo: String;
+begin
+  if CurStep <> ssPostInstall then Exit;
+  Viejo := ExpandConstant('{autodesktop}\viralshorts.lnk');
+  Nuevo := ExpandConstant('{autodesktop}\Viral Shorts.lnk');
+  if not FileExists(Viejo) then Exit;
+  if FileExists(Nuevo) then
+    DeleteFile(Viejo)
+  else
+    RenameFile(Viejo, Nuevo);
+end;
+
 { Al desinstalar se pregunta por lo descargado: las herramientas y los modelos
   ocupan cientos de MB. Los shorts (carpeta Videos\viralshorts) no se tocan. }
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
@@ -63,7 +84,7 @@ begin
   if CurUninstallStep <> usPostUninstall then Exit;
   Datos := ExpandConstant('{localappdata}\viralshorts');
   if (not DirExists(Datos)) or UninstallSilent then Exit;
-  if MsgBox('¿Quieres borrar también las herramientas y los modelos que descargó viralshorts?' + #13#10 +
+  if MsgBox('¿Quieres borrar también las herramientas y los modelos que descargó Viral Shorts?' + #13#10 +
             'Ocupan varios cientos de MB. Tus shorts (Vídeos\viralshorts) no se tocan.',
             mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDYES then
     DelTree(Datos, True, True, True);

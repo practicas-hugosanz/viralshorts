@@ -1,4 +1,4 @@
-# viralshorts
+# Viral Shorts
 
 De un podcast de YouTube a shorts verticales subtitulados, en un solo comando.
 
@@ -16,7 +16,7 @@ también se puede usar por línea de comandos. Las dos hacen exactamente lo mism
 **Windows: ejecuta `viralshorts-setup-<versión>.exe`.** Se instala como
 cualquier programa (menú Inicio, acceso directo en el Escritorio si quieres,
 desinstalador en «Aplicaciones instaladas»), para tu usuario y sin permisos de
-administrador. Después, abre **viralshorts** desde el menú Inicio o el
+administrador. Después, abre **Viral Shorts** desde el menú Inicio o el
 Escritorio: es una ventana de escritorio, sin consola ni ficheros `.bat`.
 
 La **primera vez** que se abre, una pantalla de progreso descarga las tres
@@ -106,9 +106,63 @@ y crea la release en el de publicaciones. Con `-SoloPreparar` hace todo menos
 subir nada. Para probar las actualizaciones sin publicar, `VIRALSHORTS_UPDATE_URL`
 apunta la aplicación a otro `latest.json`.
 
+## Historial de cambios
+
+Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
+publicar una versión sin ella). Lo más reciente, primero.
+
+### 1.0.3 (2026-10-19)
+
+- La aplicación pasa a llamarse **Viral Shorts**: ventana, menú Inicio, acceso
+  directo, instalador y «Aplicaciones instaladas». Los accesos directos antiguos
+  («viralshorts») se sustituyen al actualizar. Nada se mueve: el programa, la
+  carpeta de datos y tus ajustes siguen donde estaban.
+- Este historial de cambios.
+
+### 1.0.2 (2026-10-19)
+
+- **Afinar los clips elegidos**: tras elegir los momentos, el trozo de cada clip
+  se vuelve a transcribir con un modelo mayor (`large-v3-turbo`, por ejemplo).
+  Mejora los subtítulos, el título y el gancho; la calidad *Máxima* lo activa.
+- **Nombres y palabras difíciles** y **correcciones fijas** (`mal = bien`) para
+  la transcripción, en Ajustes.
+- Modelo de voz `large-v3-turbo` disponible.
+- **Transcripción en directo** en *En curso*: cada frase con su minuto, según
+  se va entendiendo.
+- Los botones de las tarjetas de *Mis shorts* caben siempre.
+
+### 1.0.1 (2026-10-19)
+
+- **Subtítulos que caben**: un bloque de palabras largas se parte en dos líneas
+  y, si ni así cabe, se reduce el tamaño solo en ese bloque.
+- Los **modelos de voz** que faltan se descargan, con barra de progreso, antes
+  de lanzar y no a mitad del trabajo.
+- **Vista previa real**: el monitor muestra un fotograma del pódcast y otro del
+  fondo.
+- **Mis shorts** enseña todas las ejecuciones, con búsqueda y filtro, y permite
+  cambiar el título, abrir la carpeta o borrar un short.
+- **Cola** editable: adelantar, atrasar, quitar y saltar el trabajo en marcha.
+- **Perfiles** de ajustes con nombre.
+- **Cookies del navegador** para vídeos de YouTube que piden iniciar sesión.
+- Comprobación de actualizaciones cada 3 horas.
+- Arreglo: la casilla de la carpeta de salida venía con «output» escrito y
+  pisaba la carpeta de `config.yaml`.
+
+### 1.0.0 (2026-10-19)
+
+- **Interfaz nueva**: barra lateral (Crear, En curso, Mis shorts, Ajustes),
+  monitor 9:16 con los subtítulos en vivo, progreso por pasos, revisión de
+  momentos y tema claro u oscuro según Windows.
+
+### 0.1.0 (2026-10-19)
+
+- Primera versión: aplicación de escritorio con instalador, primer arranque que
+  descarga ffmpeg, yt-dlp y whisper.cpp, y actualizaciones automáticas desde
+  GitHub. Todo el programa migrado de Python a Rust.
+
 ## Uso: interfaz visual (recomendado)
 
-Abre **viralshorts** (menú Inicio o Escritorio). Si prefieres el navegador:
+Abre **Viral Shorts** (menú Inicio o Escritorio). Si prefieres el navegador:
 
 ```bash
 viralshorts gui              # --port 8760  --no-browser
@@ -695,7 +749,7 @@ ID y en las políticas de contenido no original de YouTube y TikTok. Si es tu
 propio contenido, o tienes permiso, sin problema; si no, cuenta con
 reclamaciones y con posibles retiradas.
 
-## Historial
+## Origen del pipeline
 
 Este pipeline sustituye a los antiguos `main.py` (descarga + selección por
 densidad de palabras + montaje con moviepy) y `sub.py` (subtítulos .ASS por

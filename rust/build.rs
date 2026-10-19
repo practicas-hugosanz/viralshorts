@@ -5,9 +5,9 @@ fn main() {
         let mut recurso = winresource::WindowsResource::new();
         recurso
             .set_icon("assets/icon.ico")
-            .set("ProductName", "viralshorts")
-            .set("FileDescription", "viralshorts")
-            .set("LegalCopyright", "viralshorts");
+            .set("ProductName", "Viral Shorts")
+            .set("FileDescription", "Viral Shorts")
+            .set("LegalCopyright", "Viral Shorts");
         if let Err(error) = recurso.compile() {
             println!("cargo:warning=no se pudo incrustar el icono: {error}");
         }

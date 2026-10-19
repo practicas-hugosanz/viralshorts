@@ -35,7 +35,7 @@ pub fn run() -> i32 {
     let running = match gui::launch(gui::DEFAULT_PORT) {
         Ok(running) => running,
         Err(error) => {
-            alert(&format!("No se pudo arrancar viralshorts.\n\n{error}"));
+            alert(&format!("No se pudo arrancar Viral Shorts.\n\n{error}"));
             return 2;
         }
     };
@@ -45,7 +45,7 @@ pub fn run() -> i32 {
     let Err(error) = open_window(&running);
     log::warn!("No se pudo abrir la ventana ({error}); se usa el navegador.");
     alert(
-        "No se ha podido abrir la ventana de viralshorts (falta WebView2 de Microsoft).\n\n\
+        "No se ha podido abrir la ventana de Viral Shorts (falta WebView2 de Microsoft).\n\n\
          Se abrira en el navegador. Mientras no cierres este aviso, el programa sigue funcionando.",
     );
     gui::open_browser(&running.url);
@@ -57,7 +57,7 @@ pub fn run() -> i32 {
 fn open_window(running: &Running) -> Result<std::convert::Infallible, String> {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
-        .with_title("viralshorts")
+        .with_title("Viral Shorts")
         .with_inner_size(LogicalSize::new(1200.0, 860.0))
         .with_min_inner_size(LogicalSize::new(900.0, 640.0))
         .with_window_icon(Icon::from_rgba(ICON_RGBA.to_vec(), 64, 64).ok())
@@ -100,7 +100,7 @@ fn open_window(running: &Running) -> Result<std::convert::Infallible, String> {
 
 /// Un aviso en ventana: sin consola no hay otro sitio donde decirlo.
 fn alert(message: &str) {
-    rfd::MessageDialog::new().set_title("viralshorts").set_description(message).set_level(rfd::MessageLevel::Warning).show();
+    rfd::MessageDialog::new().set_title("Viral Shorts").set_description(message).set_level(rfd::MessageLevel::Warning).show();
 }
 
 #[cfg(test)]

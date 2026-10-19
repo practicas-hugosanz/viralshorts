@@ -9,7 +9,9 @@
 
   Hace, por orden:
     1. pone la version en rust\Cargo.toml y compila el instalador
-    2. escribe latest.json (version, notas, direccion y huella SHA-256)
+    2. escribe latest.json (version, notas, direccion y huella SHA-256); las notas
+       son las de la entrada de la version en el "Historial de cambios" del README
+       (que tiene que existir) salvo que se pasen con -Notas
     3. guarda el cambio en git, lo etiqueta (v0.2.0) y lo sube al repositorio de codigo
     4. crea la release en el repositorio de publicaciones con el instalador y latest.json
 
@@ -33,6 +35,16 @@ Set-Location $Raiz
 if (-not $SoloPreparar -and -not (Get-Command gh -ErrorAction SilentlyContinue)) {
     throw 'Falta la herramienta gh (https://cli.github.com). Instalala y ejecuta: gh auth login'
 }
+
+# --- 0. historial de cambios ---------------------------------------------------------
+# Cada version publicada tiene su entrada en el README ("### 1.0.3 (fecha)"): sin
+# ella no se publica, y su texto es el de las notas de la release.
+$readme = Get-Content -LiteralPath (Join-Path $Raiz 'README.md') -Raw -Encoding UTF8
+$entrada = [regex]::Match($readme, "(?ms)^### $([regex]::Escape($Version)) [^\r\n]*\r?\n(.*?)(?=^#{2,3} )")
+if (-not $entrada.Success -or [string]::IsNullOrWhiteSpace($entrada.Groups[1].Value)) {
+    throw "Falta la entrada ### $Version en el 'Historial de cambios' del README. Escribe que cambia en esta version y vuelve a lanzarlo."
+}
+if (-not $Notas) { $Notas = $entrada.Groups[1].Value.Trim() }
 
 # --- 1. version y compilacion ------------------------------------------------------
 $toml = Join-Path $Raiz 'rust\Cargo.toml'

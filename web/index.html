@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
-<title>viralshorts</title>
+<title>Viral Shorts</title>
 <style>
 /* ==========================================================================
-   viralshorts 1.0 — interfaz de escritorio
+   Viral Shorts — interfaz de escritorio
    Sin recursos externos: tipografías del sistema (Bahnschrift para títulos y
    marcas de tiempo, Segoe UI para el resto) y SVG en línea.
    ========================================================================== */
@@ -550,7 +550,7 @@ body.modal-open .main { overflow: hidden; }
         <rect x="20" y="10" width="24" height="44" rx="6" fill="#1c1612"/>
         <path d="M28 25l10 7-10 7z" fill="#ffd65a"/>
       </svg>
-      <b>viralshorts</b>
+      <b>Viral Shorts</b>
     </div>
 
     <button class="nav-item" data-view="crear" title="Crear shorts"><svg class="ico"><use href="#i-create"/></svg><span class="lbl">Crear</span></button>
@@ -580,7 +580,7 @@ body.modal-open .main { overflow: hidden; }
         <header class="view-head">
           <div>
             <h1>Crear shorts</h1>
-            <p>Elige un pódcast y un vídeo de fondo. viralshorts encuentra los mejores momentos y los monta en vertical, con subtítulos.</p>
+            <p>Elige un pódcast y un vídeo de fondo. Viral Shorts encuentra los mejores momentos y los monta en vertical, con subtítulos.</p>
           </div>
           <div class="profiles">
             <select id="profile" aria-label="Perfil de ajustes"><option value="">Ajustes actuales</option></select>
@@ -978,7 +978,7 @@ body.modal-open .main { overflow: hidden; }
           <section class="card full">
             <h2>Aplicación</h2>
             <div class="about">
-              <div class="grow"><b id="about-version">viralshorts</b><br><span id="about-status">Las actualizaciones se descargan solas desde GitHub.</span></div>
+              <div class="grow"><b id="about-version">Viral Shorts</b><br><span id="about-status">Las actualizaciones se descargan solas desde GitHub.</span></div>
               <button type="button" class="btn" id="upd-check"><svg class="ico"><use href="#i-refresh"/></svg>Buscar actualizaciones</button>
             </div>
           </section>
@@ -1325,7 +1325,7 @@ function explain(raw) {
   const text = String(raw || "");
   const rules = [
     [/no se encontro ffmpeg|ffmpeg.*no.*PATH/i,
-     ["Falta ffmpeg", "Es el programa que monta el vídeo. Cierra viralshorts y vuelve a abrirlo: la primera pantalla lo descarga sola."]],
+     ["Falta ffmpeg", "Es el programa que monta el vídeo. Cierra Viral Shorts y vuelve a abrirlo: la primera pantalla lo descarga sola."]],
     [/ANTHROPIC_API_KEY|api[_ ]key|authentication|401|credit balance/i,
      ["Claude no ha podido entrar", "Falta la clave <code>ANTHROPIC_API_KEY</code> o no tiene saldo. Apaga <b>Que Claude elija y titule</b> en Ajustes y todo lo demás seguirá funcionando."]],
     [/carpeta de trabajo.*ocupada|WorkDirBusy|ya hay un proceso|cerrojo/i,
@@ -1398,7 +1398,7 @@ let updBusy = false;
 function renderUpdate(state) {
   const node = $("upd");
   $("version-text").textContent = "v" + state.current;
-  $("about-version").textContent = "viralshorts " + state.current;
+  $("about-version").textContent = "Viral Shorts " + state.current;
   $("version-btn").classList.toggle("has-update", !!state.available);
   if (state.phase === "descargando") {
     showBanner(node, "Descargando la actualización",
@@ -2413,7 +2413,7 @@ events.onmessage = (message) => {
       }
       if (event.env && event.env.ffmpeg === false) {
         showBanner($("banner"), "Falta ffmpeg",
-          "Es el programa que monta el vídeo. Cierra viralshorts y vuelve a abrirlo: " +
+          "Es el programa que monta el vídeo. Cierra Viral Shorts y vuelve a abrirlo: " +
           "la primera pantalla lo descarga sola.");
       }
       if (event.env && event.env.nvidia && event.env.cuda_engine === false) showGpuOffer();
