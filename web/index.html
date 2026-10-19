@@ -301,12 +301,10 @@ input[type="color"].swatch::-webkit-color-swatch { border: 0; border-radius: 50%
 }
 .screen { position: relative; height: 100%; border-radius: 24px; overflow: hidden; background: #1a1d26; container-type: inline-size; }
 .pod {
-  position: absolute; inset: 0 0 50% 0;
-  background:
-    radial-gradient(circle at 50% 36%, #8f98ab 0 7.5%, transparent 8.1%),
-    radial-gradient(ellipse 34% 17% at 50% 100%, #8f98ab 0 99%, transparent 100%),
-    linear-gradient(165deg, #3a4358, #1c2130);
+  position: absolute; inset: 0 0 50% 0; overflow: hidden;
+  background: linear-gradient(165deg, #3a4358, #1c2130);
 }
+.pod svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .gamebg {
   position: absolute; inset: 50% 0 0 0;
   background:
@@ -447,6 +445,31 @@ dialog::backdrop { background: rgba(5, 7, 12, .6); backdrop-filter: blur(2px); }
 .dlg-foot { padding: 14px 24px 20px; display: flex; justify-content: flex-end; }
 body.modal-open .main { overflow: hidden; }
 
+/* ------------------------------------------------- modelo, perfiles, biblioteca */
+.model-note { display: flex; align-items: flex-start; gap: 12px; margin-top: 12px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft); border-radius: var(--r-s); }
+.model-note > .ico { color: var(--accent); margin-top: 2px; }
+.model-note .note-body p { margin-top: 2px; }
+.bar.sm { height: 6px; margin-top: 8px; }
+.profiles { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.profiles select { width: auto; min-width: 170px; padding-block: 6px; }
+.profile-new { display: flex; gap: 8px; align-items: center; margin: -10px 0 18px; flex-wrap: wrap; }
+.profile-new input { flex: 1; min-width: 200px; max-width: 360px; }
+.lib-tools { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+.lib-tools input { flex: 1; min-width: 200px; }
+.lib-tools select { width: auto; min-width: 220px; max-width: 100%; }
+.result .when { color: var(--faint); font-size: 12px; margin-top: 6px; }
+.result .rename { display: flex; flex-direction: column; gap: 6px; }
+.result .rename .row { display: flex; gap: 6px; }
+.btn.confirm { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
+.queue-item .ops { display: flex; gap: 2px; }
+.queue-item .ops button { background: none; border: 0; padding: 4px; border-radius: 6px; color: var(--faint); line-height: 0; }
+.queue-item .ops button:hover:not(:disabled) { background: var(--raise); color: var(--text); }
+.queue-item .ops button:disabled { opacity: .3; cursor: default; }
+.note-body .row-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.note-body .row-btns .btn { margin-top: 0; }
+.pod, .gamebg { background-size: cover; background-position: center; }
+.pod.has-img svg { display: none; }
+
 /* ---------------------------------------------------------------- adaptable */
 @media (max-width: 1080px) {
   .app { grid-template-columns: 64px minmax(0, 1fr); }
@@ -496,6 +519,10 @@ body.modal-open .main { overflow: hidden; }
   <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
   <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
 </svg>
 
@@ -542,7 +569,17 @@ body.modal-open .main { overflow: hidden; }
             <h1>Crear shorts</h1>
             <p>Elige un pódcast y un vídeo de fondo. viralshorts encuentra los mejores momentos y los monta en vertical, con subtítulos.</p>
           </div>
+          <div class="profiles">
+            <select id="profile" aria-label="Perfil de ajustes"><option value="">Ajustes actuales</option></select>
+            <button type="button" class="btn sm" id="profile-save">Guardar como perfil</button>
+            <button type="button" class="btn sm ghost" id="profile-del" hidden>Borrar perfil</button>
+          </div>
         </header>
+        <div class="profile-new" id="profile-new" hidden>
+          <input type="text" id="profile-name" placeholder="Nombre del perfil, por ejemplo «Humor»" maxlength="40" aria-label="Nombre del perfil">
+          <button type="button" class="btn sm primary" id="profile-ok">Guardar</button>
+          <button type="button" class="btn sm" id="profile-cancel">Cancelar</button>
+        </div>
 
         <div class="create">
           <form id="form" class="stack" autocomplete="off" novalidate>
@@ -596,6 +633,11 @@ body.modal-open .main { overflow: hidden; }
                     <label class="choice"><input type="radio" name="preset" value="best"><b>Máxima</b><em>unos 25 min</em></label>
                   </div>
                   <p class="hint">Tiempos para un pódcast de unas 2 horas en este ordenador. Más calidad significa subtítulos más exactos.</p>
+                  <div class="model-note" id="model-note" hidden>
+                    <svg class="ico"><use href="#i-download"/></svg>
+                    <div class="note-body"><b id="mn-title"></b><p id="mn-text"></p><div class="bar sm" id="mn-bar" hidden><i id="mn-fill"></i></div></div>
+                    <button type="button" class="btn sm primary" id="mn-go">Descargar ahora</button>
+                  </div>
                 </div>
 
                 <div>
@@ -655,7 +697,11 @@ body.modal-open .main { overflow: hidden; }
           <aside class="monitor" aria-label="Vista previa">
             <div class="phone" id="phone" aria-hidden="true">
               <div class="screen" id="screen">
-                <div class="pod"></div><div class="gamebg"></div><div class="seam"></div>
+                <div class="pod"><svg viewBox="0 0 90 80" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+                  <defs><linearGradient id="pod-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9aa3b6"/><stop offset="1" stop-color="#6b7488"/></linearGradient></defs>
+                  <path d="M15 80c0-17 13-25 30-25s30 8 30 25z" fill="url(#pod-g)"/>
+                  <circle cx="45" cy="37" r="12.5" fill="url(#pod-g)"/>
+                </svg></div><div class="gamebg"></div><div class="seam"></div>
                 <div class="hooktag" id="ph_hook">¿POR QUÉ NADIE LO DICE?</div>
                 <div class="sub" id="ph_sub"></div>
               </div>
@@ -712,6 +758,10 @@ body.modal-open .main { overflow: hidden; }
               <summary>Ver el detalle técnico</summary>
               <pre id="log"></pre>
             </details>
+            <div class="card-foot" id="skip-row" hidden>
+              <span class="grow">Hay más trabajos esperando en la cola.</span>
+              <button type="button" class="btn sm" id="skip">Saltar este y seguir con el siguiente</button>
+            </div>
           </section>
 
           <section class="card" id="queue-panel" hidden>
@@ -745,6 +795,10 @@ body.modal-open .main { overflow: hidden; }
           <b>Aún no hay shorts</b>
           <span>Los que montes aparecerán aquí, con su título y su texto para copiar.</span>
           <button type="button" class="btn primary" data-go="crear">Crear el primero</button>
+        </div>
+        <div class="lib-tools" id="lib-tools" hidden>
+          <input type="text" id="lib-search" placeholder="Buscar por título, gancho o texto" aria-label="Buscar shorts" spellcheck="false">
+          <select id="lib-folder" aria-label="Ejecución"><option value="">Todas las ejecuciones</option></select>
         </div>
         <div class="grid" id="results"></div>
       </section>
@@ -857,9 +911,23 @@ body.modal-open .main { overflow: hidden; }
             <h2>Dónde se guardan</h2>
             <label class="lbl-t" for="output">Carpeta de los shorts</label>
             <div class="with-button">
-              <input type="text" id="output" value="output" spellcheck="false">
+              <input type="text" id="output" value="" placeholder="La de config.yaml" spellcheck="false">
               <button type="button" class="btn" data-browse="output" data-kind="folder"><svg class="ico"><use href="#i-folder"/></svg>Elegir</button>
             </div>
+            <p class="hint" id="output-hint">Cada ejecución crea su propia subcarpeta aquí dentro.</p>
+          </section>
+
+          <section class="card">
+            <h2>Descarga de YouTube</h2>
+            <label class="lbl-t" for="st_cookies">Usar las cookies de mi navegador</label>
+            <select id="st_cookies">
+              <option value="" selected>No</option>
+              <option value="firefox">Firefox</option>
+              <option value="edge">Edge</option>
+              <option value="chrome">Chrome</option>
+              <option value="brave">Brave</option>
+            </select>
+            <p class="hint">Sirve para vídeos con restricción de edad o cuando YouTube pide iniciar sesión. Hay que haber entrado en YouTube con ese navegador. Con Chrome y Edge puede fallar mientras están abiertos; Firefox suele ir mejor.</p>
           </section>
 
           <section class="card full">
@@ -919,7 +987,7 @@ const RADIOS = ["length", "preset"];
 const STYLE  = { st_color: "color_active", st_size: "font_size",
                  st_pos: "position", st_words: "words", st_font: "font_name",
                  st_height: "max_height", st_workers: "workers",
-                 st_encoder: "encoder" };
+                 st_encoder: "encoder", st_cookies: "cookies" };
 const LOOK   = ["st_color", "st_size", "st_pos", "st_words", "st_font"];
 
 // ===========================================================================
@@ -1009,6 +1077,8 @@ function saveForm() {
 function loadForm() {
   let data = {};
   try { data = JSON.parse(localStorage.getItem("viralshorts.form") || "{}"); } catch (e) {}
+  // Antes la casilla venia con «output» escrito, y eso pisaba la carpeta de config.yaml.
+  if (data.output === "output") data.output = "";
   FIELDS.forEach(k => { if (data[k] !== undefined) $(k).value = data[k]; });
   FLAGS.forEach(k  => { if (data[k] !== undefined) $(k).checked = data[k]; });
   RADIOS.forEach(k => { if (data[k]) setRadio(k, data[k]); });
@@ -1095,6 +1165,7 @@ function refreshPreview(id) {
   const sub   = box.querySelector("span");
 
   card.classList.toggle("filled", value.length > 0);
+  refreshMonitor();
   if (!value) { box.classList.remove("on"); return; }
 
   box.classList.add("on");
@@ -1115,6 +1186,37 @@ function refreshPreview(id) {
     img.classList.remove("on");
   }
   askTitle(id, value);
+}
+
+// El monitor muestra un fotograma del pódcast y otro del fondo en cuanto se eligen.
+function monitorImage(value) {
+  const text = value.trim();
+  if (!text) return "";
+  const match = text.match(YT_ID);
+  if (match) return `https://img.youtube.com/vi/${match[1]}/mqdefault.jpg`;
+  if (/^https?:\/\//i.test(text)) return "";
+  return `/api/frame?src=${encodeURIComponent(text)}&t=${encodeURIComponent(TOKEN)}`;
+}
+
+let monitorTimer = null;
+function refreshMonitor() {
+  clearTimeout(monitorTimer);
+  // Con un archivo local cada pulsacion lanzaria un ffmpeg: se espera a que pare de teclear.
+  monitorTimer = setTimeout(() => {
+    [["podcast", ".pod"], ["background", ".gamebg"]].forEach(([id, selector]) => {
+      const node = document.querySelector(selector);
+      const url = monitorImage($(id).value);
+      if (!url) { node.style.backgroundImage = ""; node.classList.remove("has-img"); return; }
+      const probe = new Image();
+      probe.onload = () => {
+        if (monitorImage($(id).value) !== url) return;
+        node.style.backgroundImage = `url("${url}")`;
+        node.classList.add("has-img");
+      };
+      probe.onerror = () => { node.style.backgroundImage = ""; node.classList.remove("has-img"); };
+      probe.src = url;
+    });
+  }, 450);
 }
 
 const titleTimers = {};
@@ -1180,8 +1282,10 @@ function explain(raw) {
      ["Claude no ha podido entrar", "Falta la clave <code>ANTHROPIC_API_KEY</code> o no tiene saldo. Apaga <b>Que Claude elija y titule</b> en Ajustes y todo lo demás seguirá funcionando."]],
     [/carpeta de trabajo.*ocupada|WorkDirBusy|ya hay un proceso|cerrojo/i,
      ["Ya hay otra ejecución en marcha", "Espera a que termine, o pulsa Detener antes de volver a lanzarla."]],
-    [/Sign in to confirm|bot|cookies|age.?restricted|Private video|unavailable/i,
-     ["YouTube no deja descargar ese vídeo", "Suele pasar con vídeos privados, con restricción de edad, o cuando YouTube pide iniciar sesión. Prueba con otro enlace, o descarga el vídeo a mano y elígelo como archivo."]],
+    [/Sign in to confirm|not a bot|age.?restricted|cookies/i,
+     ["YouTube pide iniciar sesión para este vídeo", "Pasa con vídeos con restricción de edad o cuando YouTube sospecha de una descarga automática. Si has entrado en YouTube con tu navegador, puede usar sus cookies.", "cookies"]],
+    [/Private video|unavailable|bot/i,
+     ["YouTube no deja descargar ese vídeo", "Suele pasar con vídeos privados o que ya no existen. Prueba con otro enlace, o descarga el vídeo a mano y elígelo como archivo."]],
     [/is not a valid URL|Unsupported URL|no such file|No existe/i,
      ["Ese enlace o archivo no vale", "Comprueba que el enlace esté completo y que el archivo siga en su sitio."]],
     [/no devolvio ninguna palabra|audio audible/i,
@@ -1191,8 +1295,35 @@ function explain(raw) {
     [/MemoryError|CUDA|cuDNN|out of memory/i,
      ["Se ha quedado sin memoria", "Elige la calidad <b>Rápida</b>, o baja el modelo de transcripción en Ajustes."]],
   ];
-  for (const [pattern, [title, body]] of rules) if (pattern.test(text)) return { title, body, raw: text };
+  for (const [pattern, [title, body, action]] of rules) if (pattern.test(text)) return { title, body, action, raw: text };
   return { title: "Algo ha fallado", body: "Abre <b>Ver el detalle técnico</b> en «En curso» para ver qué ha pasado.", raw: text };
+}
+
+/** Error traducido; si tiene arreglo con un clic, lo ofrece. */
+function showNice(nice) {
+  showBanner($("banner"), nice.title, nice.body);
+  if (nice.action !== "cookies") return;
+  const row = document.createElement("div");
+  row.className = "row-btns";
+  [["firefox", "Firefox"], ["edge", "Edge"], ["chrome", "Chrome"]].forEach(([id, label]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn sm";
+    button.textContent = `Reintentar con ${label}`;
+    button.addEventListener("click", () => retryWithCookies(id, label));
+    row.appendChild(button);
+  });
+  $("banner").querySelector(".note-body").appendChild(row);
+}
+
+let lastReview = false;
+function retryWithCookies(browser, label) {
+  $("st_cookies").value = browser;
+  saveForm();
+  clearBanner($("banner"));
+  showBanner($("tip"), `Reintentando con las cookies de ${label}`,
+    "Queda guardado en Ajustes, en «Descarga de YouTube». Si falla, cierra el navegador y vuelve a probar.");
+  launch(lastReview);
 }
 
 /** Aviso del pipeline (Claude caido, falta una fuente...): no es un error. */
@@ -1281,6 +1412,19 @@ async function watchUpdates(manual) {
     }
   }
 }
+// La aplicacion puede quedarse abierta dias: se vuelve a mirar cada pocas horas.
+async function quietCheck() {
+  if (updBusy) return;
+  await post("/api/update/check", {}).catch(() => {});
+  for (let i = 0; i < 20; i++) {
+    await new Promise(r => setTimeout(r, 1200));
+    const state = await updState().catch(() => null);
+    if (!state) return;
+    if (!updBusy) renderUpdate(state);
+    if (state.checked && !state.checking) return;
+  }
+}
+setInterval(quietCheck, 3 * 60 * 60 * 1000);
 $("version-btn").addEventListener("click", () => watchUpdates(true));
 $("upd-check").addEventListener("click", () => watchUpdates(true));
 watchUpdates(false);
@@ -1343,6 +1487,69 @@ function paintSteps(current) {
 }
 
 // ===========================================================================
+// Modelos de voz: se avisa y se descargan antes de lanzar, no a mitad de un trabajo
+// ===========================================================================
+let MODELS = [];
+let modelBusy = false;
+const modelInfo = (size) => MODELS.find(m => m.size === size);
+const sizeText = (mb) => mb >= 1000 ? (mb / 1000).toFixed(1).replace(".", ",") + " GB" : mb + " MB";
+
+async function loadModels() {
+  try { MODELS = await (await fetch("/api/models", { headers: AUTH })).json(); } catch (e) { MODELS = []; }
+  refreshModelNote();
+}
+
+function refreshModelNote() {
+  if (modelBusy) return;
+  const info = modelInfo($("model").value);
+  const missing = !!info && !info.installed;
+  $("model-note").hidden = !missing;
+  if (!missing) return;
+  $("mn-title").textContent = `Falta el modelo de voz «${info.size}»`;
+  $("mn-text").textContent = `Pesa ${sizeText(info.mb)} y se descarga una sola vez. Mejor ahora que en mitad de un trabajo.`;
+  $("mn-go").hidden = false;
+  $("mn-bar").hidden = true;
+}
+
+/** Descarga el modelo con barra de progreso. Devuelve true si queda instalado. */
+async function downloadModel(size) {
+  if (modelBusy) return false;
+  const info = modelInfo(size);
+  modelBusy = true;
+  $("model-note").hidden = false;
+  $("mn-go").hidden = true;
+  $("mn-bar").hidden = false;
+  $("mn-fill").style.width = "0";
+  $("mn-title").textContent = `Descargando el modelo de voz «${size}»`;
+  $("mn-text").textContent = `${info ? sizeText(info.mb) : ""}. No cierres la aplicación.`;
+  try {
+    await post("/api/setup/start", { model: size });
+    for (let tries = 0; ; tries++) {
+      await new Promise(r => setTimeout(r, 600));
+      const state = await (await fetch("/api/setup", { headers: AUTH })).json();
+      $("mn-fill").style.width = Math.round((state.overall || 0) * 100) + "%";
+      $("mn-text").textContent = `${Math.round((state.overall || 0) * 100)} %${info ? " de " + sizeText(info.mb) : ""}. No cierres la aplicación.`;
+      if (!state.running && tries >= 2) {
+        if (state.error) throw new Error(state.error);
+        await loadModels();
+        if (modelInfo(size) && modelInfo(size).installed) break;
+        if (tries > 8) throw new Error("La descarga no terminó.");
+      }
+    }
+    modelBusy = false;
+    $("model-note").hidden = true;
+    return true;
+  } catch (error) {
+    modelBusy = false;
+    showBanner($("banner"), "No se pudo descargar el modelo de voz",
+      escapeHtml(error.message) + " Comprueba tu conexión y vuelve a intentarlo.");
+    refreshModelNote();
+    return false;
+  }
+}
+$("mn-go").addEventListener("click", () => downloadModel($("model").value));
+
+// ===========================================================================
 // Lanzar
 // ===========================================================================
 let STATE = "idle";
@@ -1370,7 +1577,10 @@ function startFresh() {
 
 async function launch(review) {
   clearBanner($("banner"));
+  lastReview = !!review;
   const busy = STATE === "running";
+  const model = modelInfo($("model").value);
+  if (model && !model.installed && !(await downloadModel(model.size))) return;
   try {
     const answer = await post("/api/run", collect(review));
     if (answer.encolado) {
@@ -1382,7 +1592,7 @@ async function launch(review) {
     go("trabajo");
   } catch (error) {
     const nice = explain(error.message);
-    showBanner($("banner"), nice.title, nice.body);
+    showNice(nice);
   }
 }
 
@@ -1392,14 +1602,31 @@ async function launch(review) {
 function renderQueue(items) {
   const list = items || [];
   $("queue-panel").hidden = list.length === 0;
-  $("queue-list").innerHTML = list.map(item => `
+  $("queue-list").innerHTML = list.map((item, i) => `
     <div class="queue-item">
       <div class="num">${item.n}</div>
       <div class="what">${escapeHtml(shortName(item.podcast))}</div>
       <span class="chip">${item.revisar ? "para revisar" : item.clips + " shorts"}</span>
+      <div class="ops">
+        <button type="button" data-op="up" data-n="${item.n}" aria-label="Adelantar" title="Adelantar" ${i === 0 ? "disabled" : ""}><svg class="ico"><use href="#i-up"/></svg></button>
+        <button type="button" data-op="down" data-n="${item.n}" aria-label="Atrasar" title="Atrasar" ${i === list.length - 1 ? "disabled" : ""}><svg class="ico"><use href="#i-down"/></svg></button>
+        <button type="button" data-op="rm" data-n="${item.n}" aria-label="Quitar de la cola" title="Quitar de la cola"><svg class="ico"><use href="#i-x"/></svg></button>
+      </div>
     </div>`).join("");
+  $("skip-row").hidden = list.length === 0 || STATE !== "running";
   refreshWork();
 }
+
+$("queue-list").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-op]");
+  if (!button) return;
+  const n = +button.dataset.n;
+  const call = button.dataset.op === "rm"
+    ? post("/api/queue/remove", { n })
+    : post("/api/queue/move", { n, delta: button.dataset.op === "up" ? -1 : 1 });
+  call.catch(() => {});
+});
+$("skip").addEventListener("click", () => post("/api/stop", { solo_este: true }).catch(() => {}));
 
 function shortName(text) {
   const value = String(text || "");
@@ -1553,9 +1780,94 @@ async function renderFromPlan(only) {
     go("trabajo");
   } catch (error) {
     const nice = explain(error.message);
-    showBanner($("banner"), nice.title, nice.body);
+    showNice(nice);
   }
 }
+
+// ===========================================================================
+// Perfiles de ajustes
+// ===========================================================================
+let PROFILES = {};
+const PROFILE_SKIP = ["podcast", "background"];
+
+function snapshot() {
+  const data = {};
+  FIELDS.filter(k => !PROFILE_SKIP.includes(k)).forEach(k => data[k] = $(k).value);
+  FLAGS.forEach(k => data[k] = $(k).checked);
+  RADIOS.forEach(k => data[k] = radio(k));
+  Object.keys(STYLE).forEach(k => data[k] = $(k).value);
+  return data;
+}
+
+function applyProfile(data) {
+  FIELDS.filter(k => !PROFILE_SKIP.includes(k)).forEach(k => { if (data[k] !== undefined) $(k).value = data[k]; });
+  FLAGS.forEach(k => { if (data[k] !== undefined) $(k).checked = data[k]; });
+  RADIOS.forEach(k => { if (data[k]) setRadio(k, data[k]); });
+  Object.keys(STYLE).forEach(k => { if (data[k] !== undefined) $(k).value = data[k]; });
+  refreshClipsUnit();
+  updateEta();
+  paintPhone();
+  paintSteps(null);
+  refreshModelNote();
+  saveForm();
+}
+
+function fillProfiles(keep) {
+  const select = $("profile");
+  const names = Object.keys(PROFILES).sort((a, b) => a.localeCompare(b, "es"));
+  select.innerHTML = `<option value="">Ajustes actuales</option>` +
+    names.map(name => `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`).join("");
+  select.value = names.includes(keep) ? keep : "";
+  $("profile-del").hidden = !select.value;
+}
+
+async function loadProfiles() {
+  try {
+    PROFILES = (await (await fetch("/api/profiles", { headers: AUTH })).json()).profiles || {};
+  } catch (error) { PROFILES = {}; }
+  fillProfiles($("profile").value);
+}
+
+$("profile").addEventListener("change", () => {
+  const name = $("profile").value;
+  $("profile-del").hidden = !name;
+  if (name && PROFILES[name]) applyProfile(PROFILES[name]);
+});
+$("profile-save").addEventListener("click", () => {
+  $("profile-new").hidden = false;
+  $("profile-name").value = $("profile").value;
+  $("profile-name").focus();
+});
+$("profile-cancel").addEventListener("click", () => { $("profile-new").hidden = true; });
+async function saveProfile() {
+  const name = $("profile-name").value.trim();
+  if (!name) { $("profile-name").focus(); return; }
+  try {
+    const answer = await post("/api/profiles/save", { name, data: snapshot() });
+    PROFILES = answer.profiles || PROFILES;
+    fillProfiles(name);
+    $("profile-new").hidden = true;
+    showBanner($("tip"), `Perfil «${escapeHtml(name)}» guardado`,
+      "Elígelo en el desplegable para recuperar estos ajustes: cantidad, duración, calidad, subtítulos y todo lo de Ajustes.");
+  } catch (error) {
+    showBanner($("banner"), "No se pudo guardar el perfil", escapeHtml(error.message));
+  }
+}
+$("profile-ok").addEventListener("click", saveProfile);
+$("profile-name").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); saveProfile(); }
+  if (e.key === "Escape") $("profile-new").hidden = true;
+});
+$("profile-del").addEventListener("click", async () => {
+  const name = $("profile").value;
+  if (!name) return;
+  try {
+    PROFILES = (await post("/api/profiles/delete", { name })).profiles || {};
+    fillProfiles("");
+  } catch (error) {
+    showBanner($("banner"), "No se pudo borrar el perfil", escapeHtml(error.message));
+  }
+});
 
 // ===========================================================================
 // Cableado
@@ -1567,15 +1879,18 @@ refreshClipsUnit();
 updateEta();
 paintSteps(null);
 go("crear");
+loadModels();
+loadProfiles();
+refreshMonitor();
 
 ["podcast", "background"].forEach(id =>
   $(id).addEventListener("input", () => { refreshPreview(id); saveForm(); }));
 
 document.querySelectorAll('input[name="length"], input[name="preset"]').forEach(r =>
-  r.addEventListener("change", () => { applyPresets(); saveForm(); }));
+  r.addEventListener("change", () => { applyPresets(); refreshModelNote(); saveForm(); }));
 
 ["min_duration", "max_duration", "model", "beam", "regions"].forEach(id =>
-  $(id).addEventListener("change", () => { presetFromFields(); saveForm(); }));
+  $(id).addEventListener("change", () => { presetFromFields(); refreshModelNote(); saveForm(); }));
 
 $("llm").addEventListener("change", () => paintSteps(null));
 
@@ -1696,6 +2011,7 @@ function setStatus(status) {
   $("clear").disabled = busy;
   // Estando ocupado los botones siguen valiendo: lo que lances se pone en cola
   // en vez de pelearse por la carpeta de trabajo.
+  $("skip-row").hidden = !busy || $("queue-panel").hidden;
   $("run").textContent = busy ? "Añadir a la cola" : "Generar mis shorts";
   $("review").textContent = busy
     ? "Añadir a la cola para revisar" : "Buscar y revisar antes de montar";
@@ -1739,17 +2055,106 @@ function renderClips(clips) {
 // ===========================================================================
 // Mis shorts
 // ===========================================================================
-const CARDS = new Map();      // fichero -> tarjeta
-let runAnchor = null;         // los de esta ejecucion se colocan delante de los antiguos
+let LIB = [];                    // lo que devuelve /api/existing: todas las ejecuciones
+const CARDS = new Map();         // id -> { el, sig }
+const RUN_N = new Map();         // ruta del short -> numero en el plan (para «Rehacer este»)
+const norm = (path) => String(path || "").replace(/\\/g, "/").toLowerCase();
 
-function refreshLibrary() {
-  const total = CARDS.size;
+function whenText(secs) {
+  if (!secs) return "";
+  const date = new Date(secs * 1000);
+  const today = new Date();
+  const days = Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()) -
+                           new Date(date.getFullYear(), date.getMonth(), date.getDate())) / 86400000);
+  const hour = date.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
+  if (days === 0) return `hoy, ${hour}`;
+  if (days === 1) return `ayer, ${hour}`;
+  return date.toLocaleDateString("es", { day: "numeric", month: "short", year: date.getFullYear() === today.getFullYear() ? undefined : "numeric" });
+}
+
+function noteResult(item) { if (item.ruta && item.n) RUN_N.set(norm(item.ruta), item.n); }
+
+async function loadLibrary() {
+  try {
+    const { results } = await (await fetch("/api/existing", { headers: AUTH })).json();
+    LIB = results || [];
+  } catch (error) { return; }
+  refreshFolders();
+  renderLibrary();
+}
+let libTimer = null;
+function loadLibrarySoon() { clearTimeout(libTimer); libTimer = setTimeout(loadLibrary, 400); }
+
+function refreshFolders() {
+  const select = $("lib-folder");
+  const keep = select.value;
+  const groups = new Map();
+  LIB.forEach(item => {
+    const group = groups.get(item.carpeta) || { items: [], newest: 0 };
+    group.items.push(item);
+    group.newest = Math.max(group.newest, item.mtime || 0);
+    groups.set(item.carpeta, group);
+  });
+  const options = [...groups.entries()].sort((a, b) => b[1].newest - a[1].newest).map(([name, group]) => {
+    const label = name
+      ? name.replace(/_\d{8}(_\d{6})?$/, "").replace(/-/g, " ") || name
+      : "Carpeta principal";
+    return `<option value="${escapeAttr(name)}">${escapeHtml(label)} (${whenText(group.newest)}, ${group.items.length})</option>`;
+  });
+  select.innerHTML = `<option value="">Todas las ejecuciones</option>` + options.join("");
+  select.value = groups.has(keep) ? keep : "";
+}
+
+function matchesFilters(item) {
+  const folder = $("lib-folder").value;
+  if (folder && item.carpeta !== folder) return false;
+  const query = $("lib-search").value.trim().toLowerCase();
+  if (!query) return true;
+  return [item.titulo, item.gancho, item.pie].some(text => String(text || "").toLowerCase().includes(query));
+}
+
+function renderLibrary() {
+  const grid = $("results");
+  const alive = new Set(LIB.map(item => item.id));
+  CARDS.forEach((card, id) => { if (!alive.has(id)) { card.el.remove(); CARDS.delete(id); } });
+
+  let shown = 0;
+  LIB.forEach((item, index) => {
+    const sig = [item.id, item.mtime, item.titulo, item.gancho, item.pie, RUN_N.has(norm(item.ruta)) && PLAN ? "r" : ""].join("|");
+    let card = CARDS.get(item.id);
+    if (!card || card.sig !== sig) {
+      if (card) card.el.remove();
+      card = { el: buildCard(item), sig };
+      CARDS.set(item.id, card);
+    }
+    const visible = matchesFilters(item);
+    card.el.hidden = !visible;
+    if (visible) shown++;
+    // Solo se mueve lo que no esta ya en su sitio: recolocar un <video> lo recarga.
+    if (grid.children[index] !== card.el) grid.insertBefore(card.el, grid.children[index] || null);
+  });
+
+  let none = $("lib-none");
+  if (!none) {
+    none = document.createElement("div");
+    none.id = "lib-none";
+    none.className = "empty";
+    none.style.gridColumn = "1 / -1";
+    none.innerHTML = `<b>Ningún short coincide</b><span>Prueba con otra palabra o elige «Todas las ejecuciones».</span>`;
+  }
+  none.hidden = shown > 0 || LIB.length === 0;
+  grid.appendChild(none);
+
+  const total = LIB.length;
   $("lib-empty").hidden = total > 0;
+  $("lib-tools").hidden = total === 0;
   $("nav-count").textContent = total ? String(total) : "";
   $("lib-sub").textContent = total
     ? `${total} ${total === 1 ? "short" : "shorts"}, listos para publicar.`
     : "Todo lo que has generado, listo para publicar.";
 }
+$("lib-search").addEventListener("input", renderLibrary);
+$("lib-folder").addEventListener("change", renderLibrary);
 
 function iconButton(label, icon, iconOnly) {
   const button = document.createElement("button");
@@ -1761,16 +2166,17 @@ function iconButton(label, icon, iconOnly) {
   return button;
 }
 
-function addResult(item) {
+function buildCard(item) {
   const card = document.createElement("div");
   card.className = "result";
-  const bust = CARDS.has(item.fichero) ? `&v=${Date.now()}` : "";
+  const src = `/api/video?f=${encodeURIComponent(item.id)}&t=${encodeURIComponent(TOKEN)}&v=${item.mtime || 0}#t=0.1`;
   card.innerHTML = `
-    <video controls preload="metadata" src="/api/video?f=${encodeURIComponent(item.fichero)}&t=${encodeURIComponent(TOKEN)}${bust}#t=0.1"></video>
+    <video controls preload="metadata" src="${src}"></video>
     <div class="meta">
       ${item.gancho ? `<div class="hook" title="${escapeAttr(item.gancho)}">${escapeHtml(item.gancho)}</div>` : ""}
       <h3>${escapeHtml(item.titulo || item.fichero)}</h3>
       ${item.pie ? `<div class="caption">${escapeHtml(item.pie)}</div>` : ""}
+      <div class="when">${escapeHtml(whenText(item.mtime))}</div>
     </div>
     <div class="foot"></div>`;
   const foot = card.querySelector(".foot");
@@ -1787,29 +2193,81 @@ function addResult(item) {
     });
     foot.appendChild(copy);
   }
+
   // Rehacer solo este short: cambia el título o el gancho en la revisión y vuelve
   // a montarse en un minuto, sin repetir descarga ni transcripción.
-  if (PLAN && item.n) {
+  const number = RUN_N.get(norm(item.ruta));
+  if (PLAN && number) {
     const again = iconButton("Rehacer este", "refresh");
     again.addEventListener("click", async () => {
       const label = again.querySelector("span");
       again.disabled = true;
       label.textContent = "Montando…";
-      await renderFromPlan([item.n]);
+      await renderFromPlan([number]);
       again.disabled = false;
       label.textContent = "Rehacer este";
     });
     foot.appendChild(again);
   }
+
+  const rename = iconButton("Cambiar el título", "edit", true);
+  rename.addEventListener("click", () => startRename(card, item));
+  foot.appendChild(rename);
+
   const open = iconButton("Ver carpeta", "folder", true);
-  open.addEventListener("click", () => fetch("/api/reveal", { headers: AUTH }));
+  open.addEventListener("click", () => fetch(`/api/reveal?f=${encodeURIComponent(item.id)}`, { headers: AUTH }));
   foot.appendChild(open);
 
-  const previous = CARDS.get(item.fichero);
-  if (previous) previous.replaceWith(card);
-  else $("results").insertBefore(card, runAnchor && runAnchor.isConnected ? runAnchor : null);
-  CARDS.set(item.fichero, card);
-  refreshLibrary();
+  const del = iconButton("Borrar", "trash", true);
+  let armed = null;
+  del.addEventListener("click", async () => {
+    if (!armed) {
+      del.classList.add("confirm");
+      del.title = "Pulsa otra vez para borrarlo";
+      armed = setTimeout(() => { armed = null; del.classList.remove("confirm"); del.title = "Borrar"; }, 3000);
+      return;
+    }
+    clearTimeout(armed);
+    del.disabled = true;
+    try {
+      await post("/api/short/delete", { id: item.id });
+      await loadLibrary();
+    } catch (error) {
+      del.disabled = false;
+      showBanner($("banner"), "No se pudo borrar", escapeHtml(error.message));
+    }
+  });
+  foot.appendChild(del);
+  return card;
+}
+
+function startRename(card, item) {
+  const title = card.querySelector("h3");
+  if (!title || card.querySelector(".rename")) return;
+  const box = document.createElement("div");
+  box.className = "rename";
+  box.innerHTML = `<input type="text" maxlength="120" aria-label="Título"><div class="row">
+    <button type="button" class="btn sm primary">Guardar</button><button type="button" class="btn sm">Cancelar</button></div>`;
+  const input = box.querySelector("input");
+  input.value = item.titulo || "";
+  title.replaceWith(box);
+  input.focus();
+  input.select();
+  const cancel = () => box.replaceWith(title);
+  const save = async () => {
+    const value = input.value.trim();
+    if (!value) return;
+    try {
+      await post("/api/short/rename", { id: item.id, titulo: value });
+      await loadLibrary();
+    } catch (error) {
+      showBanner($("banner"), "No se pudo cambiar el título", escapeHtml(error.message));
+    }
+  };
+  const [ok, no] = box.querySelectorAll("button");
+  ok.addEventListener("click", save);
+  no.addEventListener("click", cancel);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); if (e.key === "Escape") cancel(); });
 }
 
 function escapeHtml(text) {
@@ -1821,13 +2279,6 @@ function escapeHtml(text) {
 /** Igual, pero para meter el texto dentro de un atributo value="...". */
 function escapeAttr(text) {
   return escapeHtml(text || "").replace(/"/g, "&quot;");
-}
-
-async function loadExisting() {
-  try {
-    const { results } = await (await fetch("/api/existing", { headers: AUTH })).json();
-    results.forEach(addResult);
-  } catch (error) {}
 }
 
 // ===========================================================================
@@ -1849,8 +2300,12 @@ events.onmessage = (message) => {
       if (event.plan) renderReview(event.plan);
       renderClips(event.clips || []);
       (event.notices || []).forEach(showNotice);
-      (event.results || []).forEach(addResult);
-      if (!(event.results || []).length) loadExisting();
+      (event.results || []).forEach(noteResult);
+      loadLibrary();
+      if (event.env && event.env.output_dir) {
+        $("output").placeholder = event.env.output_dir;
+        $("output-hint").textContent = `Si lo dejas vacío se usa ${event.env.output_dir}. Cada ejecución crea su propia subcarpeta.`;
+      }
       if (event.status === "running" || !$("review-panel").hidden) go("trabajo");
       refreshWork();
       if (event.env && event.env.font_ok === false) {
@@ -1878,14 +2333,13 @@ events.onmessage = (message) => {
       if (event.status === "running") {
         lastError = "";
         $("log").textContent = "";
-        runAnchor = $("results").firstElementChild;
         $("progress-panel").hidden = false;
         paintSteps(0);
         refreshWork();
       }
       if (event.status === "error") {
         const nice = explain(lastError);
-        showBanner($("banner"), nice.title, nice.body);
+        showNice(nice);
       }
       break;
 
@@ -1902,6 +2356,8 @@ events.onmessage = (message) => {
     case "progress":
       $("bar").style.width = event.pct + "%";
       $("pct").textContent = event.pct.toFixed(0) + "%";
+      // La descarga de un modelo o de un video dice que es y cuanto lleva.
+      if (event.label && (event.stage === "modelo" || event.stage === "descarga")) $("stage-label").textContent = event.label;
       break;
 
     case "clips":       renderClips(event.clips || []); break;
@@ -1913,7 +2369,7 @@ events.onmessage = (message) => {
       refreshWork();
       go("trabajo");
       break;
-    case "clip_done":   addResult(event); break;
+    case "clip_done":   noteResult(event); loadLibrarySoon(); break;
     case "clip_failed":
       showBanner($("banner"), `El short ${event.n} no ha salido`,
                  escapeHtml(event.error || "") + " Los demás siguen adelante.");
@@ -1922,6 +2378,7 @@ events.onmessage = (message) => {
       $("stage-label").textContent = `Listo: ${event.ok} de ${event.total} shorts`;
       $("bar").style.width = "100%";
       $("pct").textContent = "100%";
+      loadLibrary();
       if (event.ok > 0) {
         showBanner($("tip"), `Listo: ${event.ok} de ${event.total} shorts`,
           `Ya están en <b>Mis shorts</b>, con su título y su texto para copiar.`);

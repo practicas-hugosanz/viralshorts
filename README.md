@@ -154,6 +154,28 @@ Detalles que ahorran sustos:
   vez de fallar por el cerrojo de `work/`.
 - **Elegir archivo** abre el explorador de Windows. Lo que escribes se recuerda
   entre sesiones.
+- **Vista previa real**: en cuanto eliges el pódcast y el fondo, el monitor
+  muestra un fotograma de cada uno (la miniatura en YouTube, un fotograma sacado
+  con ffmpeg si es un archivo).
+- **Modelos de voz**: si el análisis elegido necesita un modelo que aún no está
+  (`medium` pesa 1,5 GB), la pantalla *Crear* lo avisa y lo descarga con su
+  barra de progreso *antes* de lanzar, no a mitad del trabajo.
+- **Perfiles**: *Guardar como perfil* (arriba a la derecha de *Crear*) guarda
+  cantidad, duración, calidad, subtítulos y todo lo de Ajustes con un nombre, y
+  el desplegable los recupera. Se guardan en `profiles.json`.
+- **Cola**: cada trabajo en espera se puede adelantar, atrasar o quitar, y
+  *Saltar este* para solo el que está en marcha sin vaciar la cola.
+- **Mis shorts** enseña todas las ejecuciones (cada una vive en su subcarpeta),
+  con búsqueda por título o texto y filtro por ejecución. Cada short se puede
+  copiar, rehacer, **cambiarle el título** (queda en el `.json` y en
+  `publicaciones.csv`), abrir su carpeta o **borrar** (con confirmación).
+- **Cookies del navegador**: si YouTube pide iniciar sesión, el aviso ofrece
+  reintentar con las cookies de Firefox, Edge o Chrome (`download.cookies_from_browser`
+  de yt-dlp). También está en Ajustes. Con Chrome y Edge puede fallar mientras
+  están abiertos.
+- **Actualizaciones**: además de al abrir, la aplicación vuelve a mirar cada 3 horas.
+- **Subtítulos que caben**: un bloque de palabras largas se parte en dos líneas y,
+  si ni así cabe (una sola palabra enorme), se reduce el tamaño solo en ese bloque.
 
 Es un servidor local: solo escucha en `127.0.0.1` y exige un token que va en la
 URL, así que ninguna otra página ni ningún otro equipo puede usarlo. Se apaga al

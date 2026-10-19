@@ -28,3 +28,4 @@ publicaciones.csv
 rust/target/
 dist/
 webview/
+profiles.json

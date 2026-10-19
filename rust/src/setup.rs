@@ -38,6 +38,30 @@ fn whisper_url(file: &str) -> String {
 
 const YTDLP_URL: &str = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
 
+/// Modelos de voz que ofrece la interfaz: (nombre, MB aproximados). Pesan desde
+/// decenas de MB hasta varios GB, asi que se bajan a peticion y no en el primer
+/// arranque.
+pub const MODELS: &[(&str, u64)] = &[("tiny", 75), ("small", 466), ("medium", 1500), ("large-v3", 3100)];
+
+pub fn model_path(root: &Path, size: &str) -> PathBuf {
+    root.join("bin").join("models").join(format!("ggml-{size}.bin"))
+}
+
+pub fn model_installed(root: &Path, size: &str) -> bool {
+    std::fs::metadata(model_path(root, size)).is_ok_and(|m| m.len() > 0)
+}
+
+pub fn model_url(size: &str) -> String {
+    format!("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{size}.bin")
+}
+
+/// Estado de cada modelo, para que la interfaz avise antes de lanzar.
+pub fn models_json(root: &Path) -> Value {
+    Value::Array(
+        MODELS.iter().map(|(size, mb)| json!({"size": size, "mb": mb, "installed": model_installed(root, size)})).collect(),
+    )
+}
+
 /// Cada pieza que puede faltar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tool {
@@ -45,6 +69,8 @@ pub enum Tool {
     YtDlp,
     Whisper,
     WhisperCuda,
+    /// Un modelo de voz (ver `MODELS`).
+    Model(&'static str),
 }
 
 impl Tool {
@@ -54,6 +80,11 @@ impl Tool {
             Tool::YtDlp => "yt-dlp (descarga de YouTube)",
             Tool::Whisper => "whisper.cpp (transcripcion)",
             Tool::WhisperCuda => "motor de transcripcion para la tarjeta NVIDIA",
+            Tool::Model("tiny") => "modelo de voz tiny",
+            Tool::Model("small") => "modelo de voz small",
+            Tool::Model("medium") => "modelo de voz medium",
+            Tool::Model("large-v3") => "modelo de voz large-v3",
+            Tool::Model(_) => "modelo de voz",
         }
     }
 }
@@ -171,6 +202,9 @@ fn install_all(root: &Path, tools: &[Tool], state: &Shared) -> Result<(), String
             }
             Tool::Whisper => install_whisper(root, &mut on_progress)?,
             Tool::WhisperCuda => install_cuda(root, &mut on_progress)?,
+            Tool::Model(size) => {
+                fetch::download_file_with(&model_url(size), &model_path(root, size), tool.label(), &mut on_progress).map_err(|e| e.to_string())?;
+            }
         }
         note(state, &format!("{} listo", tool.label()), (index + 1) as f64 / total);
     }
@@ -336,6 +370,23 @@ mod tests {
         std::fs::create_dir_all(dir.path().join("bin/whisper-cuda")).unwrap();
         std::fs::write(dir.path().join("bin/whisper-cuda/whisper-cli.exe"), b"x").unwrap();
         assert_eq!(cuda_installed(dir.path()), cfg!(windows));
+    }
+
+    #[test]
+    fn los_modelos_se_reconocen_por_su_fichero() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!model_installed(dir.path(), "tiny"));
+        std::fs::create_dir_all(dir.path().join("bin/models")).unwrap();
+        std::fs::write(dir.path().join("bin/models/ggml-tiny.bin"), b"x").unwrap();
+        std::fs::write(dir.path().join("bin/models/ggml-small.bin"), b"").unwrap();
+        assert!(model_installed(dir.path(), "tiny"));
+        assert!(!model_installed(dir.path(), "small"), "un fichero vacio no vale");
+        let lista = models_json(dir.path());
+        assert_eq!(lista.as_array().unwrap().len(), MODELS.len());
+        assert_eq!(lista[0]["size"], "tiny");
+        assert_eq!(lista[0]["installed"], true);
+        assert_eq!(lista[2]["installed"], false);
+        assert!(model_url("medium").ends_with("/ggml-medium.bin"));
     }
 
     #[test]

@@ -368,7 +368,7 @@ impl WhisperCpp {
         if std::fs::metadata(&path).is_ok_and(|m| m.len() > 0) {
             return Ok(path);
         }
-        let url = format!("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{size}.bin");
+        let url = crate::setup::model_url(size);
         crate::fetch::download_file(&url, &path, &format!("el modelo de voz '{size}'"), "modelo")
             .map_err(|e| TranscribeError(e.to_string()))?;
         Ok(path)

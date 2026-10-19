@@ -32,7 +32,7 @@ use crate::config::Config;
 use crate::ffmpeg;
 use crate::pipeline;
 use crate::plan;
-use crate::{fonts, progress, setup, update};
+use crate::{fonts, library, progress, setup, update};
 
 pub const DEFAULT_PORT: u16 = 8760;
 const INDEX_HTML: &str = include_str!("../../web/index.html");
@@ -64,11 +64,12 @@ enum Kind {
     Ratio,
     Color,
     Text,
+    Browser,
 }
 
 /// La lista es cerrada a proposito: el navegador no decide que ajuste del
 /// pipeline se cambia, solo elige entre estos.
-const STYLE_FIELDS: [(&str, &str, Kind); 9] = [
+const STYLE_FIELDS: [(&str, &str, Kind); 10] = [
     ("font_name", "subtitles.font_name", Kind::Text),
     ("font_size", "subtitles.font_size", Kind::Int),
     ("color_active", "subtitles.color_active", Kind::Color),
@@ -78,7 +79,11 @@ const STYLE_FIELDS: [(&str, &str, Kind); 9] = [
     ("max_height", "download.max_height", Kind::Int),
     ("workers", "output.render_workers", Kind::Int),
     ("encoder", "output.hardware_encoder", Kind::Text),
+    ("cookies", "download.cookies_from_browser", Kind::Browser),
 ];
+
+/// Navegadores de los que yt-dlp sabe leer las cookies.
+const BROWSERS: [&str; 7] = ["chrome", "edge", "firefox", "brave", "opera", "vivaldi", "chromium"];
 
 /// (ajuste, valor) del estilo de subtitulos que venga del formulario.
 pub fn style_pairs(form: &Value) -> Vec<(String, Value)> {
@@ -103,6 +108,7 @@ pub fn style_pairs(form: &Value) -> Vec<(String, Value)> {
                 valid.then(|| json!(text.to_uppercase()))
             }
             Kind::Text => Some(json!(raw.as_str().unwrap_or("").trim().chars().take(60).collect::<String>())),
+            Kind::Browser => raw.as_str().map(|b| b.trim().to_lowercase()).filter(|b| BROWSERS.contains(&b.as_str())).map(|b| json!(b)),
         };
         if let Some(value) = value {
             pairs.push((setting.to_string(), value));
@@ -295,6 +301,8 @@ struct State {
     results: Vec<Value>,
     notices: Vec<Value>,
     output_dir: PathBuf,
+    /// Carpeta de la que cuelgan las de cada ejecucion: la biblioteca la recorre.
+    base_dir: PathBuf,
     plan_path: Option<PathBuf>,
     plan_clips: Vec<Value>,
     pending: Vec<Value>,
@@ -320,6 +328,7 @@ impl Job {
     pub fn with_handoff(root: &Path, spawner: Spawner, handoff: Duration) -> Arc<Self> {
         let mut state = empty_state();
         state.output_dir = latest_run_dir(&root.join("output"));
+        state.base_dir = configured_output_dir(root);
         Arc::new(Self { root: root.to_path_buf(), spawner, state: Mutex::new(state), subscribers: Mutex::new(Vec::new()), handoff })
     }
 
@@ -363,6 +372,14 @@ impl Job {
         self.lock().output_dir.clone()
     }
 
+    pub fn base_dir(&self) -> PathBuf {
+        self.lock().base_dir.clone()
+    }
+
+    pub fn set_base_dir(&self, dir: PathBuf) {
+        self.lock().base_dir = dir;
+    }
+
     pub fn set_output_dir(&self, dir: PathBuf) {
         self.lock().output_dir = dir;
     }
@@ -385,6 +402,52 @@ impl Job {
 
     pub fn pending_len(&self) -> usize {
         self.lock().pending.len()
+    }
+
+    /// Quita de la cola el trabajo `n` (1 = el siguiente en salir).
+    pub fn remove_pending(&self, n: usize) -> bool {
+        let mut state = self.lock();
+        if n == 0 || n > state.pending.len() {
+            return false;
+        }
+        state.pending.remove(n - 1);
+        let queue = queue_summary(&state);
+        drop(state);
+        self.publish(json!({"type": "queue", "queue": queue}));
+        true
+    }
+
+    /// Adelanta (`delta` < 0) o atrasa (`delta` > 0) el trabajo `n` de la cola.
+    pub fn move_pending(&self, n: usize, delta: i64) -> bool {
+        let mut state = self.lock();
+        let len = state.pending.len();
+        let target = n as i64 - 1 + delta.signum();
+        if n == 0 || n > len || target < 0 || target >= len as i64 {
+            return false;
+        }
+        state.pending.swap(n - 1, target as usize);
+        let queue = queue_summary(&state);
+        drop(state);
+        self.publish(json!({"type": "queue", "queue": queue}));
+        true
+    }
+
+    /// Para solo el trabajo en marcha; lo que espera en la cola sigue su curso.
+    pub fn stop_current(&self) {
+        let killer = {
+            let mut state = self.lock();
+            if state.status == "running" {
+                state.status = "stopped".into();
+                state.killer.take()
+            } else {
+                None
+            }
+        };
+        if let Some(kill) = killer {
+            kill();
+            let mut state = self.lock();
+            self.push_log(&mut state, "-- saltado por el usuario --".into());
+        }
     }
 
     pub fn clear_queue(&self) {
@@ -418,9 +481,14 @@ impl Job {
         state.clips.clear();
         state.results.clear();
         state.notices.clear();
-        let output = form["output"].as_str().filter(|o| !o.is_empty()).unwrap_or("output");
-        let output = PathBuf::from(output);
-        state.output_dir = if output.is_absolute() { output } else { self.root.join(output) };
+        state.base_dir = match form["output"].as_str().filter(|o| !o.is_empty()) {
+            Some(output) => {
+                let output = PathBuf::from(output);
+                if output.is_absolute() { output } else { self.root.join(output) }
+            }
+            None => configured_output_dir(&self.root),
+        };
+        state.output_dir = state.base_dir.clone();
 
         let args = if truthy(&form["from_plan"]) {
             plan_command(&form)
@@ -552,6 +620,7 @@ fn empty_state() -> State {
         results: Vec::new(),
         notices: Vec::new(),
         output_dir: PathBuf::from("output"),
+        base_dir: PathBuf::from("output"),
         plan_path: None,
         plan_clips: Vec::new(),
         pending: Vec::new(),
@@ -609,6 +678,14 @@ pub fn latest_run_dir(base: &Path) -> PathBuf {
     newest.unwrap_or_else(|| base.to_path_buf())
 }
 
+/// Carpeta de salida de `config.yaml` (o `output` junto al programa).
+pub fn configured_output_dir(root: &Path) -> PathBuf {
+    let config = root.join("config.yaml");
+    let dir = Config::load(config.is_file().then_some(config.as_path())).map(|c| c.output.dir).unwrap_or_else(|_| "output".into());
+    let dir = PathBuf::from(if dir.is_empty() { "output".to_string() } else { dir });
+    if dir.is_absolute() { dir } else { root.join(dir) }
+}
+
 /// Lo que la interfaz necesita para avisar ANTES de fallar a mitad. Enterarse de
 /// que falta ffmpeg, la clave de Claude o la fuente de los subtitulos cuando
 /// llevas veinte minutos transcribiendo es la peor forma posible de enterarse.
@@ -626,6 +703,7 @@ pub fn environment(root: &Path) -> Value {
         "version": update::CURRENT,
         "nvidia": nvidia_present(),
         "cuda_engine": setup::cuda_installed(root),
+        "output_dir": configured_output_dir(root).to_string_lossy(),
     })
 }
 
@@ -660,6 +738,7 @@ pub fn scan_output(folder: &Path) -> Vec<Value> {
                 "fichero": video.file_name().unwrap_or_default().to_string_lossy(),
                 "ruta": video.to_string_lossy(),
                 "titulo": "", "gancho": "", "pie": "",
+                "mtime": video.metadata().and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs()),
             });
             if let Some(data) = std::fs::read_to_string(video.with_extension("json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) {
                 let publicacion = &data["publicacion"];
@@ -811,8 +890,7 @@ impl App {
     }
 
     /// Lanza la instalacion de lo que falte (o del motor de GPU) en un hilo.
-    fn start_setup(&self, gpu: bool) {
-        let tools = if gpu { vec![setup::Tool::WhisperCuda] } else { setup::missing(&self.root) };
+    fn start_setup(&self, tools: Vec<setup::Tool>) {
         let (root, state) = (self.root.clone(), self.setup.clone());
         std::thread::spawn(move || setup::install(&root, &tools, &state));
     }
@@ -996,14 +1074,25 @@ fn handle_get(app: &Arc<App>, request: &Request, mut stream: TcpStream) {
                 page.replace("__TOKEN__", &app.token).as_bytes(),
             )
         }
+        "/api/models" => respond_json(&mut stream, 200, &setup::models_json(&app.root)),
         "/api/setup" => respond_json(&mut stream, 200, &app.setup.lock().unwrap_or_else(|e| e.into_inner()).to_json(&app.root)),
         "/api/update" => respond_json(&mut stream, 200, &app.updates.lock().unwrap_or_else(|e| e.into_inner()).to_json()),
         "/api/state" => respond_json(&mut stream, 200, &app.job.snapshot()),
         "/api/events" => serve_events(app, stream),
         "/api/video" => serve_file(app, request.query.get("f").map_or("", String::as_str), request, &mut stream),
-        "/api/existing" => respond_json(&mut stream, 200, &json!({"results": scan_output(&app.job.output_dir())})),
-        "/api/reveal" => reveal(app, &mut stream),
+        "/api/existing" => respond_json(&mut stream, 200, &json!({"results": library::scan_library(&app.job.base_dir())})),
+        "/api/profiles" => respond_json(&mut stream, 200, &json!({"profiles": library::load_profiles(&app.root)})),
+        "/api/frame" => serve_frame(request.query.get("src").map_or("", String::as_str), &mut stream),
+        "/api/reveal" => reveal(app, request, &mut stream),
         _ => respond_error(&mut stream, 404, "no encontrado"),
+    }
+}
+
+/// Un fotograma de un video o imagen local, para la vista previa.
+fn serve_frame(source: &str, stream: &mut TcpStream) {
+    match library::frame_jpeg(Path::new(source)) {
+        Some(jpeg) => respond(stream, 200, &[("Content-Type", "image/jpeg".into()), ("Cache-Control", "private, max-age=300".into())], &jpeg),
+        None => respond_error(stream, 404, "sin fotograma"),
     }
 }
 
@@ -1045,15 +1134,36 @@ pub fn valid_media_name(name: &str) -> bool {
         && name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.' || c == '-' || c == ' ')
 }
 
+/// Igual, pero admite el `carpeta/fichero` con el que la biblioteca nombra los
+/// shorts de cada ejecucion.
+fn valid_media_id(id: &str) -> bool {
+    match id.split_once('/') {
+        Some((folder, file)) => {
+            !file.contains('/')
+                && valid_media_name(file)
+                && !folder.is_empty()
+                && folder != "."
+                && folder != ".."
+                && folder.chars().all(|c| c.is_alphanumeric() || matches!(c, '_' | '.' | '-' | ' ' | '(' | ')'))
+        }
+        None => valid_media_name(id),
+    }
+}
+
 /// Sirve un short (o su portada) de la carpeta de salida. Con soporte de Range:
 /// sin el, el navegador no puede saltar por la barra de tiempo del video.
 fn serve_file(app: &Arc<App>, name: &str, request: &Request, stream: &mut TcpStream) {
-    if !valid_media_name(name) {
+    if !valid_media_id(name) {
         return respond_error(stream, 400, "nombre invalido");
     }
-    let folder = app.job.output_dir();
-    let path = folder.join(name);
-    let (Ok(canonical), Ok(base)) = (path.canonicalize(), folder.canonicalize()) else {
+    // La biblioteca pide `carpeta/fichero` desde la carpeta base; lo de la
+    // ejecucion en curso, solo el nombre desde su carpeta.
+    let candidates = [app.job.base_dir(), app.job.output_dir()];
+    let found = candidates.iter().find_map(|folder| {
+        let path = folder.join(name);
+        Some((path.canonicalize().ok()?, folder.canonicalize().ok()?))
+    });
+    let Some((canonical, base)) = found else {
         return respond_error(stream, 404, "no encontrado");
     };
     if !canonical.starts_with(&base) {
@@ -1118,8 +1228,14 @@ fn serve_file(app: &Arc<App>, name: &str, request: &Request, stream: &mut TcpStr
     }
 }
 
-fn reveal(app: &Arc<App>, stream: &mut TcpStream) {
-    let folder = app.job.output_dir();
+fn reveal(app: &Arc<App>, request: &Request, stream: &mut TcpStream) {
+    // Con `f` (un id de la biblioteca) se abre la carpeta de ese short.
+    let from_id = request
+        .query
+        .get("f")
+        .and_then(|id| library::resolve_short(&app.job.base_dir(), id))
+        .and_then(|video| video.parent().map(Path::to_path_buf));
+    let folder = from_id.unwrap_or_else(|| app.job.output_dir());
     let _ = std::fs::create_dir_all(&folder);
     let opener = if cfg!(windows) { "explorer" } else if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
     match Command::new(opener).arg(&folder).spawn() {
@@ -1139,9 +1255,31 @@ fn handle_post(app: &Arc<App>, request: &Request, stream: &mut TcpStream) {
     let (status, answer) = match request.path.as_str() {
         "/api/run" => run_form(app, body),
         "/api/stop" => {
-            app.job.stop();
+            if truthy(&body["solo_este"]) {
+                app.job.stop_current();
+            } else {
+                app.job.stop();
+            }
             (200, json!({"ok": true}))
         }
+        "/api/queue/remove" => (200, json!({"ok": app.job.remove_pending(body["n"].as_u64().unwrap_or(0) as usize)})),
+        "/api/queue/move" => (200, json!({"ok": app.job.move_pending(body["n"].as_u64().unwrap_or(0) as usize, body["delta"].as_i64().unwrap_or(0))})),
+        "/api/short/delete" => match library::delete_short(&app.job.base_dir(), body["id"].as_str().unwrap_or("")) {
+            Ok(removed) => (200, json!({"ok": true, "borrados": removed})),
+            Err(error) => (400, json!({"ok": false, "error": error})),
+        },
+        "/api/short/rename" => match library::rename_short(&app.job.base_dir(), body["id"].as_str().unwrap_or(""), body["titulo"].as_str().unwrap_or("")) {
+            Ok(()) => (200, json!({"ok": true})),
+            Err(error) => (400, json!({"ok": false, "error": error})),
+        },
+        "/api/profiles/save" => match library::save_profile(&app.root, body["name"].as_str().unwrap_or(""), &body["data"]) {
+            Ok(()) => (200, json!({"ok": true, "profiles": library::load_profiles(&app.root)})),
+            Err(error) => (400, json!({"ok": false, "error": error})),
+        },
+        "/api/profiles/delete" => match library::delete_profile(&app.root, body["name"].as_str().unwrap_or("")) {
+            Ok(()) => (200, json!({"ok": true, "profiles": library::load_profiles(&app.root)})),
+            Err(error) => (400, json!({"ok": false, "error": error})),
+        },
         "/api/queue/clear" => {
             app.job.clear_queue();
             (200, json!({"ok": true}))
@@ -1159,8 +1297,23 @@ fn handle_post(app: &Arc<App>, request: &Request, stream: &mut TcpStream) {
             Err(error) => (400, json!({"ok": false, "error": error})),
         },
         "/api/setup/start" => {
-            app.start_setup(body["gpu"].as_bool().unwrap_or(false));
-            (200, json!({"ok": true}))
+            let tools = if body["gpu"].as_bool().unwrap_or(false) {
+                Ok(vec![setup::Tool::WhisperCuda])
+            } else if let Some(size) = body["model"].as_str() {
+                match setup::MODELS.iter().find(|(name, _)| *name == size) {
+                    Some((name, _)) => Ok(vec![setup::Tool::Model(name)]),
+                    None => Err(format!("Modelo desconocido: {size}")),
+                }
+            } else {
+                Ok(setup::missing(&app.root))
+            };
+            match tools {
+                Ok(tools) => {
+                    app.start_setup(tools);
+                    (200, json!({"ok": true}))
+                }
+                Err(error) => (400, json!({"ok": false, "error": error})),
+            }
         }
         "/api/browse" => browse(app, body["kind"].as_str().unwrap_or("file")),
         _ => return respond_error(stream, 404, "no encontrado"),
@@ -1650,6 +1803,94 @@ mod tests {
         assert!(lanzados[1].contains(&"p2".to_string()));
         assert_eq!(b.job.pending_len(), 0);
         b.job.stop();
+    }
+
+    #[test]
+    fn la_cola_se_reordena_y_se_recorta() {
+        let b = banco(vec![], 0, false);
+        b.job.enqueue(formulario(1));
+        for n in 2..=4 {
+            b.job.enqueue(formulario(n));
+        }
+        let orden = |job: &Arc<Job>| -> Vec<String> {
+            job.snapshot()["queue"].as_array().unwrap().iter().map(|q| q["podcast"].as_str().unwrap().to_string()).collect()
+        };
+        assert_eq!(orden(&b.job), ["p2", "p3", "p4"]);
+        assert!(b.job.move_pending(3, -1));
+        assert_eq!(orden(&b.job), ["p2", "p4", "p3"]);
+        assert!(!b.job.move_pending(1, -1), "el primero no puede adelantarse");
+        assert!(!b.job.move_pending(3, 1), "el ultimo no puede atrasarse");
+        assert!(b.job.move_pending(1, 5), "solo cuenta el sentido");
+        assert_eq!(orden(&b.job), ["p4", "p2", "p3"]);
+        assert!(b.job.remove_pending(2));
+        assert_eq!(orden(&b.job), ["p4", "p3"]);
+        assert!(!b.job.remove_pending(0) && !b.job.remove_pending(9));
+        b.job.stop();
+    }
+
+    #[test]
+    fn saltar_el_actual_deja_seguir_a_la_cola() {
+        let b = banco(vec![], 0, false);
+        b.job.enqueue(formulario(1));
+        b.job.enqueue(formulario(2));
+        b.job.stop_current();
+        let t = Instant::now();
+        while b.lanzados.lock().unwrap().len() < 2 && t.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(b.lanzados.lock().unwrap().len(), 2, "el segundo arranca solo");
+        assert_eq!(b.job.pending_len(), 0);
+        b.job.stop();
+    }
+
+    #[test]
+    fn las_cookies_solo_admiten_navegadores_conocidos() {
+        let con = |cookies: &str| style_pairs(&json!({"style": {"cookies": cookies}}));
+        assert_eq!(con("Firefox"), vec![("download.cookies_from_browser".to_string(), json!("firefox"))]);
+        assert!(con("").is_empty() && con("chrome --evil").is_empty() && con("../x").is_empty());
+    }
+
+    #[test]
+    fn biblioteca_borrar_renombrar_y_perfiles_por_http() {
+        let dir = tempfile::tempdir().unwrap();
+        let (app, puerto, _b) = app_de_prueba();
+        app.job.set_base_dir(dir.path().to_path_buf());
+        let run = dir.path().join("pod_2026");
+        std::fs::create_dir_all(&run).unwrap();
+        std::fs::write(run.join("short_1.mp4"), b"v").unwrap();
+        std::fs::write(run.join("short_1.json"), json!({"publicacion": {"title": "a"}}).to_string()).unwrap();
+        let t = Some("token-de-prueba");
+        let post = |ruta: &str, cuerpo: &str| pedir(puerto, "POST", ruta, "127.0.0.1", t, cuerpo, &[]);
+
+        let (codigo, _, cuerpo) = pedir(puerto, "GET", "/api/existing", "127.0.0.1", t, "", &[]);
+        assert_eq!(codigo, 200);
+        assert!(cuerpo.contains("pod_2026/short_1.mp4"), "{cuerpo}");
+        // El video de una subcarpeta se sirve por su id.
+        assert_eq!(pedir(puerto, "GET", "/api/video?f=pod_2026/short_1.mp4", "127.0.0.1", t, "", &[]).0, 200);
+
+        assert_eq!(post("/api/short/rename", r#"{"id": "pod_2026/short_1.mp4", "titulo": "Nuevo"}"#).0, 200);
+        assert!(pedir(puerto, "GET", "/api/existing", "127.0.0.1", t, "", &[]).2.contains("Nuevo"));
+        assert_eq!(post("/api/short/rename", r#"{"id": "../x/short_1.mp4", "titulo": "Nuevo"}"#).0, 400);
+
+        assert_eq!(post("/api/short/delete", r#"{"id": "pod_2026/short_1.mp4"}"#).0, 200);
+        assert!(!run.join("short_1.mp4").exists() && !run.join("short_1.json").exists());
+        assert_eq!(post("/api/short/delete", r#"{"id": "pod_2026/short_1.mp4"}"#).0, 400);
+
+        assert_eq!(post("/api/profiles/save", r#"{"name": "Humor", "data": {"clips": 5}}"#).0, 200);
+        let (_, _, perfiles) = pedir(puerto, "GET", "/api/profiles", "127.0.0.1", t, "", &[]);
+        assert!(perfiles.contains("Humor"), "{perfiles}");
+        assert_eq!(post("/api/profiles/save", r#"{"name": "", "data": {}}"#).0, 400);
+        assert_eq!(post("/api/profiles/delete", r#"{"name": "Humor"}"#).0, 200);
+        assert_eq!(post("/api/profiles/delete", r#"{"name": "Humor"}"#).0, 400);
+
+        // Modelos de voz: la lista existe y un nombre inventado se rechaza.
+        let (codigo, _, modelos) = pedir(puerto, "GET", "/api/models", "127.0.0.1", t, "", &[]);
+        assert_eq!(codigo, 200);
+        assert!(modelos.contains("medium"));
+        assert_eq!(post("/api/setup/start", r#"{"model": "gigante"}"#).0, 400);
+        // Sin token, nada de esto.
+        assert_eq!(pedir(puerto, "POST", "/api/short/delete", "127.0.0.1", None, "{}", &[]).0, 403);
+        assert_eq!(pedir(puerto, "GET", "/api/frame?src=C:/x.mp4", "127.0.0.1", None, "", &[]).0, 403);
     }
 
     #[test]

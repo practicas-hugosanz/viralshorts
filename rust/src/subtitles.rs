@@ -88,7 +88,7 @@ pub fn build_ass(
     title_text: Option<&str>,
 ) -> Result<String, SubtitleError> {
     let groups = if cfg_subs.enabled && !words.is_empty() { group_words(words, cfg_subs) } else { Vec::new() };
-    let events = subtitle_events(&groups, cfg_subs)?;
+    let events = subtitle_events(&groups, cfg_subs, width)?;
 
     let mut card_end = 0.0;
     let mut overlays: Vec<String> = Vec::new();
@@ -175,7 +175,7 @@ fn header(
     ))
 }
 
-fn subtitle_events(groups: &[Group], cfg: &SubtitlesConfig) -> Result<Vec<String>, SubtitleError> {
+fn subtitle_events(groups: &[Group], cfg: &SubtitlesConfig, width: i64) -> Result<Vec<String>, SubtitleError> {
     let active = hex_to_ass_color(&cfg.color_active, 0)?;
     let normal = hex_to_ass_color(&cfg.color_normal, 0)?;
     let pop_ms = (cfg.pop_duration * 1000.0) as i64;
@@ -191,6 +191,7 @@ fn subtitle_events(groups: &[Group], cfg: &SubtitlesConfig) -> Result<Vec<String
         };
 
         let rendered: Vec<String> = group.words.iter().map(|w| render_word(w, cfg)).collect();
+        let layout = fit_group(&rendered, cfg, width);
 
         for (i, word) in group.words.iter().enumerate() {
             let start = if i > 0 { word.start } else { group.start() };
@@ -218,10 +219,85 @@ fn subtitle_events(groups: &[Group], cfg: &SubtitlesConfig) -> Result<Vec<String
                 })
                 .collect();
 
-            lines.push(format!("Dialogue: 0,{},{},Main,,0,0,0,,{}", format_time(start), format_time(end), parts.join(" ")));
+            let mut text = String::new();
+            if let Some(size) = layout.font_size {
+                text.push_str(&format!("{{\\fs{size}}}"));
+            }
+            for (j, part) in parts.iter().enumerate() {
+                if j > 0 {
+                    text.push_str(if layout.break_after == Some(j - 1) { "\\N" } else { " " });
+                }
+                text.push_str(part);
+            }
+            lines.push(format!("Dialogue: 0,{},{},Main,,0,0,0,,{text}", format_time(start), format_time(end)));
         }
     }
     Ok(lines)
+}
+
+// ----------------------------------------------------------------------------
+// Que el bloque quepa: con WrapStyle 2 libass no parte las lineas, asi que un
+// bloque de tres palabras largas se salia del video por los dos lados.
+// ----------------------------------------------------------------------------
+
+/// Como se dibuja un bloque para que quepa en el ancho.
+#[derive(Debug, Default, PartialEq)]
+struct GroupLayout {
+    /// Se parte en dos lineas despues de la palabra con este indice.
+    break_after: Option<usize>,
+    /// Cuerpo de letra reducido si ni partido cabe.
+    font_size: Option<i64>,
+}
+
+/// Ancho medio de una letra, en fracciones del cuerpo, segun la fuente. Medido
+/// con libass sobre Arial Black (~0,53) y con un margen: mejor encoger un poco
+/// de mas que salirse del video.
+fn glyph_ratio(font: &str, uppercase: bool) -> f64 {
+    let font = font.to_lowercase();
+    let narrow = font.contains("impact") || font.contains("anton") || font.contains("bebas");
+    match (narrow, uppercase) {
+        (true, true) => 0.46,
+        (true, false) => 0.40,
+        (false, true) if font.contains("montserrat") => 0.62,
+        (false, true) => 0.60,
+        (false, false) => 0.52,
+    }
+}
+
+fn fit_group(words: &[String], cfg: &SubtitlesConfig, width: i64) -> GroupLayout {
+    if words.is_empty() || cfg.font_size <= 0 {
+        return GroupLayout::default();
+    }
+    let size = cfg.font_size as f64;
+    let ratio = glyph_ratio(&cfg.font_name, cfg.uppercase);
+    // Margenes laterales del estilo (7 % a cada lado) y un respiro para el pop
+    // de la palabra activa y el contorno.
+    let available = width as f64 * 0.86 * 0.93;
+    let measure = |range: &[String]| -> f64 {
+        let letters: usize = range.iter().map(|w| w.chars().count()).sum();
+        let gaps = range.len().saturating_sub(1);
+        letters as f64 * ratio * size + gaps as f64 * 0.3 * size
+    };
+
+    let whole = measure(words);
+    if whole <= available {
+        return GroupLayout::default();
+    }
+
+    // Dos lineas, cortando donde queden mas parejas.
+    let mut best: Option<(usize, f64)> = None;
+    for cut in 1..words.len() {
+        let widest = measure(&words[..cut]).max(measure(&words[cut..]));
+        if best.map_or(true, |(_, w)| widest < w) {
+            best = Some((cut - 1, widest));
+        }
+    }
+    let (break_after, widest) = match best {
+        Some((index, widest)) => (Some(index), widest),
+        None => (None, whole),
+    };
+    let font_size = (widest > available).then(|| ((size * available / widest) as i64).max((size * 0.4) as i64));
+    GroupLayout { break_after, font_size }
 }
 
 /// Tarjeta de contexto al arrancar el video. Aparece en el centro, se lee, se
@@ -644,6 +720,53 @@ mod tests {
         assert_eq!(render_word(&Word::new("...", 0.0, 1.0), &cfg), "...");
         let sin_quitar = SubtitlesConfig { remove_punctuation: false, uppercase: false, ..Default::default() };
         assert_eq!(render_word(&Word::new("¿Hola,", 0.0, 1.0), &sin_quitar), "¿Hola,");
+    }
+
+    fn bloque(textos: &[&str]) -> Vec<String> {
+        textos.iter().map(|t| t.to_string()).collect()
+    }
+
+    #[test]
+    fn un_bloque_corto_no_se_toca() {
+        let cfg = SubtitlesConfig::default();
+        assert_eq!(fit_group(&bloque(&["ESTO", "NO", "TE"]), &cfg, 1080), GroupLayout::default());
+    }
+
+    #[test]
+    fn tres_palabras_largas_se_parten_en_dos_lineas() {
+        let cfg = SubtitlesConfig::default();
+        let layout = fit_group(&bloque(&["EVIDENTEMENTE", "CUANDO", "CONOCES"]), &cfg, 1080);
+        assert_eq!(layout.break_after, Some(0));
+    }
+
+    #[test]
+    fn una_palabra_enorme_encoge_el_cuerpo() {
+        let cfg = SubtitlesConfig::default();
+        let layout = fit_group(&bloque(&["ANTICONSTITUCIONALMENTE"]), &cfg, 1080);
+        assert_eq!(layout.break_after, None);
+        let size = layout.font_size.expect("tiene que encoger");
+        assert!(size < cfg.font_size && size as f64 >= cfg.font_size as f64 * 0.4);
+    }
+
+    #[test]
+    fn el_ass_lleva_el_salto_y_el_tamano_en_todas_las_lineas_del_bloque() {
+        let words = vec![Word::new("evidentemente", 0.0, 0.4), Word::new("cuando", 0.5, 0.9), Word::new("conoces", 1.0, 1.4)];
+        let ass = build_ass(&words, 1080, 1920, &SubtitlesConfig::default(), None, None, 2.0, None, None).unwrap();
+        let dialogos: Vec<&str> = ass.lines().filter(|l| l.starts_with("Dialogue: 0")).collect();
+        assert_eq!(dialogos.len(), 3);
+        assert!(dialogos.iter().all(|l| l.contains("\\N")), "{ass}");
+    }
+
+    /// A mano: escribe un .ASS con palabras largas en la ruta de VS_ASS_OUT para
+    /// mirarlo renderizado (`ffmpeg -vf ass=...`). `cargo test -- --ignored`.
+    #[test]
+    #[ignore]
+    fn escribe_un_ass_de_ejemplo() {
+        let Ok(salida) = std::env::var("VS_ASS_OUT") else { return };
+        let textos = ["evidentemente", "cuando", "conoces", "esto", "no", "te", "lo", "habian", "contado", "anticonstitucionalmente"];
+        let words: Vec<Word> = textos.iter().enumerate().map(|(i, t)| Word::new(*t, i as f64, i as f64 + 0.9)).collect();
+        let ass = build_ass(&words, 1080, 1920, &SubtitlesConfig::default(), None, None, 11.0, None, None).unwrap();
+        std::fs::write(salida, ass).unwrap();
     }
 
     #[test]

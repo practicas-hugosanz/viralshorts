@@ -15,6 +15,7 @@ pub mod ffmpeg;
 pub mod fonts;
 pub mod gui;
 pub mod jumpcuts;
+pub mod library;
 pub mod llm;
 pub mod logging;
 pub mod metadata;
