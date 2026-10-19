@@ -110,6 +110,64 @@ pub fn build_ass(
     Ok(header(width, height, cfg_subs, cfg_hook, cfg_title)? + &all.join("\n") + "\n")
 }
 
+/// Intervalos (segundos del clip montado) de las palabras que la censura tapa,
+/// para silenciar la voz ahi y poner un pitido.
+pub fn censored_intervals(words: &[crate::words::Word], subs: &SubtitlesConfig) -> Vec<(f64, f64)> {
+    words
+        .iter()
+        .filter(|w| {
+            let plain = w.text.trim();
+            !plain.is_empty() && censor(plain, &subs.censor_words, subs.censor_profanity, &subs.censor_char) != plain
+        })
+        // Un poco de margen: whisper marca el inicio de la palabra algo tarde.
+        .map(|w| ((w.start - 0.04).max(0.0), w.end + 0.06))
+        .collect()
+}
+
+/// Pantalla final: el video se oscurece y sale un texto ("Sigueme para mas") y,
+/// si hay, el usuario del canal. Dura los ultimos `card.duration` segundos.
+pub fn append_end_card(content: &mut String, card: &crate::config::EndCardConfig, handle: &str, width: i64, height: i64, duration: f64, subs: &SubtitlesConfig) {
+    let text = card.text.trim();
+    if !card.enabled || duration <= 1.0 || (text.is_empty() && handle.trim().is_empty()) {
+        return;
+    }
+    let length = card.duration.clamp(1.0, 6.0).min(duration - 0.5);
+    let start = (duration - length).max(0.0);
+    let (from, to) = (format_time(start), format_time(duration));
+    // Un rectangulo oscuro de lado a lado (dibujo vectorial de ASS).
+    content.push_str(&format!(
+        "Dialogue: 4,{from},{to},Main,,0,0,0,,{{\\an7\\pos(0,0)\\fad(300,0)\\bord0\\shad0\\1c&H000000&\\1a&H55&\\p1}}m 0 0 l {width} 0 {width} {height} 0 {height}{{\\p0}}\n"
+    ));
+    let size = ((subs.font_size as f64) * 0.95).round() as i64;
+    let mut body = escape_ass_text(&wrap(&text.to_uppercase(), 16));
+    let handle = handle.trim();
+    if !handle.is_empty() {
+        body.push_str(&format!("\\N{{\\fs{}\\c&H0000F2FF&}}{}", (size as f64 * 0.55).round() as i64, escape_ass_text(handle)));
+    }
+    content.push_str(&format!(
+        "Dialogue: 5,{from},{to},Main,,0,0,0,,{{\\an5\\pos({},{})\\fs{size}\\bord6\\shad0\\c&HFFFFFF&\\3c&H000000&\\fad(300,0)\\fscx90\\fscy90\\t(0,350,\\fscx100\\fscy100)}}{body}\n",
+        width / 2,
+        height / 2
+    ));
+}
+
+/// .ASS de un solo fotograma para la portada: el gancho grande, arriba.
+pub fn cover_ass(text: &str, width: i64, height: i64, subs: &SubtitlesConfig, hook: &HookConfig) -> String {
+    let side = (width as f64 * 0.07) as i64;
+    let margin = (height as f64 * 0.14) as i64;
+    let size = ((subs.font_size as f64) * 1.25).round() as i64;
+    let body = escape_ass_text(&wrap(&text.trim().to_uppercase(), 16));
+    let color = hex_to_ass_color(&hook.color, 0).unwrap_or_else(|_| "&H00FFFFFF&".into());
+    format!(
+        "[Script Info]\nScriptType: v4.00+\nWrapStyle: 2\nScaledBorderAndShadow: yes\nPlayResX: {width}\nPlayResY: {height}\n\n[V4+ Styles]\n\
+         Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n\
+         Style: Cover,{},{size},{color},{color},&H00000000&,&H00000000&,-1,0,0,0,100,100,0,0,1,9,3,8,{side},{side},{margin},1\n\n[Events]\n\
+         Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n\
+         Dialogue: 0,0:00:00.00,0:00:10.00,Cover,,0,0,0,,{body}\n",
+        subs.font_name
+    )
+}
+
 /// Anade el usuario del canal como una linea suelta que dura todo el video.
 /// `logo` = (ancho, alto) con que se dibuja el logo, si hay: el usuario se pone
 /// justo debajo (o encima, en las esquinas de abajo) de el.
@@ -821,6 +879,43 @@ mod tests {
         marca.handle = "  ".into();
         append_handle(&mut vacio, &marca, 1080, 1920, 10.0, &subs, None);
         assert!(vacio.is_empty());
+    }
+
+    #[test]
+    fn solo_se_pitan_las_palabras_que_la_censura_tapa() {
+        let subs = SubtitlesConfig::default();
+        let words = vec![Word::new("hola", 0.0, 0.4), Word::new("puta", 1.0, 1.4), Word::new("madre", 1.5, 1.9), Word::new("joder", 3.0, 3.3)];
+        let tramos = censored_intervals(&words, &subs);
+        assert_eq!(tramos.len(), 2, "{tramos:?}");
+        assert!((tramos[0].0 - 0.96).abs() < 1e-9 && (tramos[0].1 - 1.46).abs() < 1e-9, "con margen: {tramos:?}");
+        // Si la censura esta apagada no se pita nada.
+        let sin = SubtitlesConfig { censor_profanity: false, ..SubtitlesConfig::default() };
+        assert!(censored_intervals(&words, &sin).is_empty());
+    }
+
+    #[test]
+    fn la_tarjeta_final_oscurece_y_pone_el_texto_al_final() {
+        let subs = SubtitlesConfig::default();
+        let tarjeta = crate::config::EndCardConfig { enabled: true, text: "Sígueme para más".into(), duration: 2.5 };
+        let mut ass = String::new();
+        append_end_card(&mut ass, &tarjeta, "@micanal", 1080, 1920, 20.0, &subs);
+        assert!(ass.contains("Dialogue: 4,0:00:17.50,0:00:20.00"), "los ultimos 2,5 s: {ass}");
+        assert!(ass.contains(r"\p1}m 0 0 l 1080 0 1080 1920 0 1920"), "rectangulo oscuro: {ass}");
+        assert!(ass.contains(r"SÍGUEME PARA\NMÁS") || ass.contains("SÍGUEME PARA MÁS"), "{ass}");
+        assert!(ass.contains("@micanal"), "el usuario va debajo: {ass}");
+        // Apagada, o en un clip demasiado corto, no escribe nada.
+        let mut vacio = String::new();
+        append_end_card(&mut vacio, &crate::config::EndCardConfig { enabled: false, ..tarjeta.clone() }, "", 1080, 1920, 20.0, &subs);
+        append_end_card(&mut vacio, &tarjeta, "", 1080, 1920, 0.8, &subs);
+        assert!(vacio.is_empty());
+    }
+
+    #[test]
+    fn la_portada_lleva_el_gancho_en_mayusculas_y_arriba() {
+        let ass = cover_ass("¿Por qué nadie lo dice?", 1080, 1350, &SubtitlesConfig::default(), &HookConfig::default());
+        assert!(ass.contains("PlayResY: 1350") && ass.contains("Style: Cover,Arial Black,"), "{ass}");
+        assert!(ass.contains("Dialogue: 0,0:00:00.00,0:00:10.00,Cover,,0,0,0,,¿POR QUÉ"), "{ass}");
+        assert!(ass.contains(",8,75,75,189,1"), "alineado arriba con margen: {ass}");
     }
 
     fn bloque(textos: &[&str]) -> Vec<String> {

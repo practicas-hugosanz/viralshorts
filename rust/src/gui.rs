@@ -73,11 +73,15 @@ enum Kind {
     Choice(&'static [&'static str]),
     /// Verdadero o falso.
     Flag,
+    /// Un numero entre dos limites.
+    Float(f64, f64),
+    /// Formato del video: 9:16, 4:5 o 1:1 (cambia ancho y alto).
+    Format,
 }
 
 /// La lista es cerrada a proposito: el navegador no decide que ajuste del
 /// pipeline se cambia, solo elige entre estos.
-const STYLE_FIELDS: [(&str, &str, Kind); 28] = [
+const STYLE_FIELDS: [(&str, &str, Kind); 38] = [
     ("font_name", "subtitles.font_name", Kind::Text),
     ("font_size", "subtitles.font_size", Kind::Int),
     ("color_active", "subtitles.color_active", Kind::Color),
@@ -106,6 +110,16 @@ const STYLE_FIELDS: [(&str, &str, Kind); 28] = [
     ("music", "audio.music", Kind::Long),
     ("music_volume", "audio.music_volume", Kind::Ratio),
     ("music_duck", "audio.music_duck", Kind::Flag),
+    ("format", "layout.format", Kind::Format),
+    ("sfx", "audio.sfx", Kind::Flag),
+    ("censor_beep", "audio.censor_beep", Kind::Flag),
+    ("cover_text", "output.cover_text", Kind::Flag),
+    ("bg_start", "background.start", Kind::Choice(&["sequence", "random"])),
+    ("bg_speed", "background.speed", Kind::Float(0.5, 2.0)),
+    ("bg_blur", "background.blur", Kind::Ratio),
+    ("bg_dim", "background.dim", Kind::Float(0.0, 0.6)),
+    ("endcard", "end_card.enabled", Kind::Flag),
+    ("endcard_text", "end_card.text", Kind::Text),
 ];
 
 /// Navegadores de los que yt-dlp sabe leer las cookies.
@@ -125,7 +139,23 @@ pub fn style_pairs(form: &Value) -> Vec<(String, Value)> {
             Value::String(s) => s.trim().parse::<f64>().ok(),
             _ => None,
         };
+        // El formato cambia dos ajustes a la vez.
+        if let Kind::Format = kind {
+            let height = match raw.as_str().map(str::trim) {
+                Some("9:16") => Some(1920),
+                Some("4:5") => Some(1350),
+                Some("1:1") => Some(1080),
+                _ => None,
+            };
+            if let Some(height) = height {
+                pairs.push(("layout.width".to_string(), json!(1080)));
+                pairs.push(("layout.height".to_string(), json!(height)));
+            }
+            continue;
+        }
         let value = match kind {
+            Kind::Float(min, max) => number().map(|n| json!((n.clamp(min, max) * 1000.0).round() / 1000.0)),
+            Kind::Format => None,
             Kind::Int => number().map(|n| json!(n.trunc() as i64)),
             Kind::Ratio => number().map(|n| json!((n.clamp(0.0, 1.0) * 1000.0).round() / 1000.0)),
             Kind::Color => {
@@ -1967,6 +1997,31 @@ la guapa=La Guapa"}));
     /// Codifica para una URL todo lo que no sea alfanumerico.
     fn url_encode(text: &str) -> String {
         text.bytes().map(|b| if b.is_ascii_alphanumeric() { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
+    }
+
+    #[test]
+    fn el_formato_cambia_ancho_y_alto_y_el_resto_de_ajustes_se_filtran() {
+        let con = |style: Value| -> std::collections::HashMap<String, Value> { style_pairs(&json!({"style": style})).into_iter().collect() };
+        let v = con(json!({"format": "4:5"}));
+        assert_eq!((v["layout.width"].clone(), v["layout.height"].clone()), (json!(1080), json!(1350)));
+        assert_eq!(con(json!({"format": "1:1"}))["layout.height"], 1080);
+        assert_eq!(con(json!({"format": "9:16"}))["layout.height"], 1920);
+        assert!(con(json!({"format": "16:9"})).is_empty(), "un formato desconocido no cambia nada");
+        let otros = con(json!({"sfx": true, "censor_beep": "true", "cover_text": false, "bg_start": "random", "bg_speed": "1.5", "bg_blur": 0.4, "bg_dim": 5, "endcard": true, "endcard_text": "Sigueme"}));
+        assert_eq!(otros["audio.sfx"], true);
+        assert_eq!(otros["audio.censor_beep"], true);
+        assert_eq!(otros["output.cover_text"], false);
+        assert_eq!(otros["background.start"], "random");
+        assert_eq!(otros["background.speed"], 1.5);
+        assert_eq!(otros["background.dim"], 0.6, "se acota a 0.6");
+        assert_eq!(otros["end_card.text"], "Sigueme");
+        assert!(con(json!({"bg_start": "aleatorio"})).is_empty());
+        // El pipeline los entiende todos.
+        let mut cfg = Config::default();
+        for (ajuste, valor) in style_pairs(&json!({"style": {"format": "4:5", "sfx": true, "bg_start": "random", "bg_speed": 0.75, "endcard": true}})) {
+            cfg.set(&format!("{ajuste}={}", value_text(&valor))).unwrap();
+        }
+        assert_eq!((cfg.layout.height, cfg.audio.sfx, cfg.background.start.as_str(), cfg.background.speed, cfg.end_card.enabled), (1350, true, "random", 0.75, true));
     }
 
     #[test]

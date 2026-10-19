@@ -44,6 +44,8 @@
 - **Composición**: dividido (con el reparto que quieras), solo el pódcast a pantalla completa, o el pódcast en una franja sobre el fondo.
 - **Cinco estilos de subtítulos**: Clásico, Caja, Rotulador, Neón y Sobrio.
 - **Tu marca**: logo y usuario del canal en la esquina que prefieras.
+- **Formatos** 9:16, 4:5 y 1:1, **efectos de sonido** (whoosh y pitido de censura), **portada con el gancho**, **pantalla final** y **fondo** variable (punto, velocidad, desenfoque).
+- **Kits de marca**: logo, usuario y estilo guardados para aplicarlos con un clic.
 - **Música de fondo** que baja sola cuando habla alguien, y una **barra de progreso** sobre el vídeo.
 - **Edición por clip**: corrige el texto de los subtítulos, recorta cada clip y elige su estilo antes de montar.
 - **Perfiles**: guarda todos tus ajustes con un nombre y recupéralos con un clic.
@@ -111,6 +113,26 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
+
+### 1.3.0 (2026-10-19)
+
+- **Formatos**: además de 9:16, salida en 4:5 (feed de Instagram) y 1:1.
+- **Portada con el gancho escrito** encima, opcional.
+- **Efectos de sonido**: un whoosh cuando aparece el rótulo, y un **pitido** que
+  silencia la voz en las palabrotas (además de taparlas en el texto).
+- **Vídeo de fondo**: un punto distinto en cada short, velocidad, desenfoque y
+  oscurecido.
+- **Pantalla final** con un mensaje («Sígueme para más») y tu usuario.
+- **Kits de marca**: guarda el logo, el usuario, los subtítulos y la pantalla final
+  como un kit y aplícalo con un clic, sin tocar el resto de ajustes.
+- El aviso de versión nueva muestra las notas como una lista, y los controles de la
+  revisión tienen nombre para los lectores de pantalla.
+- **Tiempos medidos de verdad**: la interfaz estima ahora unos 3, 12 y 26 minutos
+  para un pódcast de 2 horas (Rápida, Equilibrada y Máxima), sin contar la
+  descarga; las mediciones están en `docs/funcionamiento.md`. La música baja
+  de forma algo más suave.
+- Pruebas nuevas: la interfaz entera con un navegador (`install\probar-interfaz.ps1`,
+  41 comprobaciones) y las descargas del primer arranque de verdad.
 
 ### 1.2.0 (2026-10-19)
 
@@ -199,8 +221,10 @@ publicar una versión sin ella). Lo más reciente, primero.
 
 Es un único ejecutable en Rust (`rust/`) con la interfaz en `web/` incrustada y un instalador de Inno Setup (`install/`).
 
-```bash
-cargo test --release --manifest-path rust/Cargo.toml          # unos 350 tests
+```powershell
+cargo test --release --manifest-path rust/Cargo.toml          # unos 360 tests
+$env:VS_NET_TESTS=1; cargo test --release --manifest-path rust/Cargo.toml   # con red: descargas reales
+powershell -File install\probar-interfaz.ps1                  # la interfaz, con un navegador sin ventana
 powershell -File install\crear-instalador.ps1                 # dist\viralshorts-setup-X.exe
 powershell -File install\publicar.ps1 -Version 1.2.0          # compila, etiqueta y publica la release
 ```

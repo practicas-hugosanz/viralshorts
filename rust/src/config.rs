@@ -415,11 +415,53 @@ pub struct AudioConfig {
     pub music_volume: f64,
     /// La musica baja sola mientras alguien habla.
     pub music_duck: bool,
+    /// Un "whoosh" cuando aparece el rotulo de arriba (tarjeta y gancho).
+    pub sfx: bool,
+    /// En vez de solo tapar las palabrotas en el texto, tambien se silencia la
+    /// voz en ese momento y suena un pitido.
+    pub censor_beep: bool,
 }
 
 impl Default for AudioConfig {
     fn default() -> Self {
-        Self { loudnorm: true, target_i: -14.0, target_tp: -1.5, target_lra: 11.0, music: String::new(), music_volume: 0.18, music_duck: true }
+        Self { loudnorm: true, target_i: -14.0, target_tp: -1.5, target_lra: 11.0, music: String::new(), music_volume: 0.18, music_duck: true, sfx: false, censor_beep: false }
+    }
+}
+
+/// El video de fondo: de donde sale cada clip y como se ve.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BackgroundConfig {
+    /// `sequence`: cada short sigue donde acabo el anterior. `random`: un punto
+    /// cualquiera (el mismo siempre para el mismo clip).
+    pub start: String,
+    /// Velocidad de reproduccion (0.5 a 2).
+    pub speed: f64,
+    /// Desenfoque, de 0 (nada) a 1 (mucho).
+    pub blur: f64,
+    /// Oscurecido, de 0 (nada) a 0.6.
+    pub dim: f64,
+}
+
+impl Default for BackgroundConfig {
+    fn default() -> Self {
+        Self { start: "sequence".into(), speed: 1.0, blur: 0.0, dim: 0.0 }
+    }
+}
+
+/// Pantalla final del clip ("sigueme para mas").
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EndCardConfig {
+    pub enabled: bool,
+    pub text: String,
+    /// Segundos que dura, al final del clip.
+    pub duration: f64,
+}
+
+impl Default for EndCardConfig {
+    fn default() -> Self {
+        Self { enabled: false, text: "Sígueme para más".into(), duration: 2.5 }
     }
 }
 
@@ -594,6 +636,8 @@ pub struct OutputConfig {
     pub render_workers: i64,
     pub thumbnail: bool,
     pub thumbnail_at: f64,
+    /// La portada lleva el gancho escrito encima.
+    pub cover_text: bool,
     pub csv: bool,
     /// Una subcarpeta por ejecucion dentro de `dir`.
     pub run_subfolder: bool,
@@ -612,6 +656,7 @@ impl Default for OutputConfig {
             render_workers: 0,
             thumbnail: true,
             thumbnail_at: 1.2,
+            cover_text: false,
             csv: true,
             run_subfolder: true,
         }
@@ -654,6 +699,8 @@ pub struct Config {
     pub jumpcuts: JumpCutsConfig,
     pub layout: LayoutConfig,
     pub brand: BrandConfig,
+    pub background: BackgroundConfig,
+    pub end_card: EndCardConfig,
     pub progress_bar: ProgressBarConfig,
     pub audio: AudioConfig,
     pub subtitles: SubtitlesConfig,

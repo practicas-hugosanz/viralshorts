@@ -45,6 +45,12 @@ if (-not $entrada.Success -or [string]::IsNullOrWhiteSpace($entrada.Groups[1].Va
     throw "Falta la entrada ### $Version en el 'Historial de cambios' del README. Escribe que cambia en esta version y vuelve a lanzarlo."
 }
 if (-not $Notas) { $Notas = $entrada.Groups[1].Value.Trim() }
+# En el README cada punto va partido en varias lineas: se unen, para que no queden
+# saltos raros en la release ni en el aviso de la aplicacion.
+$Notas = ($Notas -replace '\r?\n[ \t]+(?=\S)', ' ').Trim()
+# El manifiesto lleva las notas en texto plano (sin **negrita** ni `codigo`), que es
+# lo que mostraban las versiones antiguas de la aplicacion; la release, el markdown.
+$NotasPlano = (($Notas -replace '\*\*', '') -replace '`', '') -replace '(?m)^- ', ([string][char]0x2022 + ' ')
 
 # --- 1. version y compilacion ------------------------------------------------------
 $toml = Join-Path $Raiz 'rust\Cargo.toml'
@@ -64,7 +70,7 @@ $setup = Join-Path $Raiz "dist\viralshorts-setup-$Version.exe"
 $huella = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLower()
 $manifiesto = [ordered]@{
     version  = $Version
-    notes    = $Notas
+    notes    = $NotasPlano
     pub_date = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
     url      = "https://github.com/$Publicaciones/releases/download/v$Version/viralshorts-setup-$Version.exe"
     sha256   = $huella

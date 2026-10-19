@@ -148,7 +148,10 @@ code { font: 12.5px Consolas, monospace; background: var(--raise); padding: 1px 
 .note.on { display: flex; }
 .note > .ico { margin-top: 2px; }
 .note-body { flex: 1; min-width: 0; }
-.note-body p { color: var(--mute); margin-top: 2px; }
+.note-body p, .note-body .t { color: var(--mute); margin-top: 2px; }
+.notes-list { margin: 6px 0 2px; padding-left: 18px; }
+.notes-list li { margin: 3px 0; }
+.note-body .t .btn { margin-top: 8px; }
 .note-body .btn { margin-top: 10px; }
 .note.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
 .note.bad > .ico { color: var(--bad); }
@@ -325,7 +328,10 @@ input[type="color"].swatch::-webkit-color-swatch { border: 0; border-radius: 50%
 .screen.mode-full .pod { inset: 0; }
 .screen.mode-full .gamebg, .screen.mode-full .seam { display: none; }
 .screen.mode-center .gamebg { inset: 0; z-index: 0; }
-.screen.mode-center .pod { inset: 34.2% 0 34.2% 0; }
+.screen.mode-center .pod { inset: var(--inset, 34.2%) 0 var(--inset, 34.2%) 0; }
+.phone { transition: aspect-ratio .15s; }
+.kit-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: -4px 0 14px; }
+.kit-row select { width: auto; min-width: 200px; padding-block: 6px; }
 .screen.mode-center .seam { display: none; }
 
 /* Marca: logo y usuario en una esquina. */
@@ -687,11 +693,11 @@ body.modal-open .main { overflow: hidden; }
                 <div class="wide">
                   <span class="lbl-t">Calidad del análisis</span>
                   <div class="seg" role="radiogroup" aria-label="Calidad del análisis">
-                    <label class="choice"><input type="radio" name="preset" value="fast"><b>Rápida</b><em>unos 6 min</em></label>
+                    <label class="choice"><input type="radio" name="preset" value="fast"><b>Rápida</b><em>unos 3 min</em></label>
                     <label class="choice"><input type="radio" name="preset" value="balanced" checked><b>Equilibrada</b><em>unos 12 min</em></label>
-                    <label class="choice"><input type="radio" name="preset" value="best"><b>Máxima</b><em>unos 28 min</em></label>
+                    <label class="choice"><input type="radio" name="preset" value="best"><b>Máxima</b><em>unos 26 min</em></label>
                   </div>
-                  <p class="hint">Tiempos para un pódcast de unas 2 horas en este ordenador. Más calidad significa subtítulos más exactos; la máxima además afina el texto de cada clip con un modelo mayor.</p>
+                  <p class="hint">Tiempos para un pódcast de unas 2 horas, medidos en un i5-12400F sin tarjeta NVIDIA y sin contar la descarga. Más calidad significa subtítulos más exactos; la máxima además afina el texto de cada clip con un modelo mayor.</p>
                   <div class="model-note" id="model-note" hidden>
                     <svg class="ico"><use href="#i-download"/></svg>
                     <div class="note-body"><b id="mn-title"></b><p id="mn-text"></p><div class="bar sm" id="mn-bar" hidden><i id="mn-fill"></i></div></div>
@@ -721,6 +727,15 @@ body.modal-open .main { overflow: hidden; }
                     <label class="choice"><input type="radio" name="comp" value="center"><b>En el centro</b><em>franja sobre el fondo</em></label>
                   </div>
                 </div>
+                <div class="wide">
+                  <span class="lbl-t">Formato del vídeo</span>
+                  <div class="seg" role="radiogroup" aria-label="Formato">
+                    <label class="choice"><input type="radio" name="fmt" value="9:16" checked><b>9:16</b><em>TikTok, Reels, Shorts</em></label>
+                    <label class="choice"><input type="radio" name="fmt" value="4:5"><b>4:5</b><em>feed de Instagram</em></label>
+                    <label class="choice"><input type="radio" name="fmt" value="1:1"><b>1:1</b><em>cuadrado</em></label>
+                  </div>
+                  <input type="hidden" id="st_format" value="9:16">
+                </div>
                 <div class="wide" id="comp-stack">
                   <span class="lbl-t">Cuánto ocupa el pódcast</span>
                   <div class="seg four" role="radiogroup" aria-label="Altura del pódcast">
@@ -733,6 +748,32 @@ body.modal-open .main { overflow: hidden; }
                 </div>
               </div>
               <input type="hidden" id="st_layout" value="stack"><input type="hidden" id="st_top" value="0.5"><input type="hidden" id="st_swap" value="false">
+            </section>
+
+            <section class="card">
+              <h2>Vídeo de fondo</h2>
+              <div class="fields">
+                <div class="wide">
+                  <label class="lbl-t" for="st_bgstart">De dónde sale cada short</label>
+                  <select id="st_bgstart">
+                    <option value="sequence" selected>Uno detrás de otro (cada short sigue donde acabó el anterior)</option>
+                    <option value="random">Un punto distinto cada vez</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="lbl-t" for="st_bgspeed">Velocidad</label>
+                  <div class="slider"><input type="range" id="st_bgspeed" min="0.5" max="2" step="0.05" value="1"><output id="st_bgspeed_out">1.0×</output></div>
+                </div>
+                <div>
+                  <label class="lbl-t" for="st_bgblur">Desenfoque</label>
+                  <div class="slider"><input type="range" id="st_bgblur" min="0" max="100" step="5" value="0"><output id="st_bgblur_out">0%</output></div>
+                </div>
+                <div>
+                  <label class="lbl-t" for="st_bgdim">Oscurecer</label>
+                  <div class="slider"><input type="range" id="st_bgdim" min="0" max="60" step="5" value="0"><output id="st_bgdim_out">0%</output></div>
+                </div>
+              </div>
+              <p class="hint">Un fondo más lento, borroso u oscuro no compite con quien habla.</p>
             </section>
 
             <section class="card">
@@ -790,6 +831,11 @@ body.modal-open .main { overflow: hidden; }
             <section class="card">
               <h2>Tu marca</h2>
               <p class="card-sub">Un logo y tu usuario en una esquina de todos los shorts.</p>
+              <div class="kit-row">
+                <select id="kit" aria-label="Kits de marca"><option value="">Kits de marca guardados</option></select>
+                <button type="button" class="btn sm" id="kit-save">Guardar este aspecto como kit</button>
+                <button type="button" class="btn sm ghost" id="kit-del" hidden>Borrar kit</button>
+              </div>
               <div class="fields">
                 <div class="wide">
                   <label class="lbl-t" for="st_logo">Logo</label>
@@ -826,7 +872,7 @@ body.modal-open .main { overflow: hidden; }
             </section>
 
             <section class="card">
-              <h2>Barra y música</h2>
+              <h2>Barra, sonido y final</h2>
               <div class="fields">
                 <div class="wide">
                   <label class="opt compact" style="padding-top:0"><span class="opt-text"><b>Barra de progreso</b><em>Una barra fina que avanza durante el clip: el espectador ve cuánto falta y aguanta más.</em></span><input type="checkbox" class="switch" id="bar-on"></label>
@@ -842,6 +888,17 @@ body.modal-open .main { overflow: hidden; }
                     <input type="color" id="st_barcolor" value="#ff7a18" style="width:100%;height:38px;padding:2px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-s)">
                   </div>
                 </div>
+                <div class="wide opts">
+                  <label class="opt"><span class="opt-text"><b>Whoosh al aparecer el rótulo</b><em>Un efecto de sonido corto cuando salen la tarjeta y el gancho.</em></span><input type="checkbox" class="switch" id="fx-sfx"></label>
+                  <label class="opt"><span class="opt-text"><b>Pitido en vez de la palabrota</b><em>Además de taparla en el texto, se silencia la voz en ese momento y suena un pitido.</em></span><input type="checkbox" class="switch" id="fx-beep"></label>
+                  <label class="opt"><span class="opt-text"><b>Portada con el gancho escrito</b><em>La imagen de portada de cada short lleva el gancho encima.</em></span><input type="checkbox" class="switch" id="fx-cover"></label>
+                  <label class="opt"><span class="opt-text"><b>Pantalla final</b><em>Los últimos segundos se oscurecen y sale un mensaje, por ejemplo «Sígueme para más».</em></span><input type="checkbox" class="switch" id="fx-end"></label>
+                </div>
+                <div class="wide" id="end-opts" hidden>
+                  <label class="lbl-t" for="st_endtext">Mensaje de la pantalla final</label>
+                  <input type="text" id="st_endtext" maxlength="60" value="Sígueme para más" spellcheck="false">
+                </div>
+                <input type="hidden" id="st_sfx" value="false"><input type="hidden" id="st_beep" value="false"><input type="hidden" id="st_cover" value="false"><input type="hidden" id="st_endcard" value="false">
                 <div class="wide">
                   <label class="lbl-t" for="st_music">Música de fondo</label>
                   <div class="with-button">
@@ -1200,10 +1257,13 @@ const STYLE  = { st_color: "color_active", st_size: "font_size",
                  st_sstyle: "sub_style", st_logo: "logo", st_lpos: "logo_pos",
                  st_lsize: "logo_size", st_lop: "logo_opacity", st_handle: "handle",
                  st_bar: "bar", st_barpos: "bar_pos", st_barcolor: "bar_color",
-                 st_music: "music", st_mvol: "music_volume", st_mduck: "music_duck" };
+                 st_music: "music", st_mvol: "music_volume", st_mduck: "music_duck",
+                 st_format: "format", st_sfx: "sfx", st_beep: "censor_beep", st_cover: "cover_text",
+                 st_bgstart: "bg_start", st_bgspeed: "bg_speed", st_bgblur: "bg_blur", st_bgdim: "bg_dim",
+                 st_endcard: "endcard", st_endtext: "endcard_text" };
 const LOOK   = ["st_color", "st_size", "st_pos", "st_words", "st_font",
                 "st_logo", "st_lsize", "st_lop", "st_handle", "st_barpos", "st_barcolor",
-                "st_music", "st_mvol"];
+                "st_music", "st_mvol", "st_bgspeed", "st_bgblur", "st_bgdim", "st_endtext"];
 
 // ===========================================================================
 // Navegacion
@@ -1231,9 +1291,9 @@ const LENGTHS = {
   long:   { min_duration: 45, max_duration: 60 },
 };
 const PRESETS = {
-  fast:     { model: "small",  beam: "1", regions: "8",  refine: "",               minutes: "unos 6 minutos" },
+  fast:     { model: "small",  beam: "1", regions: "8",  refine: "",               minutes: "unos 3 minutos" },
   balanced: { model: "medium", beam: "1", regions: "",   refine: "",               minutes: "unos 12 minutos" },
-  best:     { model: "medium", beam: "5", regions: "16", refine: "large-v3-turbo", minutes: "unos 28 minutos" },
+  best:     { model: "medium", beam: "5", regions: "16", refine: "large-v3-turbo", minutes: "unos 26 minutos" },
 };
 
 function radio(name)      { const el = document.querySelector(`input[name="${name}"]:checked`); return el ? el.value : ""; }
@@ -1277,7 +1337,7 @@ function updateEta() {
   const n = +$("clips").value || 1;
   const label = preset ? preset.minutes : "un rato";
   $("eta").innerHTML = `Tardará <b>${label}</b> con un pódcast de unas 2 horas, ` +
-                       `más medio minuto por cada uno de los ${n} shorts.`;
+                       `más unos 15 segundos por cada uno de los ${n} shorts (menos con tarjeta gráfica).`;
 }
 
 // ===========================================================================
@@ -1311,7 +1371,7 @@ function styleValues() {
   Object.entries(STYLE).forEach(([id, key]) => {
     let value = $(id).value;
     // El servidor quiere estas en 0..1; en la pagina son porcentajes.
-    if (["position", "logo_size", "logo_opacity", "music_volume"].includes(key)) value = (+value) / 100;
+    if (["position", "logo_size", "logo_opacity", "music_volume", "bg_blur", "bg_dim"].includes(key)) value = (+value) / 100;
     out[key] = value;
   });
   return out;
@@ -1393,6 +1453,23 @@ function paintLook() {
   $("ph_handle").textContent = handle;
   brand.hidden = !handle && (image.hidden || !logo);
 
+  // Formato: el monitor cambia de proporcion; la franja central, tambien.
+  const format = $("st_format").value;
+  const ratio = { "9:16": [9, 16], "4:5": [4, 5], "1:1": [1, 1] }[format] || [9, 16];
+  $("phone").style.aspectRatio = `${ratio[0]} / ${ratio[1]}`;
+  const band = 100 * (9 / 16) * (ratio[0] / ratio[1]);      // franja 16:9 a todo el ancho
+  screen.style.setProperty("--inset", ((100 - band) / 2).toFixed(1) + "%");
+
+  // Fondo: lo que se puede ver en el monitor (desenfoque y oscurecido).
+  $("st_bgspeed_out").textContent = (+$("st_bgspeed").value).toFixed(2).replace(/0$/, "") + "×";
+  $("st_bgblur_out").textContent = $("st_bgblur").value + "%";
+  $("st_bgdim_out").textContent = $("st_bgdim").value + "%";
+  ["st_bgspeed", "st_bgblur", "st_bgdim"].forEach(id => fillRange($(id)));
+  const gamebg = document.querySelector(".gamebg");
+  gamebg.style.filter = `blur(${(+$("st_bgblur").value / 100 * 6).toFixed(1)}px) brightness(${(1 - +$("st_bgdim").value / 100).toFixed(2)})`;
+
+  $("end-opts").hidden = $("st_endcard").value !== "true";
+
   // Barra de progreso y musica.
   const bar = $("ph_bar");
   bar.hidden = $("st_bar").value !== "true";
@@ -1414,6 +1491,9 @@ function syncLook() {
   $("comp-stack").hidden = $("st_layout").value !== "stack";
   setRadio("sstyle", $("st_sstyle").value);
   setRadio("lpos", $("st_lpos").value);
+  setRadio("fmt", $("st_format").value);
+  [["fx-sfx", "st_sfx"], ["fx-beep", "st_beep"], ["fx-cover", "st_cover"], ["fx-end", "st_endcard"]]
+    .forEach(([box, hidden]) => { $(box).checked = $(hidden).value === "true"; });
   $("bar-on").checked = $("st_bar").value === "true";
   $("duck-on").checked = $("st_mduck").value !== "false";
 }
@@ -1620,7 +1700,7 @@ function showNotice(event) {
 
 function showBanner(node, title, body, dismissible = true) {
   node.innerHTML = `<svg class="ico"><use href="#i-${node.dataset.icon}"/></svg>
-    <div class="note-body"><b>${title}</b><p>${body}</p></div>
+    <div class="note-body"><b>${title}</b><div class="t">${body}</div></div>
     ${dismissible ? `<button type="button" class="x" aria-label="Cerrar"><svg class="ico"><use href="#i-x"/></svg></button>` : ""}`;
   const close = node.querySelector(".x");
   if (close) close.addEventListener("click", () => clearBanner(node));
@@ -1634,6 +1714,34 @@ function clearBanner(node) { node.classList.remove("on"); node.innerHTML = ""; }
 const updState = async () => (await fetch("/api/update", { headers: AUTH })).json();
 let updBusy = false;
 
+/** Las notas de una version vienen en un markdown sencillo: puntos con «-» o «•»,
+ *  **negrita** y `codigo`, a veces con las lineas partidas. Se muestran como lista. */
+function formatNotes(raw) {
+  const inline = (text) => escapeHtml(text)
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>");
+  const lines = String(raw || "").replace(/\r/g, "").split("\n");
+  const items = [];
+  let bullets = false;
+  for (const line of lines) {
+    const bullet = line.match(/^\s*(?:[-*•])\s+(.*)$/);
+    if (bullet) { bullets = true; items.push(bullet[1].trim()); }
+    else if (line.trim()) {
+      if (items.length) items[items.length - 1] += " " + line.trim();   // linea partida
+      else items.push(line.trim());
+    }
+  }
+  // «• a • b • c» en una sola linea (el formato plano del manifiesto)
+  if (items.length === 1 && /\s•\s/.test(items[0])) {
+    items.splice(0, 1, ...items[0].split(/\s•\s/).map(t => t.replace(/^•\s*/, "").trim()).filter(Boolean));
+    bullets = true;
+  }
+  if (!items.length) return "";
+  return bullets
+    ? `<ul class="notes-list">${items.map(item => `<li>${inline(item)}</li>`).join("")}</ul>`
+    : `<p>${inline(items.join(" "))}</p>`;
+}
+
 function renderUpdate(state) {
   const node = $("upd");
   $("version-text").textContent = "v" + state.current;
@@ -1646,9 +1754,9 @@ function renderUpdate(state) {
     showBanner(node, "Instalando la actualización",
       "La aplicación se va a cerrar y se volverá a abrir sola en unos segundos.", false);
   } else if (state.available) {
-    const notes = state.available.notes ? `<br>${escapeHtml(state.available.notes)}` : "";
+    const notes = formatNotes(state.available.notes);
     showBanner(node, `Hay una versión nueva: ${escapeHtml(state.available.version)}`,
-      `Tienes la ${escapeHtml(state.current)}.${notes}<br>` +
+      `Tienes la ${escapeHtml(state.current)}.${notes}` +
       `<button type="button" class="btn primary sm" id="upd-go">Actualizar ahora</button>`, false);
     $("upd-go").addEventListener("click", installUpdate);
   } else {
@@ -2004,13 +2112,13 @@ function renderReview(plan) {
         ${clip.motivo ? `<p class="why" style="margin:0">${escapeHtml(clip.motivo)}</p>` : ""}
         <div class="clip-edit">
           <label>Texto de los subtítulos${clip.editado ? ' <span class="chip hot">editado</span>' : ""}</label>
-          <textarea data-role="palabras" rows="4" spellcheck="true" data-orig="${escapeAttr(clip.palabras || clip.texto || "")}">${escapeHtml(clip.palabras || clip.texto || "")}</textarea>
+          <textarea data-role="palabras" aria-label="Texto de los subtítulos" rows="4" spellcheck="true" data-orig="${escapeAttr(clip.palabras || clip.texto || "")}">${escapeHtml(clip.palabras || clip.texto || "")}</textarea>
           <p class="sub-hint">Corrige lo que se haya entendido mal: cada palabra conserva su momento. Si cambias el recorte, el texto vuelve al original de ese tramo.</p>
           <div class="trim-row">
-            <label>Empezar más tarde (s)<input type="number" data-role="trim-start" min="0" max="20" step="0.5" value="${(clip.recorte && clip.recorte.inicio) || 0}"></label>
-            <label>Terminar antes (s)<input type="number" data-role="trim-end" min="0" max="20" step="0.5" value="${(clip.recorte && clip.recorte.fin) || 0}"></label>
+            <label>Empezar más tarde (s)<input type="number" aria-label="Segundos que se quitan al principio" data-role="trim-start" min="0" max="20" step="0.5" value="${(clip.recorte && clip.recorte.inicio) || 0}"></label>
+            <label>Terminar antes (s)<input type="number" aria-label="Segundos que se quitan al final" data-role="trim-end" min="0" max="20" step="0.5" value="${(clip.recorte && clip.recorte.fin) || 0}"></label>
             <label>Estilo de subtítulos
-              <select data-role="estilo">
+              <select data-role="estilo" aria-label="Estilo de subtítulos de este clip">
                 <option value="">El de los ajustes</option>
                 ${[["classic", "Clásico"], ["box", "Caja"], ["marker", "Rotulador"], ["neon", "Neón"], ["minimal", "Sobrio"]]
                   .map(([value, label]) => `<option value="${value}" ${clip.estilo === value ? "selected" : ""}>${label}</option>`).join("")}
@@ -2021,17 +2129,17 @@ function renderReview(plan) {
         </div>
         <div>
           <label>Título de la publicación</label>
-          <input type="text" data-role="titulo" value="${escapeAttr(clip.titulo)}" maxlength="120">
+          <input type="text" aria-label="Título de la publicación" data-role="titulo" value="${escapeAttr(clip.titulo)}" maxlength="120">
           <div class="counted"><span data-count="titulo">0/70</span></div>
         </div>
         <div>
           <label>Gancho: el rótulo de los primeros segundos</label>
-          <input type="text" data-role="gancho" value="${escapeAttr(clip.gancho)}" maxlength="90">
+          <input type="text" aria-label="Gancho" data-role="gancho" value="${escapeAttr(clip.gancho)}" maxlength="90">
           <div class="counted"><span data-count="gancho">0/45</span></div>
         </div>
         <div>
           <label>Hashtags, separados por espacios</label>
-          <input type="text" data-role="hashtags" value="${escapeAttr((clip.hashtags || []).join(" "))}">
+          <input type="text" aria-label="Hashtags" data-role="hashtags" value="${escapeAttr((clip.hashtags || []).join(" "))}">
         </div>
       </div>
     </div>`).join("");
@@ -2190,9 +2298,33 @@ function applyProfile(data) {
   saveForm();
 }
 
+// Un kit de marca es un perfil que solo lleva lo visual: se guarda en el mismo
+// fichero con la marca __kit y se aplica sin tocar el resto de ajustes.
+const KIT_KEYS = ["st_font", "st_size", "st_pos", "st_words", "st_color", "st_sstyle", "st_logo", "st_lpos",
+                  "st_lsize", "st_lop", "st_handle", "st_bar", "st_barpos", "st_barcolor",
+                  "st_endcard", "st_endtext", "st_cover"];
+let savingKit = false;
+const isKit = (data) => !!(data && data.__kit);
+
+function kitSnapshot() {
+  const data = { __kit: true };
+  KIT_KEYS.forEach(k => data[k] = $(k).value);
+  return data;
+}
+
+function fillKits(keep) {
+  const select = $("kit");
+  const names = Object.keys(PROFILES).filter(n => isKit(PROFILES[n])).sort((a, b) => a.localeCompare(b, "es"));
+  select.innerHTML = `<option value="">Kits de marca guardados</option>` +
+    names.map(name => `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`).join("");
+  select.value = names.includes(keep) ? keep : "";
+  $("kit-del").hidden = !select.value;
+}
+
 function fillProfiles(keep) {
+  fillKits($("kit").value);
   const select = $("profile");
-  const names = Object.keys(PROFILES).sort((a, b) => a.localeCompare(b, "es"));
+  const names = Object.keys(PROFILES).filter(n => !isKit(PROFILES[n])).sort((a, b) => a.localeCompare(b, "es"));
   select.innerHTML = `<option value="">Ajustes actuales</option>` +
     names.map(name => `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`).join("");
   select.value = names.includes(keep) ? keep : "";
@@ -2211,7 +2343,34 @@ $("profile").addEventListener("change", () => {
   $("profile-del").hidden = !name;
   if (name && PROFILES[name]) applyProfile(PROFILES[name]);
 });
+$("kit").addEventListener("change", () => {
+  const name = $("kit").value;
+  $("kit-del").hidden = !name;
+  const data = PROFILES[name];
+  if (!name || !data) return;
+  KIT_KEYS.forEach(k => { if (data[k] !== undefined) $(k).value = data[k]; });
+  afterLook();
+});
+$("kit-save").addEventListener("click", () => {
+  savingKit = true;
+  $("profile-new").hidden = false;
+  $("profile-name").placeholder = "Nombre del kit, por ejemplo «Mi canal»";
+  $("profile-name").value = $("kit").value;
+  $("profile-name").focus();
+});
+$("kit-del").addEventListener("click", async () => {
+  const name = $("kit").value;
+  if (!name) return;
+  try {
+    PROFILES = (await post("/api/profiles/delete", { name })).profiles || {};
+    fillProfiles($("profile").value);
+  } catch (error) {
+    showBanner($("banner"), "No se pudo borrar el kit", escapeHtml(error.message));
+  }
+});
 $("profile-save").addEventListener("click", () => {
+  savingKit = false;
+  $("profile-name").placeholder = "Nombre del perfil, por ejemplo «Humor»";
   $("profile-new").hidden = false;
   $("profile-name").value = $("profile").value;
   $("profile-name").focus();
@@ -2221,12 +2380,16 @@ async function saveProfile() {
   const name = $("profile-name").value.trim();
   if (!name) { $("profile-name").focus(); return; }
   try {
-    const answer = await post("/api/profiles/save", { name, data: snapshot() });
+    const answer = await post("/api/profiles/save", { name, data: savingKit ? kitSnapshot() : snapshot() });
     PROFILES = answer.profiles || PROFILES;
-    fillProfiles(name);
+    fillProfiles(savingKit ? $("profile").value : name);
+    if (savingKit) $("kit").value = name;
+    $("kit-del").hidden = !$("kit").value;
     $("profile-new").hidden = true;
-    showBanner($("tip"), `Perfil «${escapeHtml(name)}» guardado`,
-      "Elígelo en el desplegable para recuperar estos ajustes: cantidad, duración, calidad, subtítulos y todo lo de Ajustes.");
+    showBanner($("tip"), savingKit ? `Kit «${escapeHtml(name)}» guardado` : `Perfil «${escapeHtml(name)}» guardado`,
+      savingKit
+        ? "Elígelo en «Tu marca» para recuperar el logo, el usuario, los subtítulos y la pantalla final de un clic."
+        : "Elígelo en el desplegable para recuperar estos ajustes: cantidad, duración, calidad, subtítulos y todo lo de Ajustes.");
   } catch (error) {
     showBanner($("banner"), "No se pudo guardar el perfil", escapeHtml(error.message));
   }
@@ -2338,6 +2501,10 @@ document.querySelectorAll('input[name="sstyle"]').forEach(r =>
 document.querySelectorAll('input[name="lpos"]').forEach(r =>
   r.addEventListener("change", () => { $("st_lpos").value = radio("lpos"); afterLook(); }));
 $("logo-clear").addEventListener("click", () => { $("st_logo").value = ""; afterLook(); });
+document.querySelectorAll('input[name="fmt"]').forEach(r =>
+  r.addEventListener("change", () => { $("st_format").value = radio("fmt"); afterLook(); }));
+[["fx-sfx", "st_sfx"], ["fx-beep", "st_beep"], ["fx-cover", "st_cover"], ["fx-end", "st_endcard"]].forEach(([box, hidden]) =>
+  $(box).addEventListener("change", () => { $(hidden).value = $(box).checked ? "true" : "false"; afterLook(); }));
 $("bar-on").addEventListener("change", () => { $("st_bar").value = $("bar-on").checked ? "true" : "false"; afterLook(); });
 $("duck-on").addEventListener("change", () => { $("st_mduck").value = $("duck-on").checked ? "true" : "false"; afterLook(); });
 $("music-clear").addEventListener("click", () => { $("st_music").value = ""; afterLook(); });

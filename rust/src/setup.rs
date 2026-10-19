@@ -25,18 +25,18 @@ use crate::ffmpeg;
 pub const FFMPEG_VERSION: &str = "8.0";
 pub const WHISPER_RELEASE: &str = "b5454";
 
-fn ffmpeg_urls() -> Vec<String> {
+pub fn ffmpeg_urls() -> Vec<String> {
     vec![
         format!("https://github.com/GyanD/codexffmpeg/releases/download/{FFMPEG_VERSION}/ffmpeg-{FFMPEG_VERSION}-essentials_build.zip"),
         "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip".into(),
     ]
 }
 
-fn whisper_url(file: &str) -> String {
+pub fn whisper_url(file: &str) -> String {
     format!("https://github.com/ggml-org/whisper.cpp/releases/download/{WHISPER_RELEASE}/{file}")
 }
 
-const YTDLP_URL: &str = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
+pub const YTDLP_URL: &str = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
 
 /// Modelos de voz que ofrece la interfaz: (nombre, MB aproximados). Pesan desde
 /// decenas de MB hasta varios GB, asi que se bajan a peticion y no en el primer

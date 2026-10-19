@@ -43,6 +43,8 @@ fn peticion(dir: &Path, plan: JumpCutPlan, track: Option<Track>, nombre: &str) -
         ass_name: None,
         output: dir.join(nombre),
         work_dir: dir.join("work"),
+        beeps: Vec::new(),
+        whooshes: Vec::new(),
     }
 }
 

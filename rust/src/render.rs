@@ -34,6 +34,10 @@ pub struct RenderRequest {
     pub ass_name: Option<String>,
     pub output: PathBuf,
     pub work_dir: PathBuf,
+    /// Tramos (segundos del clip ya montado) donde se silencia la voz y suena un pitido.
+    pub beeps: Vec<(f64, f64)>,
+    /// Instantes (segundos del clip montado) en que suena un whoosh.
+    pub whooshes: Vec<f64>,
 }
 
 /// Lo que el grafo necesita saber de la version de ffmpeg instalada.
@@ -154,6 +158,11 @@ pub fn panel_heights(cfg: &Config) -> (i64, i64) {
     }
 }
 
+/// `between(t,a,b)+between(t,c,d)...` para varios tramos.
+fn between_any(spans: &[&(f64, f64)]) -> String {
+    spans.iter().map(|(a, b)| format!("between(t,{a:.3},{b:.3})")).collect::<Vec<_>>().join("+")
+}
+
 /// Posicion (x, y) del logo en una expresion de `overlay`.
 fn logo_position(position: &str, margin: i64) -> (String, String) {
     let x = if position.ends_with('l') { margin.to_string() } else { format!("W-w-{margin}") };
@@ -208,10 +217,19 @@ pub fn build_graph(
     // --- panel inferior: el gameplay --------------------------------------
     let mode = cfg.layout.mode.as_str();
     if mode != "full" {
-        let mut bottom = vec!["[1:v]setpts=PTS-STARTPTS".to_string(), format!("fps={fps}")];
+        let speed = cfg.background.speed.clamp(0.5, 2.0);
+        let first = if (speed - 1.0).abs() < 1e-6 { "[1:v]setpts=PTS-STARTPTS".to_string() } else { format!("[1:v]setpts=(PTS-STARTPTS)/{}", fl(speed)) };
+        let mut bottom = vec![first, format!("fps={fps}")];
         bottom.extend(square_pixels(background_info));
         bottom.push(center_crop(background_info, width, bottom_height));
         bottom.extend(cover(width, bottom_height));
+        // Desenfoque y oscurecido del fondo: que no compita con el pódcast.
+        if cfg.background.blur > 0.01 {
+            bottom.push(format!("gblur=sigma={}", fl((cfg.background.blur.clamp(0.0, 1.0) * 24.0 * 10.0).round() / 10.0)));
+        }
+        if cfg.background.dim > 0.01 {
+            bottom.push(format!("eq=brightness=-{}", fl(cfg.background.dim.clamp(0.0, 0.6))));
+        }
         bottom.push("setsar=1".into());
         chains.push(format!("{}[bottom]", bottom.join(",")));
     }
@@ -289,25 +307,59 @@ pub fn build_graph(
     }
     audio.push("aresample=48000".into());
     audio.push("aformat=sample_fmts=fltp:channel_layouts=stereo".into());
-    if cfg.audio.music.is_empty() {
+    // Pitido de censura: la voz se silencia en esos tramos.
+    let beeps: Vec<&(f64, f64)> = request.beeps.iter().filter(|(a, b)| b > a).collect();
+    if !beeps.is_empty() {
+        audio.push(format!("volume='if({},0,1)':eval=frame", between_any(&beeps)));
+    }
+    let whooshes: Vec<f64> = request.whooshes.iter().copied().filter(|t| *t >= 0.0 && *t < clip_seconds).collect();
+    let has_music = !cfg.audio.music.is_empty();
+    if !has_music && beeps.is_empty() && whooshes.is_empty() {
         chains.push(format!("{}[aout]", audio.join(",")));
     } else {
         chains.push(format!("{}[voice]", audio.join(",")));
-        // La musica es la ultima entrada: tras el logo, si lo hay.
-        let music_input = 2 + usize::from(has_logo);
-        let fade_out_at = (clip_seconds - 1.5).max(0.0);
-        chains.push(format!(
-            "[{music_input}:a]volume={},afade=t=in:st=0:d=1,afade=t=out:st={fade_out_at:.3}:d=1.5,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[music]",
-            fl(cfg.audio.music_volume.clamp(0.0, 1.0))
-        ));
-        if cfg.audio.music_duck {
-            // La voz manda: cuando suena, comprime la musica (sidechain).
-            chains.push("[voice]asplit=2[voice_mix][voice_key]".into());
-            chains.push("[music][voice_key]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=400[ducked]".into());
-            chains.push("[voice_mix][ducked]amix=inputs=2:duration=first:normalize=0:dropout_transition=0,alimiter=limit=0.97[aout]".into());
+        // Lo que se suma a la voz, ya como etiquetas de ffmpeg.
+        let mut extras: Vec<String> = Vec::new();
+        if has_music {
+            // La musica es la ultima entrada: tras el logo, si lo hay.
+            let music_input = 2 + usize::from(has_logo);
+            let fade_out_at = (clip_seconds - 1.5).max(0.0);
+            chains.push(format!(
+                "[{music_input}:a]volume={},afade=t=in:st=0:d=1,afade=t=out:st={fade_out_at:.3}:d=1.5,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[music]",
+                fl(cfg.audio.music_volume.clamp(0.0, 1.0))
+            ));
+            if cfg.audio.music_duck {
+                // La voz manda: cuando suena, comprime la musica (sidechain).
+                chains.push("[voice]asplit=2[voice_mix][voice_key]".into());
+                chains.push("[music][voice_key]sidechaincompress=threshold=0.03:ratio=4:attack=15:release=400[ducked]".into());
+                extras.push("[ducked]".into());
+            } else {
+                chains.push("[voice]anull[voice_mix]".into());
+                extras.push("[music]".into());
+            }
         } else {
-            chains.push("[voice][music]amix=inputs=2:duration=first:normalize=0:dropout_transition=0,alimiter=limit=0.97[aout]".into());
+            chains.push("[voice]anull[voice_mix]".into());
         }
+        for (i, at) in whooshes.iter().enumerate() {
+            // Ruido rosa que entra y se va: un "whoosh" sin ficheros de sonido.
+            let ms = (at * 1000.0).round() as i64;
+            chains.push(format!(
+                "anoisesrc=d=0.8:c=pink:r=48000:a=0.5,highpass=f=350,lowpass=f=6000,afade=t=in:st=0:d=0.4,afade=t=out:st=0.35:d=0.45,volume=2.6,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay={ms}|{ms}[whoosh{i}]"
+            ));
+            extras.push(format!("[whoosh{i}]"));
+        }
+        if !beeps.is_empty() {
+            chains.push(format!(
+                "sine=f=1000:d={clip_seconds:.3}:r=48000,volume='if({},3.0,0)':eval=frame,aformat=sample_fmts=fltp:channel_layouts=stereo[beep]",
+                between_any(&beeps)
+            ));
+            extras.push("[beep]".into());
+        }
+        let inputs = 1 + extras.len();
+        chains.push(format!(
+            "[voice_mix]{}amix=inputs={inputs}:duration=first:normalize=0:dropout_transition=0,alimiter=limit=0.97[aout]",
+            extras.join("")
+        ));
     }
 
     chains.join(";\n") + "\n"
@@ -515,6 +567,36 @@ pub fn extract_thumbnail(video: &Path, at: f64) -> Option<PathBuf> {
     output.is_file().then_some(output)
 }
 
+/// Portada con el gancho escrito encima: un fotograma del short con una linea de
+/// subtitulos de un solo fotograma (se reusa el mismo motor que el video).
+pub fn extract_cover(video: &Path, at: f64, text: &str, cfg: &Config, work_dir: &Path) -> Option<PathBuf> {
+    let output = video.with_extension("jpg");
+    let stem = video.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let ass_name = format!("{stem}_portada.ass");
+    let content = crate::subtitles::cover_ass(text, cfg.layout.width, cfg.layout.height, &cfg.subtitles, &cfg.hook);
+    std::fs::create_dir_all(work_dir).ok()?;
+    std::fs::write(work_dir.join(&ass_name), content).ok()?;
+    let mut filter = format!("subtitles=filename={ass_name}");
+    if let Some(dir) = cfg.subtitles.fonts_dir.as_deref().filter(|d| !d.is_empty()) {
+        filter.push_str(&format!(":fontsdir={}", ffmpeg::escape_filter_path(Path::new(dir))));
+    }
+    let args: Vec<String> = [
+        "-ss".to_string(), format!("{:.3}", at.max(0.0)),
+        "-i".to_string(), abs(video),
+        "-vf".to_string(), filter,
+        "-frames:v".to_string(), "1".to_string(),
+        "-q:v".to_string(), "2".to_string(),
+        abs(&output),
+    ]
+    .to_vec();
+    let name = video.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    if let Err(e) = ffmpeg::run(&args, Some(work_dir), None, &format!("portada {name}")) {
+        log::debug!("No se pudo sacar la portada con texto de {name}: {e}");
+        return None;
+    }
+    output.is_file().then_some(output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -535,6 +617,8 @@ mod tests {
             ass_name: ass.map(String::from),
             output: "short_1.mp4".into(),
             work_dir: "w".into(),
+            beeps: Vec::new(),
+            whooshes: Vec::new(),
         }
     }
 
@@ -603,6 +687,49 @@ mod tests {
         assert!(con_logo.contains("[barred][logo]overlay="), "{con_logo}");
     }
 
+    fn grafo_con_peticion(cfg: &Config, peticion: RenderRequest) -> String {
+        let (arriba, abajo) = panel_heights(cfg);
+        build_graph(&peticion, &video(1920, 1080, 1.0), &video(1920, 1080, 1.0), arriba, abajo, cfg, GraphOptions { crop_has_eval: false })
+    }
+
+    #[test]
+    fn el_fondo_se_puede_acelerar_desenfocar_y_oscurecer() {
+        let mut cfg = Config::default();
+        let normal = grafo_compuesto(&cfg);
+        assert!(normal.contains("[1:v]setpts=PTS-STARTPTS,") && !normal.contains("gblur") && !normal.contains("eq=brightness"));
+        cfg.background.speed = 1.5;
+        cfg.background.blur = 0.5;
+        cfg.background.dim = 0.25;
+        let g = grafo_compuesto(&cfg);
+        assert!(g.contains("[1:v]setpts=(PTS-STARTPTS)/1.5,"), "{g}");
+        assert!(g.contains(",gblur=sigma=12.0,eq=brightness=-0.25,setsar=1[bottom]"), "{g}");
+        // La velocidad se acota: nadie quiere el fondo a 10x.
+        cfg.background.speed = 10.0;
+        assert!(grafo_compuesto(&cfg).contains("setpts=(PTS-STARTPTS)/2.0"));
+    }
+
+    #[test]
+    fn los_efectos_de_sonido_se_suman_a_la_voz() {
+        let mut cfg = Config::default();
+        let mut p = peticion(None, None, Some("short_1.ass"));
+        p.whooshes = vec![0.0, 2.5, 99.0];
+        p.beeps = vec![(4.0, 4.4), (9.5, 9.9), (5.0, 5.0)];
+        let g = grafo_con_peticion(&cfg, p);
+        assert!(g.contains("volume='if(between(t,4.000,4.400)+between(t,9.500,9.900),0,1)':eval=frame"), "la voz se silencia en los pitidos: {g}");
+        assert!(g.contains("adelay=0|0[whoosh0]") && g.contains("adelay=2500|2500[whoosh1]"), "{g}");
+        assert!(!g.contains("whoosh2"), "un instante fuera del clip no suena: {g}");
+        assert!(g.contains("sine=f=1000:d=30.000:r=48000,volume='if(between(t,4.000,4.400)+between(t,9.500,9.900),3.0,0)'"), "{g}");
+        assert!(g.contains("[voice_mix][whoosh0][whoosh1][beep]amix=inputs=4:duration=first:normalize=0"), "{g}");
+        // Con musica tambien: la bajada y los efectos conviven.
+        cfg.audio.music = "m.mp3".into();
+        let mut p = peticion(None, None, Some("short_1.ass"));
+        p.whooshes = vec![0.0];
+        let con_musica = grafo_con_peticion(&cfg, p);
+        assert!(con_musica.contains("[voice_mix][ducked][whoosh0]amix=inputs=3"), "{con_musica}");
+        // Sin nada de esto el audio sigue siendo el de siempre.
+        assert!(grafo().contains("aformat=sample_fmts=fltp:channel_layouts=stereo[aout]"));
+    }
+
     #[test]
     fn la_musica_baja_cuando_habla_la_voz() {
         let mut cfg = Config::default();
@@ -611,12 +738,12 @@ mod tests {
         let g = grafo_compuesto(&cfg);
         assert!(g.contains("aformat=sample_fmts=fltp:channel_layouts=stereo[voice]"), "{g}");
         assert!(g.contains("[2:a]volume=0.18,afade=t=in:st=0:d=1,afade=t=out:st=28.500:d=1.5"), "sin logo la musica es la entrada 2: {g}");
-        assert!(g.contains("[music][voice_key]sidechaincompress=") && g.contains("alimiter=limit=0.97[aout]"), "{g}");
+        assert!(g.contains("[music][voice_key]sidechaincompress=") && g.contains("[voice_mix][ducked]amix=inputs=2") && g.contains("alimiter=limit=0.97[aout]"), "{g}");
         cfg.brand.logo = "logo.png".into();
         assert!(grafo_compuesto(&cfg).contains("[3:a]volume="), "con logo pasa a la entrada 3");
         cfg.audio.music_duck = false;
         let sin_bajar = grafo_compuesto(&cfg);
-        assert!(!sin_bajar.contains("sidechaincompress") && sin_bajar.contains("[voice][music]amix="), "{sin_bajar}");
+        assert!(!sin_bajar.contains("sidechaincompress") && sin_bajar.contains("[voice_mix][music]amix="), "{sin_bajar}");
     }
 
     #[test]

@@ -202,6 +202,9 @@ pub fn apply_overrides(cfg: &mut Config, args: &Args) -> Result<(), ConfigError>
     if !["stack", "full", "center"].contains(&cfg.layout.mode.as_str()) {
         return Err(ConfigError::Invalid(format!("layout.mode '{}' no existe: usa stack, full o center.", cfg.layout.mode)));
     }
+    if !["sequence", "random"].contains(&cfg.background.start.as_str()) {
+        return Err(ConfigError::Invalid(format!("background.start '{}' no existe: usa sequence o random.", cfg.background.start)));
+    }
     if !["classic", "box", "marker", "neon", "minimal"].contains(&cfg.subtitles.style.as_str()) {
         return Err(ConfigError::Invalid(format!("subtitles.style '{}' no existe: usa classic, box, marker, neon o minimal.", cfg.subtitles.style)));
     }
@@ -869,9 +872,10 @@ fn render_one(
     let track = facecrop::track_faces(&podcast.path, clip.start, clip.duration(), &cfg.reframe, Some(Path::new(&cfg.paths.cache_dir)), energy);
 
     // 4. Subtitulos + rotulo de gancho.
+    let title_text = metadata::card_text(&podcast.title, meta.map_or("", |m| m.title.as_str()), cfg);
+    let hook_text = meta.map_or("", |m| m.hook.as_str());
     let mut ass_name = None;
-    if cfg.subtitles.enabled || !cfg.brand.handle.trim().is_empty() {
-        let title_text = metadata::card_text(&podcast.title, meta.map_or("", |m| m.title.as_str()), cfg);
+    if cfg.subtitles.enabled || !cfg.brand.handle.trim().is_empty() || cfg.end_card.enabled {
         let mut content = subtitles::build_ass(
             &words,
             cfg.layout.width,
@@ -893,6 +897,7 @@ fn render_one(
                 (w, (w as f64 * logo_h as f64 / logo_w as f64).round() as i64)
             });
         subtitles::append_handle(&mut content, &cfg.brand, cfg.layout.width, cfg.layout.height, cuts.output_duration(), &cfg.subtitles, logo_size);
+        subtitles::append_end_card(&mut content, &cfg.end_card, &cfg.brand.handle, cfg.layout.width, cfg.layout.height, cuts.output_duration(), &cfg.subtitles);
         let name = format!("short_{number}.ass");
         subtitles::write_ass(&content, &work_dir.join(&name)).map_err(|e| format!("No se pudo escribir {name}: {e}"))?;
         ass_name = Some(name);
@@ -901,7 +906,28 @@ fn render_one(
     // 5. Punto de entrada del fondo, distinto para cada clip y con vuelta al
     //    principio si el gameplay se acaba.
     let usable = (background_duration - clip.duration()).max(1.0);
-    let offset = ((number as f64 - 1.0) * clip.duration()) % usable;
+    let offset = if cfg.background.start == "random" {
+        // Un punto cualquiera, pero siempre el mismo para el mismo clip: rehacer
+        // un short no le cambia el fondo.
+        let mixed = (clip.start.to_bits() ^ (number as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        ((mixed >> 11) as f64 / (1u64 << 53) as f64) * usable
+    } else {
+        ((number as f64 - 1.0) * clip.duration()) % usable
+    };
+
+    // Efectos de sonido: el pitido tapa las palabrotas; el whoosh acompana al rotulo.
+    let beeps = if cfg.audio.censor_beep && cfg.subtitles.censor_profanity { subtitles::censored_intervals(&words, &cfg.subtitles) } else { Vec::new() };
+    let mut whooshes = Vec::new();
+    if cfg.audio.sfx {
+        let card = cfg.title_card.enabled && !title_text.is_empty();
+        let hook = cfg.hook.enabled && !hook_text.is_empty();
+        if card || hook {
+            whooshes.push(0.0);
+        }
+        if card && hook && cfg.title_card.duration > 0.3 {
+            whooshes.push(cfg.title_card.duration.min(cuts.output_duration()));
+        }
+    }
 
     let output = output_dir.join(format!("short_{number}.mp4"));
     render::render(
@@ -916,13 +942,20 @@ fn render_one(
             ass_name,
             output: output.clone(),
             work_dir: work_dir.to_path_buf(),
+            beeps,
+            whooshes,
         },
         cfg,
     )
     .map_err(|e: FfmpegError| e.to_string())?;
 
     if cfg.output.thumbnail {
-        render::extract_thumbnail(&output, cfg.output.thumbnail_at);
+        let cover = (cfg.output.cover_text && !hook_text.is_empty())
+            .then(|| render::extract_cover(&output, cfg.output.thumbnail_at, hook_text, cfg, work_dir))
+            .flatten();
+        if cover.is_none() {
+            render::extract_thumbnail(&output, cfg.output.thumbnail_at);
+        }
     }
 
     write_sidecar(&output, clip, meta, podcast, &cuts);

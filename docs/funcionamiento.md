@@ -649,7 +649,49 @@ Otras palancas si sigue siendo mucho:
   que se instala solo tiene CUDA (para codificar vídeo sí vale, ver
   `hardware_encoder`).
 
-El render son 1-3 minutos por clip con `zoom` activado, y bastante menos sin él.
+### Mediciones con whisper.cpp (versión 1.3)
+
+Medido el 19 de octubre de 2026 en un i5-12400F (6 núcleos, 12 hilos), 15,8 GB de
+RAM y una AMD Radeon RX 6600, sin tarjeta NVIDIA (la transcripción va por CPU),
+sobre un pódcast de 20m37s. Los tiempos de transcripción **no incluyen** la
+descarga del modelo, que se midió aparte.
+
+| Calidad | Modelo | Audio transcrito | Tiempo | Velocidad |
+|---|---|---|---|---|
+| Rápida | `small`, beam 1, 8 zonas | 9m35s (6 zonas) | 90 s | 6,4x tiempo real |
+| Equilibrada | `medium`, beam 1 | 16m10s (7 zonas) | 443 s | 2,2x |
+| Máxima | `medium`, beam 5, 16 zonas | 16m40s (7 zonas) | 633 s | 1,6x |
+| Máxima, afinado | `large-v3-turbo`, beam 5, solo los clips | 4m23s (9 clips) | 195 s | 1,35x |
+
+Con eso se estima un pódcast de **2 horas** (el audio que se transcribe depende
+de las zonas, no de la duración; unos 100-140 s por zona), sin contar la
+descarga del vídeo, que depende de tu conexión:
+
+| Calidad | Transcripción | Más análisis y render de 3 shorts | Total aproximado |
+|---|---|---|---|
+| Rápida | ~2 min | ~1 min | **~3 min** |
+| Equilibrada | ~11 min | ~1 min | **~12 min** |
+| Máxima | ~24 min + ~1 min de afinado | ~1 min | **~26 min** |
+
+Otras medidas, con la misma máquina:
+
+- **Análisis de la energía del audio**: 1 s para 20 minutos de pódcast (unos 6 s
+  para 2 horas).
+- **Render de un short de 23,7 s a 1080x1920**: 12,5 s con la CPU (`libx264`),
+  **4,9 s con la tarjeta gráfica** (`h264_amf`), 10,4 s sin el zoom y 10,3 s sin
+  seguir la cara. Es decir, 2,5 veces más rápido con GPU.
+- **Música con bajada automática** (`audio.music_duck`), sobre la voz real de un
+  clip normalizado a -14 LUFS: con el compresor de entonces (ratio 6) la música
+  bajaba unos 16 dB mientras hablaba alguien; ahora el ratio es 4, algo más suave.
+  La recuperación al callarse (400 ms configurados) no se midió: el clip medido
+  no tiene pausas.
+- **Efectos de sonido**: el whoosh sale a -22,6 dB de media (pico -8,1 dB) y el
+  pitido de censura deja un tono de 1 kHz a -14,4 dB, unos 24 dB por encima del
+  resto del clip; el nivel total en esos tramos es de -13,9 dB, parecido al de la
+  voz (-16,1 dB), y la voz queda silenciada en ellos.
+- **Descargas del primer arranque** (con red): ffmpeg 8.0 (~80 MB), yt-dlp y
+  whisper.cpp se descargan y arrancan en 30 s; las direcciones del motor CUDA y de
+  los cinco modelos de voz responden (`VS_NET_TESTS=1`).
 
 ## Migración de Python a Rust
 
