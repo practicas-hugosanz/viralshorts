@@ -299,7 +299,9 @@ input[type="color"].swatch::-webkit-color-swatch { border: 0; border-radius: 50%
 .create { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; align-items: start; }
 .monitor { position: sticky; top: 24px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .phone {
-  height: clamp(240px, calc(100vh - 400px), 420px); aspect-ratio: 9 / 16;
+  /* La altura manda en vertical; en 4:5 y 1:1 el ancho se acota al del monitor. */
+  --h: clamp(240px, calc(100vh - 400px), 420px); --ar: 9 / 16; --wr: .5625;
+  width: min(100%, calc(var(--h) * var(--wr))); aspect-ratio: var(--ar);
   background: #000; border-radius: 30px; padding: 6px;
   box-shadow: 0 0 0 1.5px var(--line), 0 28px 50px -26px rgba(0,0,0,.65);
 }
@@ -329,7 +331,6 @@ input[type="color"].swatch::-webkit-color-swatch { border: 0; border-radius: 50%
 .screen.mode-full .gamebg, .screen.mode-full .seam { display: none; }
 .screen.mode-center .gamebg { inset: 0; z-index: 0; }
 .screen.mode-center .pod { inset: var(--inset, 34.2%) 0 var(--inset, 34.2%) 0; }
-.phone { transition: aspect-ratio .15s; }
 .kit-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: -4px 0 14px; }
 .kit-row select { width: auto; min-width: 200px; padding-block: 6px; }
 .screen.mode-center .seam { display: none; }
@@ -520,7 +521,7 @@ body.modal-open .main { overflow: hidden; }
 .btn.next { align-self: flex-start; }
 [role="tabpanel"][hidden] { display: none; }
 
-.templates { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 8px; }
+.templates { display: grid; grid-template-columns: repeat(auto-fit, minmax(94px, 1fr)); gap: 8px; }
 .tpl { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); text-align: left; color: var(--text); }
 .tpl svg { width: 30px; height: 54px; margin-bottom: 8px; fill: var(--mute); }
 .tpl b { font-weight: 600; }
@@ -587,7 +588,7 @@ body.modal-open .main { overflow: hidden; }
 @media (max-width: 760px) {
   .create { grid-template-columns: minmax(0, 1fr); }
   .monitor { position: static; order: -1; }
-  .phone { height: 340px; }
+  .phone { --h: 340px; }
   .settings { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 560px) {
@@ -1537,7 +1538,8 @@ function paintLook() {
   // Formato: el monitor cambia de proporcion; la franja central, tambien.
   const format = $("st_format").value;
   const ratio = { "9:16": [9, 16], "4:5": [4, 5], "1:1": [1, 1] }[format] || [9, 16];
-  $("phone").style.aspectRatio = `${ratio[0]} / ${ratio[1]}`;
+  $("phone").style.setProperty("--ar", `${ratio[0]} / ${ratio[1]}`);
+  $("phone").style.setProperty("--wr", String(ratio[0] / ratio[1]));
   const band = 100 * (9 / 16) * (ratio[0] / ratio[1]);      // franja 16:9 a todo el ancho
   screen.style.setProperty("--inset", ((100 - band) / 2).toFixed(1) + "%");
 

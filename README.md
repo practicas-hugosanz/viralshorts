@@ -114,6 +114,12 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
 
+### 1.3.2 (2026-10-19)
+
+- Arreglo: en el formato 1:1 (y en 4:5) la vista previa se salía de su columna y
+  tapaba el menú. Ahora siempre cabe.
+- Las cinco plantillas de aspecto caben en una sola fila en ventanas más estrechas.
+
 ### 1.3.1 (2026-10-19)
 
 - **Interfaz más sencilla.** *Crear* ahora va en dos pasos: **Contenido** (el

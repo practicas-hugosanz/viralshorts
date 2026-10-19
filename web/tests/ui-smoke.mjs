@@ -75,7 +75,8 @@ const look = await run(`(async () => {
   out.swap = $("screen").classList.contains("swap");
   $("comp-swap").click();
   click('input[name="fmt"][value="1:1"]');
-  out.formato = $("phone").style.aspectRatio.replace(/\\s/g, "") === "1/1";
+  const phone = $("phone").getBoundingClientRect(), column = $("phone").parentElement.getBoundingClientRect();
+  out.formato = Math.abs(phone.width - phone.height) < 2 && phone.left >= column.left - 1 && phone.right <= column.right + 1;
   click('input[name="fmt"][value="9:16"]');
   for (const style of ["box", "marker", "neon", "minimal", "classic"]) {
     click('input[name="sstyle"][value="' + style + '"]');
@@ -87,7 +88,7 @@ check('composicion en el centro', look.centro);
 check('composicion a pantalla completa', look.completo);
 check('reparto 60 %', look.ratio);
 check('pódcast abajo', look.swap);
-check('formato 1:1 cambia la proporcion del monitor', look.formato);
+check('en 1:1 el monitor es cuadrado y cabe en su columna', look.formato);
 for (const style of ['box', 'marker', 'neon', 'minimal', 'classic']) check(`estilo ${style} en el monitor`, look['estilo_' + style]);
 
 // ------------------------------------------------------------ lo que se envia al servidor
