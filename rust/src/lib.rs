@@ -3,6 +3,7 @@
 //! Migracion a Rust de la version Python. Cada modulo hace lo mismo que su
 //! homonimo de `viralshorts/*.py`.
 
+pub mod app;
 pub mod audio_energy;
 pub mod config;
 pub mod context;
@@ -23,6 +24,7 @@ pub mod prescan;
 pub mod progress;
 pub mod render;
 pub mod scoring;
+pub mod setup;
 pub mod subtitles;
 pub mod transcribe;
 pub mod words;

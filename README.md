@@ -8,37 +8,50 @@ podcast (YouTube)  ─┐   preselección ─► transcripción ─► puntuaci�
 gameplay (YouTube) ─┘    energía)        zonas calientes)
 ```
 
-Se puede usar con **interfaz visual** (`viralshorts.bat`) o por línea de
-comandos. Las dos hacen exactamente lo mismo.
+Es una **aplicación de escritorio** (ventana propia, icono, instalador) y
+también se puede usar por línea de comandos. Las dos hacen exactamente lo mismo.
 
 ## Instalación
 
-**Windows: doble clic en `viralshorts.bat`.** No hay más. El programa es un
-único `viralshorts.exe` (sin Python ni nada que instalar). La primera vez
-descarga, dentro de la carpeta, las tres herramientas que usa como ejecutables
-—ffmpeg, yt-dlp y whisper.cpp— y abre la interfaz; las siguientes veces arranca
-directamente. Los modelos (voz y caras) los baja el propio programa la primera
-vez que los necesita. No necesita permisos de administrador y no toca el PATH
-del sistema.
+**Windows: ejecuta `viralshorts-setup-<versión>.exe`.** Se instala como
+cualquier programa (menú Inicio, acceso directo en el Escritorio si quieres,
+desinstalador en «Aplicaciones instaladas»), para tu usuario y sin permisos de
+administrador. Después, abre **viralshorts** desde el menú Inicio o el
+Escritorio: es una ventana de escritorio, sin consola ni ficheros `.bat`.
 
-Si algo falla, `install\Reparar instalacion.bat` vuelve a descargar las
-herramientas y `install\log-instalacion.txt` dice qué pasó. `viralshorts.exe
-doctor` (o `install\Comprobar GPU.bat`) muestra qué ve el programa.
+La **primera vez** que se abre, una pantalla de progreso descarga las tres
+herramientas que usa como ejecutables —ffmpeg, yt-dlp y whisper.cpp, unos
+120 MB— y después abre la interfaz; las siguientes veces abre al momento. Los
+modelos (voz y caras) los baja el propio programa la primera vez que los
+necesita. Todo se guarda en `%LOCALAPPDATA%\viralshorts`, los shorts en
+`Vídeos\viralshorts` (se puede cambiar en `config.yaml`, `output.dir`), y no se
+toca el PATH del sistema. Hace falta el *WebView2 Runtime* de Microsoft, que ya
+trae Windows 11 y las versiones recientes de Windows 10; si falta, el programa
+se abre en el navegador.
+
+Al **desinstalar**, pregunta si quieres borrar también las herramientas y los
+modelos descargados (varios cientos de MB). Tus shorts no se tocan.
 
 **GPU (opcional).** La transcripción usa la tarjeta NVIDIA si puede, y el
-procesador si no. Para usar la tarjeta hace falta el motor CUDA de
-whisper.cpp: `install\Activar GPU NVIDIA.bat` lo descarga (~700 MB, con las
-librerías de NVIDIA dentro) y `install\Comprobar GPU.bat` dice en cuál de los
-dos casos estás. Sin él el pipeline no falla, solo va más lento. Si la tarjeta
-falla a mitad de la transcripción, se repite entera en el procesador.
+procesador si no. Si el programa detecta una NVIDIA sin el motor de GPU,
+muestra un aviso con el botón **Activar la GPU** (descarga ~700 MB, una sola
+vez). Sin él todo funciona igual, solo más despacio. Si la tarjeta falla a mitad
+de la transcripción, se repite entera en el procesador.
 
-Para **mandárselo a otra persona**: `Crear paquete para enviar.bat` deja en el
-Escritorio un ZIP de unos 10 MB con el ejecutable, los lanzadores y el
-instalador (sin vídeos, sin caché, sin herramientas ya descargadas y sin tu
-clave de API). El que lo recibe descomprime y hace doble clic en
-`viralshorts.bat`. Si hay Rust instalado, el paquete se compila antes.
+`viralshorts.exe doctor` (en una terminal) muestra qué herramientas ve el
+programa, si hay GPU y la configuración.
 
-Para **compilarlo tú** (hace falta [Rust](https://rustup.rs)):
+Para **fabricar el instalador** (hacen falta [Rust](https://rustup.rs) e
+[Inno Setup](https://jrsoftware.org/isdl.php)):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install\crear-instalador.ps1
+```
+
+Compila el programa y deja `dist\viralshorts-setup-<versión>.exe` (~9 MB). Es lo
+único que hay que pasarle a otra persona.
+
+Para **compilar y probar sin instalador**:
 
 ```bash
 cd rust
@@ -46,12 +59,13 @@ cargo build --release      # deja rust/target/release/viralshorts.exe
 cargo test                 # pruebas
 ```
 
-`viralshorts.bat` usa `viralshorts.exe` si está al lado y, si no, el que deja
-`cargo build --release`.
+Ese `viralshorts.exe` funciona suelto: si al lado tiene `config.yaml` o `bin/`
+(como en esta carpeta de desarrollo) usa esa carpeta como sitio de datos; si no,
+usa `%LOCALAPPDATA%\viralshorts`.
 
-En macOS o Linux el código compila igual, pero los instaladores son de Windows:
-hay que dejar a mano `ffmpeg`, `yt-dlp` y `whisper-cli` en el PATH (o en
-`bin/`).
+En macOS o Linux el código compila igual, pero el instalador y la ventana son de
+Windows: hay que dejar a mano `ffmpeg`, `yt-dlp` y `whisper-cli` en el PATH (o en
+`bin/`) y usar `viralshorts gui`, que abre la interfaz en el navegador.
 
 Para la puntuación con Claude (opcional pero recomendada):
 
@@ -64,10 +78,10 @@ y no genera títulos ni hashtags.
 
 ## Uso: interfaz visual (recomendado)
 
-Doble clic en **`viralshorts.bat`**, o desde la consola:
+Abre **viralshorts** (menú Inicio o Escritorio). Si prefieres el navegador:
 
 ```bash
-viralshorts.exe gui          # --port 8760  --no-browser
+viralshorts gui              # --port 8760  --no-browser
 ```
 
 Se abre el navegador con la interfaz, pensada para que se pueda usar sin haber
@@ -402,10 +416,11 @@ Formato .ASS quemado con libass, palabra por palabra:
 
 | Fichero | Qué es |
 |---|---|
-| `viralshorts.bat` | único punto de entrada: instala si hace falta y abre la interfaz |
-| `install/instalar.ps1` | el instalador (ffmpeg, yt-dlp y whisper.cpp dentro de `bin/`) |
-| `install/empaquetar.ps1` | genera el ZIP que se le manda a otra persona |
+| `install/viralshorts.iss` | el instalador (Inno Setup): instala el `.exe`, accesos directos y desinstalador |
+| `install/crear-instalador.ps1` | compila el programa y fabrica `dist\viralshorts-setup-<versión>.exe` |
 | `rust/` | el programa: un crate de Rust que compila a `viralshorts.exe` |
+| `rust/src/app.rs` | la ventana de escritorio (WebView2) |
+| `rust/src/setup.rs` | el primer arranque: descarga ffmpeg, yt-dlp y whisper.cpp con una pantalla de progreso |
 | `rust/src/gui.rs` | servidor local de la interfaz |
 | `web/index.html` | la propia interfaz (se incrusta en el ejecutable al compilar) |
 | `rust/src/pipeline.rs` | el pipeline y la línea de comandos |
@@ -562,7 +577,7 @@ Otras palancas si sigue siendo mucho:
 - `--regions 8` (menos zonas que mirar, algo menos de variedad al elegir).
 - `--model small` (3x más rápido que `medium`; en español se nota poco).
 - `--no-zoom` acelera el render.
-- Con GPU NVIDIA y el motor CUDA (`install\Activar GPU NVIDIA.bat`) la
+- Con GPU NVIDIA y el motor CUDA (botón «Activar la GPU» de la aplicación) la
   transcripción baja a segundos. Una AMD no sirve para transcribir: el motor
   que se instala solo tiene CUDA (para codificar vídeo sí vale, ver
   `hardware_encoder`).

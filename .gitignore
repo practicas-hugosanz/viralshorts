@@ -26,3 +26,4 @@ venv/
 *.jpg
 publicaciones.csv
 rust/target/
+dist/

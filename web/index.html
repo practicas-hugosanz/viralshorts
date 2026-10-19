@@ -476,6 +476,7 @@
   </div>
 
   <div class="banner tip" id="tip"></div>
+  <div class="banner tip" id="gpu"></div>
   <div class="banner" id="banner"></div>
 
   <!-- ==================================================== formulario ==== -->
@@ -1157,6 +1158,41 @@ function showBanner(node, title, body) {
 }
 function clearBanner(node) { node.classList.remove("on"); node.innerHTML = ""; }
 
+// Tarjeta NVIDIA sin el motor de GPU: se ofrece instalarlo desde aquí.
+let gpuBusy = false;
+function showGpuOffer() {
+  if (gpuBusy || $("gpu").classList.contains("on")) return;
+  const node = $("gpu");
+  node.innerHTML = `<div class="ic">⚡</div>
+    <div><b>Tu tarjeta NVIDIA puede acelerar la transcripción</b>
+    <p id="gpu-text">Hay que descargar un motor extra (unos 700 MB, una sola vez). Sin él todo
+    funciona igual, solo que más despacio.</p>
+    <p><button type="button" id="gpu-go">Activar la GPU</button></p></div>`;
+  node.classList.add("on");
+  $("gpu-go").addEventListener("click", async () => {
+    gpuBusy = true;
+    $("gpu-go").disabled = true;
+    $("gpu-text").textContent = "Descargando el motor de la tarjeta... no cierres la aplicación.";
+    try {
+      await post("/api/setup/start", { gpu: true });
+      for (;;) {
+        await new Promise(r => setTimeout(r, 700));
+        const state = await (await fetch("/api/setup", { headers: AUTH })).json();
+        if (state.error) throw new Error(state.error);
+        if (state.done) break;
+        $("gpu-text").textContent = `Descargando el motor de la tarjeta... ${Math.round((state.overall || 0) * 100)} %`;
+      }
+      $("gpu-text").textContent = "Listo: la próxima transcripción usará la tarjeta.";
+      $("gpu-go").remove();
+      setTimeout(() => clearBanner($("gpu")), 6000);
+    } catch (error) {
+      gpuBusy = false;
+      $("gpu-text").textContent = "No se pudo descargar el motor: " + error.message + " (no pasa nada, sigue funcionando con el procesador).";
+      $("gpu-go").disabled = false;
+    }
+  });
+}
+
 // ===========================================================================
 // Fases visibles
 // ===========================================================================
@@ -1636,16 +1672,16 @@ events.onmessage = (message) => {
       }
       if (event.env && event.env.has_api_key === false && $("llm").checked) {
         showBanner($("tip"), "Puede que Claude no funcione aquí",
-          "No se ha encontrado la variable <code>ANTHROPIC_API_KEY</code>. Si tampoco has " +
-          "iniciado sesión con <code>ant auth login</code>, apaga «Que Claude elija y titule» " +
-          "en los ajustes avanzados: los shorts se siguen haciendo igual, y los títulos y " +
-          "hashtags se sacan de las propias frases del clip.");
+          "No se ha encontrado la clave de Claude (la variable <code>ANTHROPIC_API_KEY</code>). " +
+          "Apaga «Que Claude elija y titule» en los ajustes avanzados: los shorts se siguen " +
+          "haciendo igual, y los títulos y hashtags se sacan de las propias frases del clip.");
       }
       if (event.env && event.env.ffmpeg === false) {
         showBanner($("banner"), "Falta ffmpeg",
-          "Es el programa que monta el vídeo. Instálalo con <code>winget install Gyan.FFmpeg</code>, " +
-          "cierra esta ventana y vuelve a abrir la interfaz.");
+          "Es el programa que monta el vídeo. Cierra viralshorts y vuelve a abrirlo: " +
+          "la primera pantalla lo descarga sola.");
       }
+      if (event.env && event.env.nvidia && event.env.cuda_engine === false) showGpuOffer();
       break;
 
     case "job":

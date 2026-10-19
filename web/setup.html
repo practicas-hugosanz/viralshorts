@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>viralshorts</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #151a22; --line: #232b36; --text: #e8ecf2; --muted: #8b95a5;
+    --accent: #ffb020; --accent2: #ff7a18; --bad: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+    display: grid; place-items: center; padding: 24px;
+  }
+  main { width: min(520px, 100%); text-align: center; }
+  .logo {
+    width: 72px; height: 72px; margin: 0 auto 20px; border-radius: 20px;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    display: grid; place-items: center;
+  }
+  .logo span { display: block; width: 28px; height: 50px; border-radius: 7px; background: #1c1612; position: relative; }
+  .logo span::after {
+    content: ""; position: absolute; left: 9px; top: 18px;
+    border-left: 12px solid #ffd65a; border-top: 7px solid transparent; border-bottom: 7px solid transparent;
+  }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  p { color: var(--muted); margin: 0 0 22px; }
+  .bar { height: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width .4s ease; }
+  .step { margin: 14px 0 0; min-height: 1.5em; color: var(--text); font-size: 14px; }
+  .error { display: none; margin-top: 18px; padding: 12px 14px; text-align: left; border: 1px solid #5a2d2d; background: #2a1a1a; border-radius: 10px; color: #ffb3b3; font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+  button {
+    display: none; margin: 18px auto 0; padding: 10px 22px; border: 0; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent2), var(--accent)); color: #1c1612; font: 600 15px inherit; cursor: pointer;
+  }
+  small { display: block; margin-top: 26px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="logo"><span></span></div>
+  <h1>Preparando viralshorts</h1>
+  <p>Es la primera vez: se descargan las herramientas que usa el programa. Solo pasa una vez y no se instala nada fuera de su carpeta.</p>
+  <div class="bar"><i id="fill"></i></div>
+  <div class="step" id="step">Empezando...</div>
+  <div class="error" id="error"></div>
+  <button id="retry">Reintentar</button>
+  <small>Necesita conexión a internet. Pueden ser unos 120 MB.</small>
+</main>
+<script>
+const TOKEN = "__TOKEN__";
+const AUTH = { "X-VS-Token": TOKEN };
+const $ = id => document.getElementById(id);
+
+async function call(path, body) {
+  const options = body === undefined ? { headers: AUTH } : { method: "POST", headers: { ...AUTH, "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  return (await fetch(path, options)).json();
+}
+
+let started = false;
+async function tick() {
+  let state;
+  try { state = await call("/api/setup"); } catch (e) { setTimeout(tick, 1000); return; }
+
+  if (state.done) { $("fill").style.width = "100%"; $("step").textContent = "Listo"; location.reload(); return; }
+  if (state.error) {
+    $("error").style.display = "block";
+    $("error").textContent = state.error;
+    $("step").textContent = "No se ha podido terminar";
+    $("retry").style.display = "block";
+    return;
+  }
+  if (!state.running && !started) {
+    started = true;
+    await call("/api/setup/start", {});
+  }
+  $("fill").style.width = Math.round((state.overall || 0) * 100) + "%";
+  if (state.step) $("step").textContent = state.step;
+  setTimeout(tick, 500);
+}
+
+$("retry").addEventListener("click", async () => {
+  $("error").style.display = "none";
+  $("retry").style.display = "none";
+  $("step").textContent = "Reintentando...";
+  await call("/api/setup/start", {});
+  setTimeout(tick, 800);
+});
+tick();
+</script>
+</body>
+</html>

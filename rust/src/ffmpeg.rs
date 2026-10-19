@@ -63,29 +63,95 @@ pub fn use_portable_tools(root: &Path) {
     }
 }
 
-/// Carpeta del proyecto: la que contiene `bin/` o `config.yaml`, buscando desde
-/// el ejecutable hacia arriba y despues desde la carpeta actual.
+/// Carpeta de datos del programa (herramientas, modelos, trabajo, configuracion).
+///
+///  1. `VIRALSHORTS_HOME`, si esta puesta.
+///  2. Modo portable: la carpeta del ejecutable (o hasta tres por encima, para
+///     una copia de desarrollo `rust/target/release`) si tiene `config.yaml` o
+///     `bin/` al lado.
+///  3. Instalado: `%LOCALAPPDATA%\viralshorts`, que es donde la aplicacion
+///     guarda todo cuando vive en `Program Files` o en `Programs`.
 pub fn project_root() -> PathBuf {
     if let Some(home) = std::env::var_os("VIRALSHORTS_HOME") {
         return PathBuf::from(home);
     }
-    let mut starts: Vec<PathBuf> = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            starts.push(dir.to_path_buf());
-        }
-    }
-    if let Ok(cwd) = std::env::current_dir() {
-        starts.push(cwd);
-    }
-    for start in &starts {
-        for dir in start.ancestors() {
-            if dir.join("config.yaml").is_file() || dir.join("bin").is_dir() {
-                return dir.to_path_buf();
+    if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
+        for candidate in dir.ancestors().take(4) {
+            if candidate.join("config.yaml").is_file() || candidate.join("bin").is_dir() {
+                return candidate.to_path_buf();
             }
         }
     }
-    starts.pop().unwrap_or_else(|| PathBuf::from("."))
+    data_dir()
+}
+
+/// `%LOCALAPPDATA%\viralshorts` (o el equivalente en otros sistemas).
+pub fn data_dir() -> PathBuf {
+    let base = std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("XDG_DATA_HOME").map(PathBuf::from))
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local").join("share")))
+        .unwrap_or_else(|| PathBuf::from("."));
+    base.join("viralshorts")
+}
+
+/// Donde se guardan los shorts cuando el usuario no ha elegido otra cosa:
+/// `Videos\viralshorts` en su carpeta personal.
+pub fn default_output_dir() -> PathBuf {
+    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).map(PathBuf::from);
+    match home {
+        Some(home) => home.join("Videos").join("viralshorts"),
+        None => PathBuf::from("output"),
+    }
+}
+
+/// La configuracion que se escribe la primera vez en modo instalado: la del
+/// proyecto, con la carpeta de salida en Videos.
+pub fn first_config(template: &str, output_dir: &Path) -> String {
+    let wanted = format!("  dir: \"{}\"", output_dir.display().to_string().replace('\\', "/"));
+    // Con fin de linea de Windows o de Unix, da igual como llegue el fichero.
+    let text = template.replace("\r\n", "\n");
+
+    let mut lines: Vec<String> = Vec::new();
+    let mut section_at: Option<usize> = None; // donde esta "output:"
+    let mut inside = false;
+    let mut replaced = false;
+    for line in text.lines() {
+        if line == "output:" {
+            section_at = Some(lines.len());
+            inside = true;
+        } else if inside && !line.is_empty() && !line.starts_with(' ') && !line.starts_with('#') {
+            inside = false; // otra seccion
+        }
+        if inside && !replaced && line.starts_with("  dir:") {
+            lines.push(wanted.clone());
+            replaced = true;
+        } else {
+            lines.push(line.to_string());
+        }
+    }
+    match (replaced, section_at) {
+        (true, _) => {}
+        (false, Some(at)) => lines.insert(at + 1, wanted), // la seccion existe pero sin `dir`
+        (false, None) => {
+            lines.push("output:".into());
+            lines.push(wanted);
+        }
+    }
+    lines.join("\n") + "\n"
+}
+
+/// Deja lista la carpeta de datos del modo instalado: existe y tiene un
+/// config.yaml (con la salida en Videos). En modo portable no toca nada.
+pub fn ensure_home(root: &Path, template: &str) {
+    if std::fs::create_dir_all(root).is_err() || root.join("config.yaml").is_file() {
+        return;
+    }
+    // Solo en la carpeta de datos del modo instalado: en una carpeta portable el
+    // config.yaml lo pone el usuario (o no hace falta).
+    if root == data_dir() {
+        let _ = std::fs::write(root.join("config.yaml"), first_config(template, &default_output_dir()));
+    }
 }
 
 /// Busca un ejecutable en el PATH (con las extensiones de Windows).
@@ -769,5 +835,62 @@ mod tests {
     fn un_nombre_concreto_se_respeta() {
         assert_eq!(detect_hardware_encoder_with("h264_amf", |n| n == "h264_amf").as_deref(), Some("h264_amf"));
         assert_eq!(detect_hardware_encoder_with("", |n| n == "h264_nvenc").as_deref(), Some("h264_nvenc"));
+    }
+}
+
+#[cfg(test)]
+mod tests_config_inicial {
+    use super::*;
+    use crate::config::Config;
+
+    fn salida() -> PathBuf {
+        PathBuf::from(r"C:\Users\yo\Videos\viralshorts")
+    }
+
+    fn cargar(texto: &str) -> Config {
+        let mut cfg = Config::default();
+        cfg.merge_yaml(texto, "c.yaml").expect("el YAML resultante debe ser valido");
+        cfg
+    }
+
+    #[test]
+    fn la_carpeta_de_salida_se_cambia_con_fin_de_linea_de_windows_o_unix() {
+        let plantilla = "clips:\n  num_clips: 5\n\noutput:\n  dir: output\n  crf: 20\npaths:\n  work_dir: work\n";
+        for texto in [plantilla.to_string(), plantilla.replace('\n', "\r\n")] {
+            let nuevo = first_config(&texto, &salida());
+            assert_eq!(nuevo.matches("output:").count(), 1, "{nuevo}");
+            let cfg = cargar(&nuevo);
+            assert_eq!(cfg.output.dir, "C:/Users/yo/Videos/viralshorts");
+            assert_eq!((cfg.output.crf, cfg.clips.num_clips, cfg.paths.work_dir.as_str()), (20, 5, "work"));
+        }
+    }
+
+    #[test]
+    fn sin_linea_dir_o_sin_seccion_se_anade_sin_duplicar() {
+        let sin_dir = first_config("output:\n  crf: 18\n", &salida());
+        assert_eq!(cargar(&sin_dir).output.dir, "C:/Users/yo/Videos/viralshorts");
+        assert_eq!(cargar(&sin_dir).output.crf, 18);
+
+        let sin_seccion = first_config("clips:\n  num_clips: 2\n", &salida());
+        assert_eq!(cargar(&sin_seccion).output.dir, "C:/Users/yo/Videos/viralshorts");
+        assert_eq!(sin_seccion.matches("output:").count(), 1);
+        assert_eq!(cargar(&first_config("", &salida())).output.dir, "C:/Users/yo/Videos/viralshorts");
+    }
+
+    #[test]
+    fn el_config_del_proyecto_sirve_de_plantilla_tal_cual() {
+        let plantilla = include_str!("../../config.yaml");
+        let nuevo = first_config(plantilla, &salida());
+        assert_eq!(nuevo.matches("\noutput:").count(), 1);
+        let cfg = cargar(&nuevo);
+        assert_eq!(cfg.output.dir, "C:/Users/yo/Videos/viralshorts");
+        assert_eq!(cfg.clips.max_duration, 45.0, "lo demas se conserva");
+    }
+
+    #[test]
+    fn solo_se_escribe_la_primera_vez_y_solo_en_la_carpeta_de_datos() {
+        let dir = tempfile::tempdir().unwrap();
+        ensure_home(dir.path(), "clips:\n  num_clips: 7\n");
+        assert!(!dir.path().join("config.yaml").exists(), "una carpeta portable no se toca");
     }
 }

@@ -23,6 +23,9 @@ ndarray = "0.17.2"
 rfd = "0.17.2"
 ctrlc = "3.5.2"
 getrandom = "0.4.3"
+wry = "0.57.0"
+tao = "0.37.1"
+zip = "9.0.5"
 
 [dev-dependencies]
 tempfile = "3"
@@ -33,4 +36,8 @@ codegen-units = 4
 strip = true
 
 [target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_System_Console", "Win32_Foundation"] }
 winreg = "0.56.0"
+
+[build-dependencies]
+winresource = "0.1.34"

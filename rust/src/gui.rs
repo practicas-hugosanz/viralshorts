@@ -32,10 +32,11 @@ use crate::config::Config;
 use crate::ffmpeg;
 use crate::pipeline;
 use crate::plan;
-use crate::{fonts, progress};
+use crate::{fonts, progress, setup};
 
 pub const DEFAULT_PORT: u16 = 8760;
 const INDEX_HTML: &str = include_str!("../../web/index.html");
+const SETUP_HTML: &str = include_str!("../../web/setup.html");
 const EVENT_PREFIX: &str = "@@VS ";
 
 /// Nombres con los que el navegador puede llegar legitimamente a este servidor.
@@ -622,6 +623,19 @@ pub fn environment(root: &Path) -> Value {
         "font": font,
         "font_ok": font_ok,
         "font_alternative": if font_ok { String::new() } else { fonts::suggest_alternative(&font) },
+        "nvidia": nvidia_present(),
+        "cuda_engine": setup::cuda_installed(root),
+    })
+}
+
+/// Hay una tarjeta NVIDIA. Se pregunta una sola vez: `environment` se calcula
+/// en cada estado que se manda a la interfaz.
+pub fn nvidia_present() -> bool {
+    static PRESENT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *PRESENT.get_or_init(|| {
+        ffmpeg::which("nvidia-smi").is_some_and(|smi| {
+            ffmpeg::command(smi).arg("-L").stdin(Stdio::null()).output().is_ok_and(|o| o.status.success() && !o.stdout.is_empty())
+        })
     })
 }
 
@@ -727,6 +741,11 @@ pub struct App {
     titles: Mutex<HashMap<String, Value>>,
     /// Dialogo de ficheros del sistema. None = no disponible (y en pruebas).
     picker: Option<Box<dyn Fn(&str) -> Option<String> + Send + Sync>>,
+    /// Instalacion de las herramientas (primer arranque, motor de GPU).
+    setup: Arc<setup::Shared>,
+    /// Con true, mientras falten herramientas la pagina principal es la de
+    /// instalacion. En las pruebas va apagado.
+    setup_required: bool,
 }
 
 impl App {
@@ -737,11 +756,28 @@ impl App {
             job: Job::new(root, spawner),
             titles: Mutex::new(HashMap::new()),
             picker: Some(Box::new(native_picker)),
+            setup: Arc::new(Mutex::new(setup::State::default())),
+            setup_required: true,
         })
     }
 
     pub fn with_job(root: &Path, job: Arc<Job>, token: &str) -> Arc<Self> {
-        Arc::new(Self { token: token.to_string(), root: root.to_path_buf(), job, titles: Mutex::new(HashMap::new()), picker: None })
+        Arc::new(Self {
+            token: token.to_string(),
+            root: root.to_path_buf(),
+            job,
+            titles: Mutex::new(HashMap::new()),
+            picker: None,
+            setup: Arc::new(Mutex::new(setup::State::default())),
+            setup_required: false,
+        })
+    }
+
+    /// Lanza la instalacion de lo que falte (o del motor de GPU) en un hilo.
+    fn start_setup(&self, gpu: bool) {
+        let tools = if gpu { vec![setup::Tool::WhisperCuda] } else { setup::missing(&self.root) };
+        let (root, state) = (self.root.clone(), self.setup.clone());
+        std::thread::spawn(move || setup::install(&root, &tools, &state));
     }
 }
 
@@ -913,12 +949,17 @@ pub fn handle_connection(app: &Arc<App>, mut stream: TcpStream) {
 
 fn handle_get(app: &Arc<App>, request: &Request, mut stream: TcpStream) {
     match request.path.as_str() {
-        "/" => respond(
-            &mut stream,
-            200,
-            &[("Content-Type", "text/html; charset=utf-8".into()), ("Cache-Control", "no-store".into())],
-            INDEX_HTML.replace("__TOKEN__", &app.token).as_bytes(),
-        ),
+        "/" => {
+            // Sin las herramientas no hay nada que hacer: primero se instalan.
+            let page = if app.setup_required && !setup::missing(&app.root).is_empty() { SETUP_HTML } else { INDEX_HTML };
+            respond(
+                &mut stream,
+                200,
+                &[("Content-Type", "text/html; charset=utf-8".into()), ("Cache-Control", "no-store".into())],
+                page.replace("__TOKEN__", &app.token).as_bytes(),
+            )
+        }
+        "/api/setup" => respond_json(&mut stream, 200, &app.setup.lock().unwrap_or_else(|e| e.into_inner()).to_json(&app.root)),
         "/api/state" => respond_json(&mut stream, 200, &app.job.snapshot()),
         "/api/events" => serve_events(app, stream),
         "/api/video" => serve_file(app, request.query.get("f").map_or("", String::as_str), request, &mut stream),
@@ -1071,6 +1112,10 @@ fn handle_post(app: &Arc<App>, request: &Request, stream: &mut TcpStream) {
         "/api/plan/save" => save_plan(app, &body),
         "/api/plan/render" => render_plan(app, &body),
         "/api/title" => (200, probe_title(body["url"].as_str().unwrap_or(""), &app.titles)),
+        "/api/setup/start" => {
+            app.start_setup(body["gpu"].as_bool().unwrap_or(false));
+            (200, json!({"ok": true}))
+        }
         "/api/browse" => browse(app, body["kind"].as_str().unwrap_or("file")),
         _ => return respond_error(stream, 404, "no encontrado"),
     };
@@ -1192,31 +1237,45 @@ pub fn open_browser(url: &str) {
     }
 }
 
-/// `viralshorts gui`: levanta el servidor y abre el navegador. No vuelve hasta
-/// que se cierra la ventana o con Ctrl+C.
-pub fn run(port: u16, browser: bool) -> i32 {
+/// El servidor ya en marcha (en su propio hilo): la aplicacion, el puerto y la
+/// direccion completa, con el token.
+pub struct Running {
+    pub app: Arc<App>,
+    pub port: u16,
+    pub url: String,
+}
+
+/// Prepara la carpeta de datos y levanta el servidor local en un hilo.
+pub fn launch(port: u16) -> Result<Running, String> {
     let root = ffmpeg::project_root();
-    if !INDEX_HTML.contains("__TOKEN__") {
-        eprintln!("La pagina de la interfaz no es la esperada.");
-        return 2;
-    }
+    ffmpeg::ensure_home(&root, include_str!("../../config.yaml"));
     // Todo lo relativo (config.yaml, work/, output/) se resuelve desde la carpeta
-    // del programa, se lance desde donde se lance.
+    // de datos, se lance desde donde se lance.
     let _ = std::env::set_current_dir(&root);
 
-    let listener = match free_listener(port) {
-        Ok(listener) => listener,
+    let listener = free_listener(port).map_err(|e| e.to_string())?;
+    let port = listener.local_addr().map_or(port, |a| a.port());
+    let app = App::new(&root, real_spawner());
+    let url = format!("http://127.0.0.1:{port}/?t={}", app.token);
+
+    let _ = progress::mode(); // se resuelve aqui, no a mitad de un trabajo
+    let serving = app.clone();
+    std::thread::spawn(move || serve_forever(serving, listener));
+    Ok(Running { app, port, url })
+}
+
+/// `viralshorts gui`: la interfaz en el navegador, para quien lo prefiera o no
+/// tenga WebView2. No vuelve hasta Ctrl+C.
+pub fn run(port: u16, browser: bool) -> i32 {
+    let running = match launch(port) {
+        Ok(running) => running,
         Err(error) => {
             eprintln!("{error}");
             return 2;
         }
     };
-    let port = listener.local_addr().map_or(port, |a| a.port());
-    let app = App::new(&root, real_spawner());
-    let url = format!("http://127.0.0.1:{port}/?t={}", app.token);
-
     {
-        let job = app.job.clone();
+        let job = running.app.job.clone();
         let _ = ctrlc::set_handler(move || {
             job.stop();
             std::process::exit(130);
@@ -1226,18 +1285,17 @@ pub fn run(port: u16, browser: bool) -> i32 {
     println!("{}", "=".repeat(62));
     println!(" viralshorts - interfaz visual");
     println!("{}", "=".repeat(62));
-    println!(" Abre esta direccion si no se abre sola:\n   {url}");
-    println!(" Cierra esta ventana (o Ctrl+C) para apagar la interfaz.");
+    println!(" Abre esta direccion si no se abre sola:\n   {}", running.url);
+    println!(" Ctrl+C para apagar la interfaz.");
     println!("{}", "=".repeat(62));
     let _ = std::io::stdout().flush();
     if browser {
-        open_browser(&url);
+        open_browser(&running.url);
     }
 
-    let _ = progress::mode(); // se resuelve aqui, no a mitad de un trabajo
-    serve_forever(app.clone(), listener);
-    app.job.stop();
-    0
+    loop {
+        std::thread::sleep(Duration::from_secs(3600));
+    }
 }
 
 /// Cuanto tarda en pasar a "terminado" un trabajo (para las pruebas).

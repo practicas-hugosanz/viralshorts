@@ -249,8 +249,19 @@ pub fn run(args: &Args) -> i32 {
     code
 }
 
+/// `config.yaml` de la carpeta actual o, si no hay, el de la carpeta de datos
+/// del programa (donde lo deja la instalacion).
+pub fn resolve_config(path: &Path) -> PathBuf {
+    if path.is_file() || path.is_absolute() {
+        return path.to_path_buf();
+    }
+    let in_home = ffmpeg::project_root().join(path);
+    if in_home.is_file() { in_home } else { path.to_path_buf() }
+}
+
 fn load_config(args: &Args) -> Result<Config, ConfigError> {
-    let mut cfg = Config::load(args.config.is_file().then_some(args.config.as_path()))?;
+    let path = resolve_config(&args.config);
+    let mut cfg = Config::load(path.is_file().then_some(path.as_path()))?;
     apply_overrides(&mut cfg, args)?;
     Ok(cfg)
 }

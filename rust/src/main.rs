@@ -1,11 +1,17 @@
 //! viralshorts: de un podcast de YouTube a shorts verticales subtitulados.
 //!
-//! Sin subcomando hace lo mismo que `python pipeline.py`: elige los momentos y
-//! monta los shorts. Los subcomandos son utilidades:
+//! Sin argumentos abre la aplicacion (una ventana con la interfaz). Con
+//! `--podcast` y `--background` (o `--from-plan`) elige los momentos y monta los
+//! shorts por linea de comandos. Los subcomandos son utilidades:
 //!
 //!   viralshorts doctor    comprueba ffmpeg, whisper.cpp, el codificador y la configuracion
 //!   viralshorts config    muestra la configuracion efectiva (YAML + --set)
-//!   viralshorts gui       abre la interfaz visual en el navegador
+//!   viralshorts gui       la interfaz en el navegador, sin ventana propia
+//!
+//! En Windows es una aplicacion de ventana (sin consola al hacer doble clic).
+//! Lanzada desde una terminal se engancha a ella para poder escribir.
+
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -42,12 +48,28 @@ enum Command {
     },
 }
 
+/// Sin consola propia, `println!` y los registros no tienen donde escribir
+/// cuando se lanza desde una terminal: se engancha a la de quien lo lanzo.
+#[cfg(windows)]
+fn attach_parent_console() {
+    // ATTACH_PARENT_PROCESS = (DWORD)-1. Si no hay terminal (doble clic) falla y no pasa nada.
+    unsafe {
+        windows_sys::Win32::System::Console::AttachConsole(u32::MAX);
+    }
+}
+
+#[cfg(not(windows))]
+fn attach_parent_console() {}
+
 fn main() -> ExitCode {
+    attach_parent_console();
     let cli = Cli::parse();
     logging::setup(cli.args.verbose);
     ffmpeg::use_portable_tools(&ffmpeg::project_root());
 
+    let sin_trabajo = cli.args.podcast.is_none() && cli.args.background.is_none() && cli.args.from_plan.is_none();
     let code = match &cli.command {
+        None if sin_trabajo => viralshorts::app::run(),
         None => pipeline::run(&cli.args),
         Some(Command::Config) => show_config(&cli.args),
         Some(Command::Doctor) => doctor(&cli.args),
@@ -57,7 +79,8 @@ fn main() -> ExitCode {
 }
 
 fn load(args: &Args) -> Result<Config, ConfigError> {
-    let path: &Path = &args.config;
+    let path = pipeline::resolve_config(&args.config);
+    let path: &Path = &path;
     let mut cfg = Config::load(path.is_file().then_some(path))?;
     for item in &args.overrides {
         cfg.set(item)?;
