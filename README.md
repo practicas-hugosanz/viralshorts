@@ -13,32 +13,45 @@ comandos. Las dos hacen exactamente lo mismo.
 
 ## Instalación
 
-**Windows: doble clic en `viralshorts.bat`.** No hay más. La primera vez busca
-(o instala) Python, crea un entorno virtual dentro de la carpeta, instala las
-dependencias, descarga una copia portable de ffmpeg y abre la interfaz; las
-siguientes veces arranca directamente. No necesita permisos de administrador y
-no toca el Python ni el PATH del sistema.
+**Windows: doble clic en `viralshorts.bat`.** No hay más. El programa es un
+único `viralshorts.exe` (sin Python ni nada que instalar). La primera vez
+descarga, dentro de la carpeta, las tres herramientas que usa como ejecutables
+—ffmpeg, yt-dlp y whisper.cpp— y abre la interfaz; las siguientes veces arranca
+directamente. Los modelos (voz y caras) los baja el propio programa la primera
+vez que los necesita. No necesita permisos de administrador y no toca el PATH
+del sistema.
 
-Si algo falla, `install\Reparar instalacion.bat` lo rehace desde cero y
-`install\log-instalacion.txt` dice qué pasó.
+Si algo falla, `install\Reparar instalacion.bat` vuelve a descargar las
+herramientas y `install\log-instalacion.txt` dice qué pasó. `viralshorts.exe
+doctor` (o `install\Comprobar GPU.bat`) muestra qué ve el programa.
 
 **GPU (opcional).** La transcripción usa la tarjeta NVIDIA si puede, y el
-procesador si no. Para usar la tarjeta hacen falta cuBLAS y cuDNN, que no
-vienen con `faster-whisper`: `install\Activar GPU NVIDIA.bat` los instala
-(~600 MB) y `install\Comprobar GPU.bat` dice en cuál de los dos casos estás.
-Sin ellos el pipeline no falla, solo va más lento.
+procesador si no. Para usar la tarjeta hace falta el motor CUDA de
+whisper.cpp: `install\Activar GPU NVIDIA.bat` lo descarga (~700 MB, con las
+librerías de NVIDIA dentro) y `install\Comprobar GPU.bat` dice en cuál de los
+dos casos estás. Sin él el pipeline no falla, solo va más lento. Si la tarjeta
+falla a mitad de la transcripción, se repite entera en el procesador.
 
 Para **mandárselo a otra persona**: `Crear paquete para enviar.bat` deja en el
-Escritorio un ZIP con solo lo necesario (sin `.venv`, sin vídeos, sin caché, y
-sin tu clave de API). El que lo recibe descomprime y hace doble clic en
-`viralshorts.bat`.
+Escritorio un ZIP de unos 10 MB con el ejecutable, los lanzadores y el
+instalador (sin vídeos, sin caché, sin herramientas ya descargadas y sin tu
+clave de API). El que lo recibe descomprime y hace doble clic en
+`viralshorts.bat`. Si hay Rust instalado, el paquete se compila antes.
 
-En macOS o Linux, a mano:
+Para **compilarlo tú** (hace falta [Rust](https://rustup.rs)):
 
 ```bash
-pip install -r requirements.txt
-brew install ffmpeg                 # Linux: sudo apt install ffmpeg
+cd rust
+cargo build --release      # deja rust/target/release/viralshorts.exe
+cargo test                 # pruebas
 ```
+
+`viralshorts.bat` usa `viralshorts.exe` si está al lado y, si no, el que deja
+`cargo build --release`.
+
+En macOS o Linux el código compila igual, pero los instaladores son de Windows:
+hay que dejar a mano `ffmpeg`, `yt-dlp` y `whisper-cli` en el PATH (o en
+`bin/`).
 
 Para la puntuación con Claude (opcional pero recomendada):
 
@@ -54,7 +67,7 @@ y no genera títulos ni hashtags.
 Doble clic en **`viralshorts.bat`**, o desde la consola:
 
 ```bash
-python gui.py
+viralshorts.exe gui          # --port 8760  --no-browser
 ```
 
 Se abre el navegador con la interfaz, pensada para que se pueda usar sin haber
@@ -104,25 +117,29 @@ cerrar la ventana de consola.
 
 ```bash
 # Lo normal
-python pipeline.py --podcast <URL> --background <URL_gameplay>
+viralshorts --podcast <URL> --background <URL_gameplay>
 
 # Ver qué momentos elegiría, sin renderizar (rápido y gratis)
-python pipeline.py --podcast <URL> --background gameplay.mp4 --dry-run
+viralshorts --podcast <URL> --background gameplay.mp4 --dry-run
 
 # 5 clips, en inglés, sin Claude
-python pipeline.py --podcast <URL> --background <URL> --clips 5 --language en --no-llm
+viralshorts --podcast <URL> --background <URL> --clips 5 --language en --no-llm
 
 # Cambiar cualquier ajuste sin tocar el YAML
-python pipeline.py --podcast <URL> --background <URL> \
-                   --set subtitles.font_size=80 --set output.hardware_encoder=off
+viralshorts --podcast <URL> --background <URL> \
+            --set subtitles.font_size=80 --set output.hardware_encoder=off
 
 # En dos tiempos: elegir ahora, revisar, y montar solo lo que valga
-python pipeline.py --podcast <URL> --background <URL> --plan-out work/plans/hoy.json
-python pipeline.py --from-plan work/plans/hoy.json --only 1,4,7
+viralshorts --podcast <URL> --background <URL> --plan-out work/plans/hoy.json
+viralshorts --from-plan work/plans/hoy.json --only 1,4,7
+
+# Utilidades
+viralshorts doctor           # qué herramientas ve, GPU, configuración
+viralshorts config           # la configuración efectiva (YAML + --set)
 ```
 
 Tanto `--podcast` como `--background` aceptan una URL o un fichero local.
-`python pipeline.py --help` lista todas las opciones.
+`viralshorts --help` lista todas las opciones.
 
 Salida en `output/<titulo-del-podcast>_<fecha>/` (una carpeta por ejecución, así
 un podcast nuevo no pisa los shorts del anterior; `--set output.run_subfolder=off`
@@ -277,7 +294,7 @@ El heatmap dice **dónde** está lo bueno; no dice dónde **empieza**. Un recort
 puede caer en el minuto más rebobinado del pódcast y aun así ser inservible
 porque arranca en «…y entonces eso es justo lo que le pasó a él».
 
-`viralshorts/context.py` puntúa lo autocontenido que es el arranque de cada
+`rust/src/context.rs` puntúa lo autocontenido que es el arranque de cada
 ventana candidata, con tres señales y sin modelo de lenguaje:
 
 - **La primera palabra en minúscula.** Whisper pone mayúscula al empezar frase,
@@ -312,7 +329,7 @@ lenguaje. Son dos caminos con una diferencia importante:
 
 - **Con Claude** los textos están **redactados**: lee el clip y escribe un
   titular nuevo.
-- **Sin Claude** (`viralshorts/metadata.py`) están **extraídos**: se elige la
+- **Sin Claude** (`rust/src/metadata.rs`) están **extraídos**: se elige la
   mejor frase que el invitado ya ha dicho y se usa tal cual. Nada de
   plantillas tipo «Descubre el secreto de…», que es lo que sale al intentar
   redactar sin entender el contenido; una frase real del clip siempre gana.
@@ -386,19 +403,21 @@ Formato .ASS quemado con libass, palabra por palabra:
 | Fichero | Qué es |
 |---|---|
 | `viralshorts.bat` | único punto de entrada: instala si hace falta y abre la interfaz |
-| `install/setup.ps1` | el instalador (Python, entorno virtual, dependencias, ffmpeg) |
+| `install/instalar.ps1` | el instalador (ffmpeg, yt-dlp y whisper.cpp dentro de `bin/`) |
 | `install/empaquetar.ps1` | genera el ZIP que se le manda a otra persona |
-| `gui.py` | servidor local de la interfaz |
-| `web/index.html` | la propia interfaz |
-| `pipeline.py` | el pipeline por línea de comandos |
-| `viralshorts/` | los módulos: descarga, preselección, transcripción, puntuación, textos, corte, render, plan, exportación |
-| `tests/` | pruebas sin ffmpeg ni red (`python -m unittest discover -s tests -t .`) |
+| `rust/` | el programa: un crate de Rust que compila a `viralshorts.exe` |
+| `rust/src/gui.rs` | servidor local de la interfaz |
+| `web/index.html` | la propia interfaz (se incrusta en el ejecutable al compilar) |
+| `rust/src/pipeline.rs` | el pipeline y la línea de comandos |
+| `rust/src/*.rs` | los módulos: descarga, preselección, transcripción, puntuación, textos, corte, render, plan, exportación |
+| `rust/tests/` | pruebas con ffmpeg, yt-dlp, whisper.cpp y YuNet de verdad (se saltan si falta algo) |
 | `config.yaml` | todos los ajustes |
+| `bin/` | herramientas y modelos descargados (no se versiona) |
 
 ## Configuración
 
 Todo está en `config.yaml`; solo hace falta escribir lo que quieras cambiar. Los
-valores por defecto y su documentación están en `viralshorts/config.py`.
+valores por defecto y su documentación están en `rust/src/config.rs`.
 
 Ajustes que más se tocan:
 
@@ -425,7 +444,7 @@ Cualquier ajuste se puede cambiar también desde la línea de comandos sin tocar
 el fichero, con `--set clave=valor`:
 
 ```bash
-python pipeline.py ... --set subtitles.color_active=#00E676 --set clips.min_gap=120
+viralshorts ... --set subtitles.color_active=#00E676 --set clips.min_gap=120
 ```
 
 ### Fuentes
@@ -512,9 +531,8 @@ De dónde sale cada cosa:
 - **`beam_size: 1`** (2x): búsqueda greedy en vez de beam de 5. Para elegir
   momentos y poner subtítulos la diferencia de calidad es despreciable. Sube a
   5 con `--beam 5` si quieres la transcripción más fina posible.
-- **`cpu_threads`** (1.4x): faster-whisper usa 4 hilos por defecto, lo que en
-  un procesador de 6 núcleos deja media CPU parada. Ahora usa los núcleos
-  físicos.
+- **`cpu_threads`** (1.4x): con el valor por defecto de la librería, un
+  procesador de 6 núcleos queda a medias. Ahora se usan los núcleos físicos.
 
 Y después de eso, lo que se ha ido ganando en el resto del recorrido:
 
@@ -523,8 +541,10 @@ Y después de eso, lo que se ha ido ganando en el resto del recorrido:
   la descarga tardaba mucho más que la conexión. Con `download.max_height: 720`
   se baja a la mitad de datos, a cambio de un pelo de nitidez en el panel de
   arriba.
-- **Transcripción por lotes** (`transcribe.batched`, faster-whisper ≥ 1.1):
-  2-4x más rápido con el mismo modelo y las mismas marcas por palabra.
+- **Transcripción con whisper.cpp**: solo se transcriben las zonas calientes
+  (con `tiny` en CPU, unos 14 minutos de audio tardan ~26 s). Los ajustes
+  `transcribe.batched`, `batch_size`, `vad_filter` y `compute_type` se conservan
+  en el YAML por compatibilidad pero whisper.cpp no los usa.
 - **Codificación por GPU detectada sola** (`output.hardware_encoder: auto`):
   prueba NVENC, QSV y AMF *codificando un fotograma de verdad*, porque ffmpeg
   los lista aunque no haya tarjeta. Si ninguno funciona, libx264.
@@ -542,24 +562,53 @@ Otras palancas si sigue siendo mucho:
 - `--regions 8` (menos zonas que mirar, algo menos de variedad al elegir).
 - `--model small` (3x más rápido que `medium`; en español se nota poco).
 - `--no-zoom` acelera el render.
-- Con GPU NVIDIA (`device: cuda`) la transcripción baja a segundos. Una AMD no
-  sirve: ctranslate2 solo tiene CUDA.
+- Con GPU NVIDIA y el motor CUDA (`install\Activar GPU NVIDIA.bat`) la
+  transcripción baja a segundos. Una AMD no sirve para transcribir: el motor
+  que se instala solo tiene CUDA (para codificar vídeo sí vale, ver
+  `hardware_encoder`).
 
 El render son 1-3 minutos por clip con `zoom` activado, y bastante menos sin él.
+
+## Migración de Python a Rust
+
+El programa se escribió primero en Python (faster-whisper, OpenCV, el SDK de
+Anthropic) y se ha reescrito entero en Rust para que sea un único ejecutable.
+La línea de comandos, `config.yaml`, la interfaz (`web/index.html`), las rutas
+`/api/*`, los planes de montaje (`work/plans/*.json`) y los ficheros que deja
+cada short son los mismos. Lo que cambia por dentro:
+
+| Antes | Ahora |
+|---|---|
+| faster-whisper (CTranslate2) | whisper.cpp (`whisper-cli`), modelos `ggml-<tamaño>.bin` |
+| cuBLAS + cuDNN por `pip` | motor CUDA de whisper.cpp con sus librerías |
+| OpenCV (`FaceDetectorYN`, Haar de respaldo) | YuNet con ONNX Runtime; fotogramas decodificados por ffmpeg; sin Haar |
+| SDK `anthropic` | la API de mensajes por HTTP, mismas peticiones |
+| yt-dlp como librería | yt-dlp como ejecutable |
+| servidor `http.server` + tkinter | servidor propio sobre `std::net` + diálogo nativo (`rfd`) |
+
+Diferencias que se notan: la transcripción sale de otro motor, así que las
+palabras y sus tiempos no son idénticos (y `tiny` falla bastante más que
+`medium`, que es el valor por defecto); y los tiempos de transcripción en CPU
+son varias veces menores. Los shorts de la versión Python pueden convivir en
+`output/`.
 
 ## Pruebas
 
 ```bash
-python -m unittest discover -s tests -t .
+cd rust
+cargo test
 ```
 
-39 pruebas, menos de un segundo, sin tocar ffmpeg, YouTube ni la API. Cubren
-justo lo que falla **en silencio**: los tiempos (jump cuts, remapeo de
+Unas 300 pruebas unitarias (dos segundos, sin red ni API) y las de `rust/tests`,
+que usan ffmpeg de verdad (renderizan un short y comprueban que sale de
+1080x1920 con audio y con la duración del plan) y, si están a mano, yt-dlp,
+whisper.cpp y YuNet. Las que necesitan red solo corren con `VS_NET_TESTS=1`.
+Cubren justo lo que falla **en silencio**: los tiempos (jump cuts, remapeo de
 palabras, tiempos del `.ASS`, expresiones de recorte de ffmpeg), la elección de
 clips (ventanas, hueco mínimo, deduplicación por tema), la configuración y los
-`--set`, el plan de montaje, y los lotes y la caché de las llamadas al modelo.
-Un fallo ahí no rompe nada: saca un short con buena pinta y los subtítulos
-medio segundo desplazados.
+`--set`, el plan de montaje, la seguridad del servidor local y los lotes y la
+caché de las llamadas al modelo. Un fallo ahí no rompe nada: saca un short con
+buena pinta y los subtítulos medio segundo desplazados.
 
 ## Aviso legal
 

@@ -1,18 +1,24 @@
 @echo off
-REM Dice si la transcripcion va a usar la tarjeta grafica o el procesador.
+REM Dice si la transcripcion va a usar la tarjeta grafica o el procesador, y
+REM comprueba de paso que el resto de herramientas estan en su sitio.
 setlocal
 cd /d "%~dp0.."
-title viralshorts - comprobar GPU
+title viralshorts - comprobar
 
-if not exist ".venv\Scripts\python.exe" (
+set "EXE=%~dp0..\viralshorts.exe"
+if not exist "%EXE%" set "EXE=%~dp0..\rust\target\release\viralshorts.exe"
+if not exist "%EXE%" (
   echo(
-  echo  Primero hay que instalar el programa: viralshorts.bat
+  echo  No encuentro viralshorts.exe.
   echo(
   pause
   exit /b 1
 )
 
+if exist "bin\ffmpeg\bin\ffmpeg.exe" set "PATH=%CD%\bin\ffmpeg\bin;%PATH%"
+if exist "bin\yt-dlp.exe" set "PATH=%CD%\bin;%PATH%"
+
 echo(
-".venv\Scripts\python.exe" "install\comprueba_gpu.py"
+"%EXE%" doctor
 echo(
 pause

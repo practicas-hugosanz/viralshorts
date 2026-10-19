@@ -25,3 +25,4 @@ venv/
 # Portadas y hojas de publicacion generadas
 *.jpg
 publicaciones.csv
+rust/target/
