@@ -90,9 +90,16 @@ pub fn fetch_with(ytdlp: &dyn YtDlp, url: &str, dest_base: &Path, cfg: &Download
     let info_path = info_path(dest_base);
 
     if let Some(cached) = find_existing(dest_base) {
-        log::info!("Reutilizando descarga previa: {}", cached.file_name().unwrap_or_default().to_string_lossy());
-        let info = cached_info(ytdlp, url, &info_path, cfg);
-        return build(cached, info);
+        if cache_matches(url, dest_base, &info_path) {
+            log::info!("Reutilizando descarga previa: {}", cached.file_name().unwrap_or_default().to_string_lossy());
+            write_source(url, dest_base);
+            let info = cached_info(ytdlp, url, &info_path, cfg);
+            return build(cached, info);
+        }
+        // Lo que hay en la carpeta de trabajo es de OTRO enlace: servirlo seria
+        // montar el video de antes con el enlace nuevo.
+        log::info!("El enlace ha cambiado: se descarga de nuevo en vez de reutilizar el video anterior.");
+        remove_cache(dest_base, &info_path);
     }
 
     log::info!("Descargando {url}");
@@ -105,7 +112,61 @@ pub fn fetch_with(ytdlp: &dyn YtDlp, url: &str, dest_base: &Path, cfg: &Download
         )));
     };
     save_info(&info, &info_path);
+    write_source(url, dest_base);
     build(downloaded, info)
+}
+
+// ----------------------------------------------------------------------------
+// De que enlace es lo que hay descargado
+// ----------------------------------------------------------------------------
+
+/// Identifica un enlace: el id del video si es de YouTube (todas las formas de
+/// escribirlo dan el mismo), y el texto tal cual en cualquier otro caso.
+pub fn source_key(url: &str) -> String {
+    let url = url.trim();
+    let re = regex::Regex::new(r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|live/|shorts/|embed/)|youtu\.be/)([\w-]{11})").expect("regex valida");
+    match re.captures(url) {
+        Some(found) => format!("yt:{}", &found[1]),
+        None => url.to_lowercase(),
+    }
+}
+
+fn source_path(dest_base: &Path) -> PathBuf {
+    let mut name = dest_base.file_name().unwrap_or_default().to_os_string();
+    name.push(".source");
+    dest_base.with_file_name(name)
+}
+
+fn write_source(url: &str, dest_base: &Path) {
+    let _ = std::fs::write(source_path(dest_base), source_key(url));
+}
+
+/// Lo descargado en `dest_base` es del mismo enlace que `url`? Se mira la marca
+/// que deja cada descarga; en las anteriores a esa marca, el id del video que
+/// guardo yt-dlp. Si no se puede asegurar, se considera de otro enlace.
+fn cache_matches(url: &str, dest_base: &Path, info_path: &Path) -> bool {
+    let wanted = source_key(url);
+    if let Ok(saved) = std::fs::read_to_string(source_path(dest_base)) {
+        return saved.trim() == wanted;
+    }
+    let info: Option<Value> = std::fs::read_to_string(info_path).ok().and_then(|t| serde_json::from_str(&t).ok());
+    let Some(info) = info else { return false };
+    let from_id = info["id"].as_str().filter(|id| !id.is_empty()).map(|id| format!("yt:{id}"));
+    let from_page = info["webpage_url"].as_str().map(source_key);
+    [from_id, from_page].into_iter().flatten().any(|key| key == wanted)
+}
+
+/// Borra el video descargado, sus metadatos y la marca.
+fn remove_cache(dest_base: &Path, info_path: &Path) {
+    // Puede haber varios formatos (mp4 y webm): se quitan todos.
+    for _ in 0..8 {
+        let Some(old) = find_existing(dest_base) else { break };
+        if std::fs::remove_file(&old).is_err() {
+            break;
+        }
+    }
+    let _ = std::fs::remove_file(info_path);
+    let _ = std::fs::remove_file(source_path(dest_base));
 }
 
 fn info_path(dest_base: &Path) -> PathBuf {
@@ -542,6 +603,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let base = dir.path().join("podcast");
         std::fs::write(dir.path().join("podcast.mp4"), b"video").unwrap();
+        std::fs::write(dir.path().join("podcast.source"), "u").unwrap();
         let falso = Falso::default();
         let video = fetch_with(&falso, "u", &base, &DownloadConfig::default()).unwrap();
         assert_eq!(*falso.llamadas.borrow(), ["metadata"]);
@@ -554,6 +616,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("podcast.mp4"), b"video").unwrap();
         std::fs::write(dir.path().join("podcast.info.json"), "{roto").unwrap();
+        std::fs::write(dir.path().join("podcast.source"), "u").unwrap();
         let falso = Falso::default();
         fetch_with(&falso, "u", &dir.path().join("podcast"), &DownloadConfig::default()).unwrap();
         assert_eq!(*falso.llamadas.borrow(), ["metadata"]);
@@ -581,6 +644,55 @@ mod tests {
         std::fs::remove_file(dir.path().join("podcast.mp4")).unwrap();
         assert!(find_existing(&dir.path().join("podcast")).unwrap().ends_with("podcast.webm"));
         assert!(find_existing(&dir.path().join("nada")).is_none());
+    }
+
+    #[test]
+    fn otro_enlace_no_reutiliza_el_video_de_antes() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().join("podcast");
+        let falso = Falso { crea_video: true, ..Default::default() };
+        fetch_with(&falso, "https://youtu.be/AAAAAAAAAAA", &base, &DownloadConfig::default()).unwrap();
+        // El video "viejo" tiene un contenido que lo delata.
+        std::fs::write(dir.path().join("podcast.mp4"), b"VIDEO VIEJO").unwrap();
+        fetch_with(&falso, "https://youtu.be/BBBBBBBBBBB", &base, &DownloadConfig::default()).unwrap();
+        assert_eq!(*falso.llamadas.borrow(), ["download", "download"], "con otro enlace hay que descargar otra vez");
+        assert_eq!(std::fs::read(dir.path().join("podcast.mp4")).unwrap(), b"video", "el video viejo ya no esta");
+        assert_eq!(std::fs::read_to_string(dir.path().join("podcast.source")).unwrap(), "yt:BBBBBBBBBBB");
+    }
+
+    #[test]
+    fn el_mismo_video_escrito_de_otra_forma_si_se_reutiliza() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().join("podcast");
+        let falso = Falso { crea_video: true, ..Default::default() };
+        fetch_with(&falso, "https://youtu.be/dQw4w9WgXcQ", &base, &DownloadConfig::default()).unwrap();
+        fetch_with(&falso, "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=30s", &base, &DownloadConfig::default()).unwrap();
+        assert_eq!(*falso.llamadas.borrow(), ["download"]);
+        assert_eq!(source_key("https://youtube.com/shorts/dQw4w9WgXcQ"), "yt:dQw4w9WgXcQ");
+        assert_eq!(source_key("  HTTPS://Otro.com/Video  "), "https://otro.com/video");
+    }
+
+    #[test]
+    fn una_descarga_antigua_sin_marca_se_reconoce_por_su_id_o_se_descarta() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().join("podcast");
+        std::fs::write(dir.path().join("podcast.mp4"), b"video").unwrap();
+        // Sin marca ni metadatos: no se puede asegurar de quien es.
+        let falso = Falso { crea_video: true, ..Default::default() };
+        fetch_with(&falso, "https://youtu.be/dQw4w9WgXcQ", &base, &DownloadConfig::default()).unwrap();
+        assert_eq!(*falso.llamadas.borrow(), ["download"]);
+        // Con los metadatos de yt-dlp (id) del mismo video, si se reutiliza.
+        std::fs::remove_file(dir.path().join("podcast.source")).unwrap();
+        std::fs::write(dir.path().join("podcast.info.json"), r#"{"id": "dQw4w9WgXcQ", "title": "Antiguo", "duration": 60.0}"#).unwrap();
+        let otra = Falso::default();
+        let video = fetch_with(&otra, "https://youtu.be/dQw4w9WgXcQ", &base, &DownloadConfig::default()).unwrap();
+        assert!(otra.llamadas.borrow().is_empty(), "no llama a yt-dlp");
+        assert_eq!(video.title, "Antiguo");
+        // Pero esos mismos metadatos no valen para otro enlace.
+        std::fs::remove_file(dir.path().join("podcast.source")).unwrap();
+        let tercera = Falso { crea_video: true, ..Default::default() };
+        fetch_with(&tercera, "https://youtu.be/ZZZZZZZZZZZ", &base, &DownloadConfig::default()).unwrap();
+        assert_eq!(*tercera.llamadas.borrow(), ["download"]);
     }
 
     #[test]

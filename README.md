@@ -114,6 +114,16 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
 
+### 1.3.3 (2026-10-21)
+
+- Arreglo importante: al cambiar el enlace del pódcast (o del fondo), **Generar**
+  seguía usando el vídeo del enlace anterior, porque se reutilizaba lo que había en
+  la carpeta de trabajo sin mirar de qué enlace era. Ahora cada descarga recuerda
+  de qué enlace es: si cambias de enlace se descarga el vídeo nuevo, y si es el
+  mismo vídeo escrito de otra forma (`youtu.be/...` o `watch?v=...`) se reutiliza.
+  Las descargas anteriores, sin esa marca, se reconocen por el id de YouTube o se
+  vuelven a bajar.
+
 ### 1.3.2 (2026-10-19)
 
 - Arreglo: en el formato 1:1 (y en 4:5) la vista previa se salía de su columna y

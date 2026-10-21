@@ -235,3 +235,26 @@ fn yt_dlp_de_verdad_descarga_y_reutiliza() {
     let otra_vez = download::fetch(url, &base, &cfg).unwrap();
     assert_eq!(otra_vez.path, video.path);
 }
+
+#[test]
+fn cambiar_de_enlace_descarga_el_video_nuevo() {
+    if std::env::var("VS_NET_TESTS").is_err() || ffmpeg::which("yt-dlp").is_none() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let base = dir.path().join("podcast");
+    let cfg = DownloadConfig { max_height: 360, ..Default::default() };
+
+    let zoo = download::fetch("https://www.youtube.com/watch?v=jNQXAC9IVRw", &base, &cfg).unwrap();
+    assert!(zoo.title.contains("zoo"));
+
+    // Otro enlace con la MISMA carpeta de trabajo: tiene que salir el otro video.
+    let otro = download::fetch("https://www.youtube.com/watch?v=dQw4w9WgXcQ", &base, &cfg).unwrap();
+    assert!(!otro.title.contains("zoo"), "se reutilizo el video del enlace anterior: {}", otro.title);
+    assert!((otro.duration - zoo.duration).abs() > 30.0, "dura {} y {}", otro.duration, zoo.duration);
+
+    // Y el mismo video escrito de otra forma no se baja otra vez.
+    let mismo = download::fetch("https://youtu.be/dQw4w9WgXcQ", &base, &cfg).unwrap();
+    assert_eq!(mismo.path, otro.path);
+    assert_eq!(mismo.title, otro.title);
+}
