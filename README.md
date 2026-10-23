@@ -114,6 +114,18 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
 
+### 1.3.4 (2026-10-23)
+
+- Arreglo: los subtítulos ya no pegan saltos. Un bloque seguía en pantalla unos
+  milisegundos cuando ya había empezado el siguiente y uno de los dos se subía.
+- Arreglo: las palabras que Whisper deja sin duración (varias en el mismo
+  instante) ya no desaparecen ni se saltan el resaltado: se reparten el tiempo.
+  La misma palabra repetida en el borde de dos frases sale una sola vez.
+- Arreglo: cuando Whisper se atasca y repite un trozo en bucle («...son bichos
+  que...» cada 2 segundos) se quita el bucle entero de la transcripción, de los
+  subtítulos, de la descripción y de los hashtags. Una repetición suelta («no...
+  no») se respeta. También se limpian las transcripciones ya guardadas.
+
 ### 1.3.3 (2026-10-21)
 
 - Arreglo importante: al cambiar el enlace del pódcast (o del fondo), **Generar**

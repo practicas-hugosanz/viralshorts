@@ -46,6 +46,62 @@ impl Group {
 // Agrupacion
 // ----------------------------------------------------------------------------
 
+/// Limpia los tiempos de whisper antes de montar los bloques. Tal cual llegan
+/// traen tres defectos que se ven en pantalla:
+/// - la misma palabra dos veces en el borde de dos segmentos ("A / A MECISTA");
+/// - varias palabras con el mismo instante y sin duracion: nunca se resaltaban
+///   y el bloque aparecia con la ultima ya encendida;
+/// - una palabra que empieza antes que la anterior.
+pub fn tidy_words(words: &[Word]) -> Vec<Word> {
+    let mut out: Vec<Word> = Vec::with_capacity(words.len());
+    for word in words {
+        let mut word = word.clone();
+        if let Some(prev) = out.last() {
+            if prev.text.trim().to_lowercase() == word.text.trim().to_lowercase() && (word.start - prev.start).abs() < 0.05 {
+                continue;
+            }
+            word.start = word.start.max(prev.start);
+        }
+        word.end = word.end.max(word.start);
+        out.push(word);
+    }
+
+    // Las rachas con el mismo arranque se reparten el tiempo que tienen hasta
+    // la siguiente palabra (o, al final, hasta donde acaba la racha). Si ahi no
+    // cabe (suele pasar cuando el corte de silencios las junta) se toma el
+    // hueco de antes, sin pisar la palabra anterior: si no, desaparecian.
+    const MIN_WORD: f64 = 0.12;
+    let mut i = 0;
+    while i < out.len() {
+        let mut j = i + 1;
+        while j < out.len() && out[j].start - out[i].start < 0.02 {
+            j += 1;
+        }
+        let count = j - i;
+        if count > 1 {
+            let want = MIN_WORD * count as f64;
+            let mut from = out[i].start;
+            let until = match out.get(j) {
+                Some(next) => next.start,
+                None => out[i..j].iter().map(|w| w.end).fold(from + want, f64::max),
+            };
+            if until - from < want && i > 0 {
+                let floor = out[i - 1].end.max(out[i - 1].start + 0.02);
+                from = (until - want).max(floor).min(from);
+            }
+            let step = (until - from) / count as f64;
+            if step >= 0.02 {
+                for k in 0..count {
+                    out[i + k].start = from + step * k as f64;
+                    out[i + k].end = if k + 1 < count { from + step * (k + 1) as f64 } else { out[i + k].end.max(out[i + k].start) };
+                }
+            }
+        }
+        i = j;
+    }
+    out
+}
+
 /// Parte la lista de palabras en bloques cortos que caben en pantalla.
 pub fn group_words(words: &[Word], cfg: &SubtitlesConfig) -> Vec<Group> {
     let mut groups = Vec::new();
@@ -87,7 +143,8 @@ pub fn build_ass(
     cfg_title: Option<&TitleCardConfig>,
     title_text: Option<&str>,
 ) -> Result<String, SubtitleError> {
-    let groups = if cfg_subs.enabled && !words.is_empty() { group_words(words, cfg_subs) } else { Vec::new() };
+    let words = tidy_words(words);
+    let groups = if cfg_subs.enabled && !words.is_empty() { group_words(&words, cfg_subs) } else { Vec::new() };
     let events = subtitle_events(&groups, cfg_subs, width)?;
 
     let mut card_end = 0.0;
@@ -287,9 +344,11 @@ fn subtitle_events(groups: &[Group], cfg: &SubtitlesConfig, width: i64) -> Resul
     let mut lines = Vec::new();
     for (group_index, group) in groups.iter().enumerate() {
         // Fin del bloque: se enlaza con el siguiente para que no haya un hueco
-        // en negro, pero sin arrastrarlo si viene una pausa larga.
+        // en negro, pero sin arrastrarlo si viene una pausa larga. NUNCA pasa
+        // del arranque del siguiente: dos bloques a la vez en pantalla hacen
+        // que libass suba uno de los dos y el subtitulo pega un salto.
         let group_end = if let Some(next) = groups.get(group_index + 1) {
-            next.start().min(group.end() + TAIL_HOLD).max(group.end() + 0.02)
+            next.start().min(group.end() + TAIL_HOLD)
         } else {
             group.end() + TAIL_HOLD
         };
@@ -701,6 +760,85 @@ mod tests {
         con_punto[0].text = "hola.".into();
         assert_eq!(group_words(&con_punto, &cfg).len(), 2);
         assert!(group_words(&[], &cfg).is_empty());
+    }
+
+    // -- tiempos de whisper ---------------------------------------------------
+
+    fn dialogos(contenido: &str) -> Vec<(f64, f64, String)> {
+        let segundos = |t: &str| -> f64 {
+            let p: Vec<f64> = t.split(':').map(|x| x.parse().unwrap()).collect();
+            p[0] * 3600.0 + p[1] * 60.0 + p[2]
+        };
+        contenido
+            .lines()
+            .filter(|l| l.starts_with("Dialogue: 0,"))
+            .map(|l| {
+                let p: Vec<&str> = l.splitn(10, ',').collect();
+                (segundos(p[1]), segundos(p[2]), p[9].to_string())
+            })
+            .collect()
+    }
+
+    fn texto(lista: &[(&str, f64, f64)]) -> Vec<Word> {
+        lista.iter().map(|&(t, a, b)| Word::new(t, a, b)).collect()
+    }
+
+    #[test]
+    fn dos_bloques_nunca_estan_a_la_vez_en_pantalla() {
+        // Caso real: el bloque siguiente arrancaba 20 ms antes de que acabase
+        // el anterior y libass subia uno de los dos: el subtitulo daba un salto.
+        let cfg = SubtitlesConfig { max_words_per_group: 2, ..Default::default() };
+        let habla = texto(&[("feeling", 2.28, 2.90), ("watched", 2.90, 3.38), ("man", 3.38, 3.68), ("spawning", 3.68, 4.47)]);
+        let ass = build_ass(&habla, 1080, 1920, &cfg, None, None, 6.0, None, None).unwrap();
+        let lineas = dialogos(&ass);
+        for par in lineas.windows(2) {
+            assert!(par[0].1 <= par[1].0 + 1e-9, "se solapan: {:?} y {:?}", par[0], par[1]);
+        }
+    }
+
+    #[test]
+    fn las_palabras_sin_duracion_se_reparten_el_tiempo_y_todas_se_resaltan() {
+        // Caso real: "VALE ESE SONIDO POR" con los cuatro en el mismo instante.
+        let cfg = SubtitlesConfig { max_words_per_group: 4, ..Default::default() };
+        let habla = texto(&[("vale", 19.97, 19.97), ("ese", 19.97, 19.97), ("sonido", 19.97, 19.97), ("por", 19.97, 20.06), ("lo", 20.37, 20.6)]);
+        let ass = build_ass(&habla, 1080, 1920, &cfg, None, None, 30.0, None, None).unwrap();
+        let lineas = dialogos(&ass);
+        assert!((lineas[0].0 - 19.97).abs() < 0.011);
+        let activas = |lineas: &[(f64, f64, String)]| -> Vec<String> {
+            // La palabra que va detras del color activo, sin etiquetas ni saltos.
+            lineas
+                .iter()
+                .filter_map(|(_, _, t)| t.split("&H0000F2FF&").nth(1)?.split('}').nth(1)?.split('{').next())
+                .map(|w| w.replace("\\N", "").trim().to_string())
+                .collect()
+        };
+        assert_eq!(activas(&lineas)[..4], ["VALE", "ESE", "SONIDO", "POR"], "{lineas:?}");
+
+        // Y sin sitio despues (la siguiente palabra 70 ms mas tarde): usan el
+        // hueco de antes, sin pisar el "no" anterior. Antes no salian.
+        let cfg = SubtitlesConfig { max_words_per_group: 3, ..Default::default() };
+        let apretado = texto(&[("no", 18.88, 19.78), ("vale", 19.97, 19.97), ("ese", 19.97, 19.97), ("sonido", 19.97, 19.97), ("por", 19.97, 20.04), ("lo", 20.04, 20.38)]);
+        let lineas = dialogos(&build_ass(&apretado, 1080, 1920, &cfg, None, None, 30.0, None, None).unwrap());
+        assert_eq!(activas(&lineas)[..6], ["NO", "VALE", "ESE", "SONIDO", "POR", "LO"], "{lineas:?}");
+        assert!(lineas[1].0 >= 19.78 - 1e-9, "no pisa el 'no': {lineas:?}");
+        assert!(lineas[1..5].iter().all(|(a, b, _)| b - a >= 0.04), "{lineas:?}");
+    }
+
+    #[test]
+    fn el_reparto_de_tiempos_no_toca_lo_que_ya_esta_bien() {
+        let bien = texto(&[("uno", 0.0, 0.3), ("dos", 0.35, 0.6), ("tres", 0.7, 1.0)]);
+        assert_eq!(tidy_words(&bien), bien);
+    }
+
+    #[test]
+    fn la_palabra_repetida_en_el_borde_de_dos_segmentos_sale_una_vez() {
+        let limpio = tidy_words(&texto(&[("hierro", 2.41, 2.95), ("a", 2.95, 3.05), ("A", 2.95, 3.03), ("mecista", 3.03, 3.35)]));
+        let textos: Vec<&str> = limpio.iter().map(|w| w.text.as_str()).collect();
+        assert_eq!(textos, ["hierro", "a", "mecista"]);
+        // Y nunca va hacia atras.
+        let raro = tidy_words(&texto(&[("uno", 1.0, 1.5), ("dos", 0.8, 1.2), ("tres", 1.6, 2.0)]));
+        assert!(raro.windows(2).all(|p| p[0].start <= p[1].start));
+        assert!(raro.iter().all(|w| w.end >= w.start));
     }
 
     // -- fichero completo ----------------------------------------------------

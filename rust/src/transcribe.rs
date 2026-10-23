@@ -240,7 +240,8 @@ impl Transcriber {
         result
     }
 
-    fn finish(&self, mut segments: Vec<Segment>, language: Option<String>, duration: f64, path: &Path) -> Result<Transcript> {
+    fn finish(&self, segments: Vec<Segment>, language: Option<String>, duration: f64, path: &Path) -> Result<Transcript> {
+        let mut segments = drop_repetition_loops(segments);
         let corrections = Corrections::parse(&self.cfg.corrections);
         if !corrections.is_empty() {
             for segment in &mut segments {
@@ -374,8 +375,10 @@ fn read_cache(path: &Path) -> Option<Transcript> {
         return None;
     }
     match std::fs::read_to_string(path).ok().and_then(|t| serde_json::from_str::<Transcript>(&t).ok()) {
-        Some(transcript) => {
+        Some(mut transcript) => {
             log::info!("Transcripcion en cache: {}", file_name(path));
+            // Las guardadas antes del filtro de bucles tambien se limpian.
+            transcript.segments = drop_repetition_loops(transcript.segments);
             Some(transcript)
         }
         None => {
@@ -611,6 +614,49 @@ pub fn parse_whisper_json(text: &str) -> Result<EngineOutput> {
         segments.push(Segment { start: seg_start, end: seg_end.max(words.last().map_or(seg_end, |w| w.end)), text, words });
     }
     Ok(EngineOutput { language, segments })
+}
+
+/// Quita los bucles en los que whisper se queda atascado: cuando se pierde,
+/// repite trozos de lo ultimo que oyo ("...son bichos que..." cada 2 s) durante
+/// un buen rato aunque ahi se hable de otra cosa o no se hable. Un segmento es
+/// un eco si todas sus palabras estan en los dos anteriores; una racha de dos o
+/// mas ecos seguidos es un bucle y se quita entera. Un eco suelto se deja: la
+/// gente repite ("no... no").
+pub fn drop_repetition_loops(segments: Vec<Segment>) -> Vec<Segment> {
+    fn fold(text: &str) -> Vec<String> {
+        text.split_whitespace()
+            .map(|w| w.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect::<String>())
+            .filter(|w| !w.is_empty())
+            .collect()
+    }
+    fn same(a: &str, b: &str) -> bool {
+        a == b || (a.chars().count().min(b.chars().count()) >= 4 && (a.contains(b) || b.contains(a)))
+    }
+    let folded: Vec<Vec<String>> = segments.iter().map(|s| fold(&s.text)).collect();
+    let echo: Vec<bool> = (0..segments.len())
+        .map(|i| {
+            let words = &folded[i];
+            let recent: Vec<&String> = folded[i.saturating_sub(2)..i].iter().flatten().collect();
+            !words.is_empty() && words.len() <= 8 && words.iter().all(|w| recent.iter().any(|r| same(w, r)))
+        })
+        .collect();
+
+    let mut keep = vec![true; segments.len()];
+    let mut i = 0;
+    while i < segments.len() {
+        let run = echo[i..].iter().take_while(|&&e| e).count();
+        if run >= 2 {
+            log::info!(
+                "Quitado un bucle de la transcripcion ({} trozos repetidos desde {:.0} s: \"{}\").",
+                run,
+                segments[i].start,
+                segments[i].text.trim()
+            );
+            keep[i..i + run].iter_mut().for_each(|k| *k = false);
+        }
+        i += run.max(1);
+    }
+    segments.into_iter().zip(keep).filter_map(|(s, k)| k.then_some(s)).collect()
 }
 
 /// Anotaciones de sonido que whisper escribe en vez de habla.
@@ -932,6 +978,33 @@ mod tests {
         let s = Segment { start: 1.0, end: 2.0, text: "a".into(), words: vec![Word::new("a", 1.0, 2.0)] };
         let movido = shift(s, 100.0);
         assert_eq!((movido.start, movido.end, movido.words[0].start), (101.0, 102.0, 101.0));
+    }
+
+    fn seg(a: f64, texto: &str) -> Segment {
+        Segment { start: a, end: a + 2.0, text: texto.into(), words: vec![Word::new(texto, a, a + 2.0)] }
+    }
+
+    #[test]
+    fn el_bucle_de_whisper_se_quita_entero() {
+        // Copiado de una transcripcion real: whisper se atasca y repite.
+        let entrada = vec![
+            seg(330.0, "Eso funciona."),
+            seg(334.74, "Yo creo que los que me han spawneados son bichos que..."),
+            seg(338.74, "...spawneados..."),
+            seg(340.74, "...son bichos que..."),
+            seg(342.74, "...espawneados..."),
+            seg(344.74, "...son bichos que..."),
+            seg(346.74, "...son bichos que..."),
+            seg(352.0, "Vale, ahora a por el cofre."),
+        ];
+        let textos: Vec<String> = drop_repetition_loops(entrada).into_iter().map(|s| s.text).collect();
+        assert_eq!(textos, ["Eso funciona.", "Yo creo que los que me han spawneados son bichos que...", "Vale, ahora a por el cofre."]);
+    }
+
+    #[test]
+    fn repetir_una_vez_es_hablar_y_se_queda() {
+        let entrada = vec![seg(0.0, "¿Qué ha pasado?"), seg(2.0, "No, no."), seg(4.0, "No."), seg(6.0, "Mira esto."), seg(8.0, "Mira.")];
+        assert_eq!(drop_repetition_loops(entrada.clone()), entrada);
     }
 
     #[test]
