@@ -6,72 +6,72 @@
 <meta name="color-scheme" content="dark light">
 <title>Viral Shorts</title>
 <style>
+  /* Mismo aspecto que la aplicacion: marco oscuro y panel blanco redondeado. */
   :root {
-    --bg: #0f1218; --surf: #171b23; --raise: #1f2430; --line: #2a303d;
-    --text: #eceff5; --mute: #98a1b3; --faint: #667084;
-    --accent: #ff7a1a; --accent-hi: #ffb347; --accent-ink: #1a0f05;
-    --bad: #ff6a6a; --bad-soft: rgba(255, 106, 106, .12);
+    --frame: #1b1c20; --surf: #ffffff; --raise: #f3f5f9; --line: #e4e7ee;
+    --text: #16171b; --mute: #5f6573; --faint: #8f95a3;
+    --ink: #16171b; --ink-text: #ffffff; --sky: #dcebfb;
+    --bad: #d23c3c; --bad-soft: #fdecec;
     --ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-    --display: "Bahnschrift", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    --display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   }
-  @media (prefers-color-scheme: light) {
+  @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #f2f3f7; --surf: #ffffff; --raise: #eff1f5; --line: #d5d9e2;
-      --text: #141821; --mute: #525c70; --faint: #7a8498;
-      --accent: #d85a0b; --accent-hi: #f08a2c; --accent-ink: #ffffff;
-      --bad: #c93030; --bad-soft: rgba(201, 48, 48, .09);
+      --frame: #0f1013; --surf: #1f2127; --raise: #272a31; --line: #333740;
+      --text: #f1f2f5; --mute: #a6abb6; --faint: #7c818c;
+      --ink: #f1f2f5; --ink-text: #16171b; --sky: #1f3043;
+      --bad: #ff7272; --bad-soft: #3a2224;
     }
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; }
   body {
-    background: var(--bg); color: var(--text);
+    background: var(--frame); color: var(--text);
     font: 14px/1.5 var(--ui); -webkit-font-smoothing: antialiased;
     display: grid; place-items: center; padding: 24px;
   }
   main {
     width: min(480px, 100%);
-    background: var(--surf); border: 1px solid var(--line);
-    border-radius: 16px; padding: 34px 34px 26px;
-    box-shadow: 0 30px 70px -34px rgba(0, 0, 0, .6);
+    background: var(--surf);
+    border-radius: 30px; padding: 36px 36px 28px;
   }
-  .logo { width: 56px; height: 56px; display: block; margin-bottom: 22px; }
-  h1 { font: 600 26px/1.15 var(--display); font-variation-settings: "wdth" 90; margin: 0 0 8px; }
+  .logo { width: 56px; height: 56px; display: block; margin-bottom: 24px; border-radius: 16px; }
+  h1 { font: 700 26px/1.15 var(--display); letter-spacing: -.01em; margin: 0 0 8px; }
   p { color: var(--mute); margin: 0 0 26px; }
-  .bar { height: 8px; border-radius: 3px; background: var(--raise); overflow: hidden; }
-  .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-hi)); transition: width .4s ease; }
-  .ruler { height: 7px; margin-top: 3px; opacity: .8; background: repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 10px); -webkit-mask: linear-gradient(transparent, #000); mask: linear-gradient(transparent, #000); }
-  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-top: 14px; }
+  .meter { padding: 16px 18px; border-radius: 18px; background: var(--sky); }
+  .bar { height: 8px; border-radius: 8px; background: rgba(255,255,255,.7); overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; border-radius: 8px; background: var(--ink); transition: width .4s ease; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 10px; }
   .step { font-weight: 600; min-height: 1.5em; }
-  .pct { font: 600 22px var(--display); color: var(--accent); font-variant-numeric: tabular-nums; }
+  .pct { font: 700 22px var(--display); color: var(--text); font-variant-numeric: tabular-nums; }
   .error {
-    margin-top: 18px; padding: 12px 14px; border-radius: 10px;
-    border: 1px solid color-mix(in srgb, var(--bad) 40%, transparent); background: var(--bad-soft);
+    margin-top: 18px; padding: 12px 14px; border-radius: 14px; background: var(--bad-soft);
     color: var(--bad); font-size: 13px; white-space: pre-wrap; word-break: break-word;
   }
   button {
-    margin-top: 18px; padding: 10px 20px; border: 0; border-radius: 8px;
-    background: var(--accent); color: var(--accent-ink); font: 600 14px var(--ui); cursor: pointer;
+    margin-top: 18px; padding: 11px 22px; border: 0; border-radius: 99px;
+    background: var(--ink); color: var(--ink-text); font: 600 14px var(--ui); cursor: pointer;
   }
-  button:hover { background: var(--accent-hi); }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:hover { opacity: .88; }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   small { display: block; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12.5px; }
 </style>
 </head>
 <body>
 <main>
   <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
-    <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a18"/><stop offset="1" stop-color="#ffb020"/></linearGradient></defs>
-    <rect width="64" height="64" rx="16" fill="url(#g)"/>
-    <rect x="20" y="10" width="24" height="44" rx="6" fill="#1c1612"/>
-    <path d="M28 25l10 7-10 7z" fill="#ffd65a"/>
+    <rect width="64" height="64" rx="18" fill="#f6e9c3"/>
+    <rect x="19" y="13" width="23" height="39" rx="7" fill="#16171b"/>
+    <path d="M27 25.5v14l10.5-7z" fill="#f6e9c3"/>
+    <path d="M48 9.5l1.6 4.4 4.4 1.6-4.4 1.6-1.6 4.4-1.6-4.4-4.4-1.6 4.4-1.6z" fill="#16171b"/>
   </svg>
   <h1>Preparando Viral Shorts</h1>
   <p>Es la primera vez que se abre: se descargan las herramientas que usa el programa. Solo ocurre una vez y no se instala nada fuera de su carpeta.</p>
-  <div class="bar"><i id="fill"></i></div>
-  <div class="ruler" aria-hidden="true"></div>
-  <div class="row"><span class="step" id="step">Empezando…</span><span class="pct" id="pct"></span></div>
+  <div class="meter">
+    <div class="row"><span class="step" id="step">Empezando…</span><span class="pct" id="pct"></span></div>
+    <div class="bar"><i id="fill"></i></div>
+  </div>
   <div class="error" id="error" hidden></div>
   <button id="retry" hidden>Reintentar</button>
   <small>Necesita conexión a internet. Se descargan unos 120 MB.</small>

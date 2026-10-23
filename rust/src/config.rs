@@ -641,6 +641,9 @@ pub struct OutputConfig {
     pub csv: bool,
     /// Una subcarpeta por ejecucion dentro de `dir`.
     pub run_subfolder: bool,
+    /// Al terminar de montar, borrar el video descargado del podcast (pesa
+    /// cientos de MB). Si hace falta otra vez se vuelve a bajar solo.
+    pub delete_source: bool,
 }
 
 impl Default for OutputConfig {
@@ -659,6 +662,7 @@ impl Default for OutputConfig {
             cover_text: false,
             csv: true,
             run_subfolder: true,
+            delete_source: true,
         }
     }
 }

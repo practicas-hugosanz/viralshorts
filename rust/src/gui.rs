@@ -260,6 +260,7 @@ pub fn build_command(form: &Value) -> Vec<String> {
         }
     }
 
+    keep_source_arg(form, &mut args);
     for (setting, value) in style_pairs(form) {
         args.extend(["--set".to_string(), format!("{setting}={}", value_text(&value))]);
     }
@@ -287,7 +288,16 @@ pub fn plan_command(form: &Value) -> Vec<String> {
     if truthy(&form["output"]) {
         args.extend(["--output".into(), value_text(&form["output"])]);
     }
+    keep_source_arg(form, &mut args);
     args
+}
+
+/// "Borrar el video descargado al terminar" viene encendido de serie: solo
+/// hace falta decir algo cuando el usuario lo apaga.
+fn keep_source_arg(form: &Value, args: &mut Vec<String>) {
+    if form.get("delete_source").is_some_and(|v| !v.is_null() && !truthy(v)) {
+        args.extend(["--set".into(), "output.delete_source=off".into()]);
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -1492,6 +1502,7 @@ fn render_plan(app: &Arc<App>, body: &Value) -> (u16, Value) {
             "output": body["output"].as_str().unwrap_or(""),
             "podcast": podcast,
             "clips": only.len(),
+            "delete_source": body["delete_source"].clone(),
         })),
     )
 }
@@ -2227,6 +2238,15 @@ la guapa=La Guapa"}));
     fn lo_minimo() {
         let args = comando(json!({}));
         assert_eq!(args, ["--podcast", "https://youtu.be/abc", "--background", "juego.mp4"]);
+    }
+
+    #[test]
+    fn borrar_el_video_al_terminar_solo_se_menciona_si_se_apaga() {
+        assert!(pares(&comando(json!({"delete_source": true}))).is_empty());
+        assert_eq!(pares(&comando(json!({"delete_source": false}))), ["output.delete_source=off"]);
+        let montar = plan_command(&json!({"from_plan": "p.json", "only": [2], "delete_source": false}));
+        assert_eq!(pares(&montar), ["output.delete_source=off"]);
+        assert!(pares(&plan_command(&json!({"from_plan": "p.json", "delete_source": null}))).is_empty());
     }
 
     #[test]

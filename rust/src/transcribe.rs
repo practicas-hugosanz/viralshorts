@@ -169,8 +169,8 @@ impl Transcriber {
 
     /// Transcribe el video entero.
     pub fn transcribe(&mut self, path: &Path, duration: f64) -> Result<Transcript> {
-        let cache_path = self.cache_dir.join(format!("{}.json", self.cache_key(path, None)?));
-        if let Some(cached) = read_cache(&cache_path) {
+        let (cache_path, cached) = self.cached(path, None)?;
+        if let Some(cached) = cached {
             return Ok(cached);
         }
 
@@ -195,8 +195,8 @@ impl Transcriber {
             return self.transcribe(path, duration);
         }
 
-        let cache_path = self.cache_dir.join(format!("{}.json", self.cache_key(path, Some(&regions))?));
-        if let Some(cached) = read_cache(&cache_path) {
+        let (cache_path, cached) = self.cached(path, Some(&regions))?;
+        if let Some(cached) = cached {
             return Ok(cached);
         }
 
@@ -261,12 +261,36 @@ impl Transcriber {
         })
     }
 
+    /// Transcripcion guardada de `path`. Se busca primero por el video
+    /// descargado (su enlace) y despues por el fichero, que es como se
+    /// guardaban antes: asi no se pierden las que ya habia.
+    fn cached(&self, path: &Path, regions: Option<&[(f64, f64)]>) -> Result<(PathBuf, Option<Transcript>)> {
+        let primary = self.cache_dir.join(format!("{}.json", self.cache_key(path, regions, true)?));
+        if let Some(found) = read_cache(&primary) {
+            return Ok((primary, Some(found)));
+        }
+        let legacy = self.cache_dir.join(format!("{}.json", self.cache_key(path, regions, false)?));
+        let found = (legacy != primary).then(|| read_cache(&legacy)).flatten();
+        if let Some(found) = &found {
+            write_cache(&primary, found);
+        }
+        Ok((primary, found))
+    }
+
     /// Identifica la transcripcion por el video Y por como se pidio. Zonas
-    /// distintas = transcripcion distinta: no pueden compartir entrada.
-    fn cache_key(&self, path: &Path, regions: Option<&[(f64, f64)]>) -> Result<String> {
+    /// distintas = transcripcion distinta: no pueden compartir entrada. El
+    /// video es su enlace si es una descarga (sigue valiendo aunque se borre y
+    /// se vuelva a bajar) y si no, el fichero con su tamano y su fecha.
+    fn cache_key(&self, path: &Path, regions: Option<&[(f64, f64)]>, by_link: bool) -> Result<String> {
         let meta = std::fs::metadata(path).map_err(|e| TranscribeError(format!("No se pudo leer {}: {e}", path.display())))?;
-        let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
-        let resolved = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        let video = match crate::download::identity(path).filter(|_| by_link) {
+            Some(link) => format!("enlace:{link}"),
+            None => {
+                let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
+                let resolved = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+                format!("{}|{}|{mtime}", resolved.display(), meta.len())
+            }
+        };
         let zones = match regions {
             Some(r) => r.iter().map(|(a, b)| format!("{a:.1}-{b:.1}")).collect::<Vec<_>>().join("|"),
             None => "full".into(),
@@ -275,9 +299,7 @@ impl Transcriber {
             "whispercpp".to_string(),
             self.cfg.initial_prompt.clone(),
             self.cfg.corrections.clone(),
-            resolved.display().to_string(),
-            meta.len().to_string(),
-            mtime.to_string(),
+            video,
             self.cfg.model_size.clone(),
             self.cfg.language.clone().unwrap_or_else(|| "None".into()),
             self.cfg.beam_size.to_string(),
@@ -950,18 +972,45 @@ mod tests {
         let estado = Arc::new(Mutex::new(Estado::default()));
         let (t, _d) = transcriptor(Falso::nuevo(&estado), "auto");
 
-        let completa = t.cache_key(&video, None).unwrap();
-        assert_eq!(completa, t.cache_key(&video, None).unwrap());
-        assert_ne!(completa, t.cache_key(&video, Some(&[(0.0, 30.0)])).unwrap(), "zonas distintas no comparten entrada");
-        assert_ne!(t.cache_key(&video, Some(&[(0.0, 30.0)])).unwrap(), t.cache_key(&video, Some(&[(0.0, 31.0)])).unwrap());
+        let completa = t.cache_key(&video, None, true).unwrap();
+        assert_eq!(completa, t.cache_key(&video, None, true).unwrap());
+        assert_ne!(completa, t.cache_key(&video, Some(&[(0.0, 30.0)]), true).unwrap(), "zonas distintas no comparten entrada");
+        assert_ne!(t.cache_key(&video, Some(&[(0.0, 30.0)]), true).unwrap(), t.cache_key(&video, Some(&[(0.0, 31.0)]), true).unwrap());
 
         let (otro, _d2) = {
             let dir2 = tempfile::tempdir().unwrap();
             let cfg = TranscribeConfig { model_size: "tiny".into(), ..Default::default() };
             (Transcriber::new(cfg, dir2.path().join("c"), Box::new(Falso::nuevo(&estado))).unwrap(), dir2)
         };
-        assert_ne!(completa, otro.cache_key(&video, None).unwrap(), "otro modelo, otra transcripcion");
+        assert_ne!(completa, otro.cache_key(&video, None, true).unwrap(), "otro modelo, otra transcripcion");
         assert_eq!(completa.len(), 16);
+    }
+
+    #[test]
+    fn la_transcripcion_sobrevive_a_borrar_y_volver_a_bajar_el_video() {
+        let dir = tempfile::tempdir().unwrap();
+        let video = dir.path().join("podcast.mp4");
+        std::fs::write(&video, b"descarga uno").unwrap();
+        let estado = Arc::new(Mutex::new(Estado::default()));
+        let (t, _d) = transcriptor(Falso::nuevo(&estado), "auto");
+        let guardada = Transcript { language: "es".into(), duration: 9.0, segments: vec![seg(0.0, "Hola.")] };
+
+        // Una cache de antes (por fichero) se encuentra y pasa a guardarse por enlace.
+        write_cache(&t.cache_dir.join(format!("{}.json", t.cache_key(&video, None, false).unwrap())), &guardada);
+        std::fs::write(dir.path().join("podcast.source"), "yt:dQw4w9WgXcQ").unwrap();
+        assert_eq!(t.cached(&video, None).unwrap().1.as_ref(), Some(&guardada));
+
+        // Se borra y se vuelve a bajar: otra fecha y otro tamano, mismo enlace.
+        std::fs::remove_file(&video).unwrap();
+        std::fs::write(&video, b"descarga dos, algo distinta").unwrap();
+        assert_eq!(t.cached(&video, None).unwrap().1.as_ref(), Some(&guardada), "no se vuelve a transcribir");
+
+        // Otro enlace en el mismo sitio no la aprovecha.
+        std::fs::write(dir.path().join("podcast.source"), "yt:AAAAAAAAAAA").unwrap();
+        assert!(t.cached(&video, None).unwrap().1.is_none());
+        // Y un fichero propio (sin marca) sigue identificandose por el fichero.
+        std::fs::remove_file(dir.path().join("podcast.source")).unwrap();
+        assert!(t.cached(&video, None).unwrap().1.is_none());
     }
 
     #[test]

@@ -156,6 +156,31 @@ fn cache_matches(url: &str, dest_base: &Path, info_path: &Path) -> bool {
     [from_id, from_page].into_iter().flatten().any(|key| key == wanted)
 }
 
+/// Que video es `path` si es una descarga: la marca de su enlace ("yt:ID").
+/// Reconoce el mismo video aunque se haya borrado y vuelto a bajar (otra
+/// fecha, quiza otro tamano), para no repetir lo que ya se hizo con el.
+pub fn identity(path: &Path) -> Option<String> {
+    let marker = path.with_extension("source");
+    std::fs::read_to_string(marker).ok().map(|key| key.trim().to_string()).filter(|key| !key.is_empty())
+}
+
+/// Borra el video descargado en `dest_base`, con sus metadatos, para liberar
+/// espacio. Devuelve los bytes liberados. Solo toca la carpeta de trabajo: un
+/// fichero local del usuario no se descarga y nunca pasa por aqui.
+pub fn discard(dest_base: &Path) -> u64 {
+    let mut freed = 0;
+    for _ in 0..8 {
+        let Some(video) = find_existing(dest_base) else { break };
+        let size = std::fs::metadata(&video).map_or(0, |m| m.len());
+        if std::fs::remove_file(&video).is_err() {
+            break;
+        }
+        freed += size;
+    }
+    remove_cache(dest_base, &info_path(dest_base));
+    freed
+}
+
 /// Borra el video descargado, sus metadatos y la marca.
 fn remove_cache(dest_base: &Path, info_path: &Path) {
     // Puede haber varios formatos (mp4 y webm): se quitan todos.
@@ -670,6 +695,26 @@ mod tests {
         assert_eq!(*falso.llamadas.borrow(), ["download"]);
         assert_eq!(source_key("https://youtube.com/shorts/dQw4w9WgXcQ"), "yt:dQw4w9WgXcQ");
         assert_eq!(source_key("  HTTPS://Otro.com/Video  "), "https://otro.com/video");
+    }
+
+    #[test]
+    fn borrar_la_descarga_libera_el_espacio_y_la_siguiente_vez_se_baja_otra_vez() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().join("podcast");
+        let falso = Falso { crea_video: true, ..Default::default() };
+        let video = fetch_with(&falso, "https://youtu.be/dQw4w9WgXcQ", &base, &DownloadConfig::default()).unwrap();
+        assert_eq!(identity(&video.path).as_deref(), Some("yt:dQw4w9WgXcQ"));
+        std::fs::write(dir.path().join("background.mp4"), b"fondo").unwrap();
+
+        assert_eq!(discard(&base), b"video".len() as u64);
+        let quedan: Vec<String> = std::fs::read_dir(dir.path()).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(quedan, ["background.mp4"], "solo se borra lo del podcast");
+        assert_eq!(discard(&base), 0, "borrar dos veces no falla");
+
+        fetch_with(&falso, "https://youtu.be/dQw4w9WgXcQ", &base, &DownloadConfig::default()).unwrap();
+        assert_eq!(*falso.llamadas.borrow(), ["download", "download"]);
+        // Un fichero sin marca al lado (uno propio del usuario) no tiene enlace.
+        assert_eq!(identity(&dir.path().join("background.mp4")), None);
     }
 
     #[test]

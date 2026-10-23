@@ -222,6 +222,12 @@ viralshorts config           # la configuración efectiva (YAML + --set)
 Tanto `--podcast` como `--background` aceptan una URL o un fichero local.
 `viralshorts --help` lista todas las opciones.
 
+Al terminar de montar se borra el vídeo del pódcast descargado (`work/podcast.*`),
+que suele pesar cientos de MB. Si luego se vuelve a montar algo de él (`--from-plan`,
+«Rehacer este») se descarga otra vez solo, y la transcripción y las caras guardadas
+se reconocen por el enlace, así que no se repiten. No se borra nunca un fichero
+local ni el vídeo de fondo. `--set output.delete_source=off` lo desactiva.
+
 Salida en `output/<titulo-del-podcast>_<fecha>/` (una carpeta por ejecución, así
 un podcast nuevo no pisa los shorts del anterior; `--set output.run_subfolder=off`
 lo deja todo en `output/`). Por cada clip:

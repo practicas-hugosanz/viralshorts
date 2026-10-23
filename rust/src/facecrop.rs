@@ -98,13 +98,19 @@ pub trait Detector {
 fn cache_path(video: &Path, start: f64, duration: f64, cfg: &ReframeConfig, cache_dir: Option<&Path>) -> Option<PathBuf> {
     let cache_dir = cache_dir?;
     let meta = std::fs::metadata(video).ok()?;
-    let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
-    let resolved = std::fs::canonicalize(video).unwrap_or_else(|_| video.to_path_buf());
+    // Un video descargado se reconoce por su enlace: si se borro para no
+    // ocupar disco y se ha vuelto a bajar, las caras ya estan calculadas.
+    let identity = match crate::download::identity(video) {
+        Some(link) => format!("enlace:{link}"),
+        None => {
+            let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
+            let resolved = std::fs::canonicalize(video).unwrap_or_else(|_| video.to_path_buf());
+            format!("{}|{}|{mtime}", resolved.display(), meta.len())
+        }
+    };
     let signature = [
         "yunet-ort".to_string(),
-        resolved.display().to_string(),
-        meta.len().to_string(),
-        mtime.to_string(),
+        identity,
         format!("{:.2}", start),
         format!("{:.2}", duration),
         cfg.sample_interval.to_string(),

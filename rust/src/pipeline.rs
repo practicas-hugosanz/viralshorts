@@ -422,6 +422,7 @@ fn run_new(args: &Args, cfg: &Config, work_dir: &Path, output_dir: &Path, starte
     let results = render_all(&selection.clips, &written, &podcast, &background, cfg, work_dir, &output_dir, &numbers, Some(&selection.energy));
 
     finish(cfg, &output_dir);
+    free_source(cfg, work_dir, &podcast, &results);
     report_results(&results, selection.clips.len(), started.elapsed().as_secs_f64())
 }
 
@@ -597,12 +598,26 @@ fn run_from_plan(args: &Args, plan_path: &Path, cfg: &mut Config, work_dir: &Pat
         return 2;
     }
 
-    let podcast = Source::from(&saved.podcast);
-    let background = Source::from(&saved.background);
-    for (source, label) in [(&podcast, "podcast"), (&background, "video de fondo")] {
-        if !source.path.is_file() {
-            log::error!("El {label} del plan ya no esta en {}. Vuelve a buscar los momentos para descargarlo otra vez.", source.path.display());
+    let mut podcast = Source::from(&saved.podcast);
+    let mut background = Source::from(&saved.background);
+    for (source, base, label) in [(&mut podcast, "podcast", "podcast"), (&mut background, "background", "video de fondo")] {
+        if source.path.is_file() {
+            continue;
+        }
+        // Lo normal es que se borrase al terminar el montaje anterior para no
+        // ocupar disco: si vino de un enlace, se baja otra vez.
+        if source.url.is_empty() {
+            log::error!("El {label} del plan ya no esta en {}. Vuelve a buscar los momentos con el video.", source.path.display());
             return 2;
+        }
+        progress::stage("descarga", "Descargando los videos");
+        log::info!("El {label} ya no esta en el disco: se vuelve a descargar.");
+        match download::fetch(&source.url, &work_dir.join(base), &cfg.download) {
+            Ok(video) => source.path = video.path,
+            Err(error) => {
+                log::error!("No se pudo volver a descargar el {label}: {error}");
+                return 2;
+            }
         }
     }
 
@@ -638,7 +653,32 @@ fn run_from_plan(args: &Args, plan_path: &Path, cfg: &mut Config, work_dir: &Pat
     let results = render_all(&clips, &written, &podcast, &background, cfg, work_dir, &output_dir, &wanted, None);
 
     finish(cfg, &output_dir);
+    free_source(cfg, work_dir, &podcast, &results);
     report_results(&results, clips.len(), started.elapsed().as_secs_f64())
+}
+
+/// Al terminar, borra el video descargado del podcast: pesa cientos de MB y
+/// los shorts ya estan hechos. Solo si ha salido al menos uno (si todo falla,
+/// se deja para reintentar sin descargar) y solo la descarga de la carpeta de
+/// trabajo: un fichero propio del usuario no se toca nunca. El fondo se queda:
+/// suele ser el mismo de una vez para otra.
+fn free_source(cfg: &Config, work_dir: &Path, podcast: &Source, results: &[RenderResult]) {
+    if !cfg.output.delete_source || !results.iter().any(|(_, r)| r.is_ok()) {
+        return;
+    }
+    let base = work_dir.join("podcast");
+    let same_dir = |a: &Path, b: &Path| std::fs::canonicalize(a).ok().zip(std::fs::canonicalize(b).ok()).is_some_and(|(a, b)| a == b);
+    let downloaded = podcast.path.file_stem().is_some_and(|s| s == "podcast") && podcast.path.parent().is_some_and(|dir| same_dir(dir, work_dir));
+    if !downloaded {
+        return;
+    }
+    let freed = download::discard(&base);
+    if freed > 0 {
+        log::info!(
+            "Borrado el video descargado ({:.1} MB) para no ocupar disco. Si vuelves a montar algo de este podcast se descarga otra vez.",
+            freed as f64 / 1e6
+        );
+    }
 }
 
 /// Numeros de clip (desde 1) a montar: los de --only, o los marcados en el plan.

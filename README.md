@@ -65,7 +65,7 @@
   </tr>
   <tr>
     <td width="50%"><img src="docs/img/mis-shorts.png" alt="Biblioteca de shorts con búsqueda"><br><sub><b>Mis shorts.</b> Todo lo generado, con búsqueda, título editable y texto para copiar.</sub></td>
-    <td width="50%"><img src="docs/img/crear-claro.png" alt="Tema claro con composición en el centro y subtítulos neón"><br><sub><b>Tema claro u oscuro</b>, según tu Windows.</sub></td>
+    <td width="50%"><img src="docs/img/crear-oscuro.png" alt="Tema oscuro con composición en el centro y subtítulos neón"><br><sub><b>Tema claro u oscuro</b>, según tu Windows.</sub></td>
   </tr>
 </table>
 
@@ -113,6 +113,21 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
+
+### 1.4.0 (2026-10-23)
+
+- Diseño nuevo: barra lateral oscura solo con iconos, panel blanco redondeado,
+  tarjetas de color para el pódcast, el fondo y lo que quieres obtener (cuántos
+  shorts, duración y calidad, con el valor en grande) y una tarjeta negra para
+  generar. Botones en forma de píldora y letra Manrope, incluida en el programa.
+  Tema claro y oscuro según Windows.
+- Logo e icono nuevos (también en el instalador y en la pantalla del primer
+  arranque).
+- Al terminar de montar se borra el vídeo del pódcast descargado, que pesa cientos
+  de MB. Si después rehaces un short se vuelve a descargar solo, y la transcripción
+  y las caras ya calculadas se reconocen por el enlace, así que no se repiten. Tus
+  propios ficheros y el vídeo de fondo no se borran nunca. Se puede desactivar en
+  Ajustes › Dónde se guardan.
 
 ### 1.3.4 (2026-10-23)
 
