@@ -83,9 +83,9 @@
 
 1. En **Crear**, pega el enlace del pódcast y el del vídeo de fondo.
 2. Elige cuántos shorts quieres, cuánto duran y la calidad del análisis (*Equilibrada* va bien para empezar).
-3. Pulsa **Generar mis shorts** y mira cómo avanza en **En curso**. Cuando termina, están en **Mis shorts**.
+3. Pulsa **Generar** (el botón dice cuántos: «Generar 3 shorts») y mira cómo avanza en **En curso**. Cuando termina, están en **Mis shorts**.
 
-Si prefieres decidir tú qué momentos se montan, usa **Buscar y revisar antes de montar**.
+Si prefieres decidir tú qué momentos se montan, usa **Elegir yo los momentos**.
 
 ## ¿Hace falta Claude?
 
@@ -113,6 +113,16 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
+
+### 1.4.1 (2026-10-23)
+
+- El panel de generar ya no parece un anuncio: es una lista de lo que falta
+  (pódcast, vídeo de fondo) y de lo que va a salir, con el tiempo estimado, y el
+  botón dice lo que hace: «Generar 3 shorts».
+- Las opciones principales son preguntas claras («¿Cuántos shorts?», «¿Cuánto
+  dura cada uno?», «¿Cuánto cuidado con el texto?», «¿En qué idioma hablan?»)
+  con todas las opciones y su detalle a la vista para compararlas.
+- «Buscar y revisar antes de montar» pasa a llamarse «Elegir yo los momentos».
 
 ### 1.4.0 (2026-10-23)
 

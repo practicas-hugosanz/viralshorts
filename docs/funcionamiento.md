@@ -124,7 +124,7 @@ La ventana tiene una barra lateral con cuatro secciones:
   la calidad del análisis, y el estilo de los subtítulos. A la derecha, un
   **monitor 9:16** que se actualiza al momento (color, tamaño, altura, palabras
   por línea y fuente; la palabra que suena va cambiando de color) y, debajo,
-  **Generar mis shorts** o **Buscar y revisar antes de montar**.
+  **Generar N shorts** o **Elegir yo los momentos**.
 - **En curso**: las cinco fases como una lista que se va marcando, con barra de
   progreso, la cola de trabajos, el detalle técnico plegado y, si pediste revisar,
   los momentos para elegir y corregir antes de montar.
@@ -251,7 +251,7 @@ Elegir los momentos cuesta minutos (descarga, transcripción, Claude) y
 montarlos cuesta otros tantos. Antes las dos cosas iban pegadas: para descartar
 un clip flojo o corregir un título había que repetirlo **todo**.
 
-Ahora se pueden separar. **Buscar y revisar antes de montar** guarda un *plan*
+Ahora se pueden separar. **Elegir yo los momentos** guarda un *plan*
 en `work/plans/` con la selección: los candidatos —el triple de los que pediste,
 por defecto—, sus transcripciones, las palabras con sus tiempos y la
 configuración completa con la que se eligieron. Encima de eso trabaja la

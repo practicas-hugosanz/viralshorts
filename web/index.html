@@ -47,9 +47,6 @@
   --bad-soft: #fdecec;
   --info: #2a6fc9;
   --info-soft: #e8f1fc;
-  --cta: #1b1c20;
-  --cta-text: #ffffff;
-  --cta-mute: #b9bcc5;
   --shadow: 0 1px 2px rgba(22,23,27,.05), 0 14px 30px -22px rgba(22,23,27,.35);
   --ui: "Manrope", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --display: "Manrope", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
@@ -83,9 +80,6 @@
     --bad-soft: #3a2224;
     --info: #78b4ff;
     --info-soft: #1f2d3e;
-    --cta: #0f1013;
-    --cta-text: #f1f2f5;
-    --cta-mute: #9da1ab;
     --shadow: 0 14px 30px -22px rgba(0,0,0,.8);
   }
 }
@@ -308,38 +302,26 @@ select.pill { width: auto; border-radius: 99px; background-color: var(--surf); b
 .choice:has(input:checked) em { color: color-mix(in srgb, var(--ink-text) 70%, transparent); }
 .choice:has(input:focus-visible) { outline: 2px solid var(--ink); outline-offset: 2px; }
 
-/* "Que quieres obtener": tres fichas de color con el valor grande, y las
-   opciones como pastillas pequenas debajo (como 1H / 24H / 1W). */
-.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-.tile { position: relative; border-radius: var(--r); padding: 18px 18px 16px; min-height: 162px; display: flex; flex-direction: column; }
-.tile.tint-lilac { background: var(--lilac); }
-.tile.tint-mint { background: var(--mint); }
-.tile.tint-butter { background: var(--butter); }
-.tile-k { font-weight: 700; color: var(--mute); font-size: 13px; }
-.tile-v { font: 800 26px/1.15 var(--display); letter-spacing: -.02em; margin: 6px 0 auto; min-height: 30px; }
-.tile .seg { display: flex; gap: 2px; flex-wrap: nowrap; margin-top: 14px; }
-.tile .choice { position: static; padding: 4px 9px; border-radius: 99px; background: transparent; }
-.tile .choice b { font-size: 12.5px; color: var(--mute); }
-.tile .choice em { display: none; }
-.tile .choice input { position: absolute; width: 1px; height: 1px; inset: auto; }
-.tile .choice:hover { border-color: transparent; background: rgba(255,255,255,.5); }
-.tile .choice:has(input:checked) { background: var(--surf); color: var(--text); box-shadow: var(--shadow); }
-.tile .choice:has(input:checked) b { color: var(--text); }
-/* El valor grande es el texto de la opcion marcada. */
-.tile .choice:has(input:checked) em { display: block; position: absolute; left: 18px; top: 40px; right: 18px; font: 800 26px/1.15 var(--display); letter-spacing: -.02em; color: var(--text); pointer-events: none; }
-.tile .hint { margin-top: 8px; color: var(--mute); }
+/* "Que quieres obtener": una pregunta por fila y todas las opciones a la vista,
+   con su detalle, para poder compararlas sin abrir nada. */
+.choices-card { padding-bottom: 8px; }
+.choices-card > h2 { margin-bottom: 4px; }
+.q-row { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 10px 24px; align-items: center; padding: 16px 0; border-top: 1px solid var(--line-soft); }
+.choices-card > h2 + .q-row { border-top: 0; }
+.q-text b { display: block; font-size: 14.5px; }
+.q-text span { display: block; color: var(--mute); font-size: 12.5px; line-height: 1.4; margin-top: 2px; }
+.q-ctrl.seg { gap: 6px; }
+.q-ctrl select { max-width: 300px; }
 
 /* contador */
-.stepper { display: inline-flex; align-items: center; gap: 6px; }
-.stepper button { width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--surf); font-size: 18px; line-height: 1; color: var(--text); box-shadow: var(--shadow); }
+.stepper { display: inline-flex; align-items: center; gap: 4px; padding: 4px; border-radius: 99px; background: var(--raise); }
+.stepper button { width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--surf); font-size: 18px; line-height: 1; color: var(--text); box-shadow: 0 1px 2px rgba(22,23,27,.08); }
 .stepper button:hover { background: var(--ink); color: var(--ink-text); }
-.stepper input { width: 64px; text-align: center; border: 0; background: transparent; border-radius: 10px; padding: 0; font: 800 34px/1.1 var(--display); letter-spacing: -.02em; -moz-appearance: textfield; appearance: textfield; }
+.stepper input { width: 48px; text-align: center; border: 0; background: transparent; padding: 0; font: 800 20px/1 var(--display); -moz-appearance: textfield; appearance: textfield; }
 .stepper input:hover { border: 0; }
 .stepper input::-webkit-outer-spin-button, .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .count-row { display: flex; align-items: center; gap: 12px; }
 .count-row span { color: var(--mute); }
-.tile .stepper { margin: 4px 0 auto -6px; }
-.tile #clips-unit { font-size: 12.5px; font-weight: 600; color: var(--mute); margin-top: 14px; }
 
 /* deslizadores */
 .slider { display: flex; align-items: center; gap: 12px; }
@@ -383,7 +365,7 @@ input[type="color"].swatch::-webkit-color-swatch { border: 0; border-radius: 50%
 .monitor { position: sticky; top: 8px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .phone {
   /* La altura manda en vertical; en 4:5 y 1:1 el ancho se acota al del monitor. */
-  --h: clamp(200px, calc(100vh - 540px), 400px); --ar: 9 / 16; --wr: .5625;
+  --h: clamp(200px, calc(100vh - 520px), 400px); --ar: 9 / 16; --wr: .5625;
   width: min(100%, calc(var(--h) * var(--wr))); aspect-ratio: var(--ar);
   background: #16171b; border-radius: 30px; padding: 6px;
   box-shadow: 0 30px 50px -28px rgba(22,23,27,.55);
@@ -457,30 +439,27 @@ input[type="color"].swatch::-webkit-color-swatch { border: 0; border-radius: 50%
 .sub span { transition: color .12s; }
 .monitor > .hint { text-align: center; max-width: 30ch; margin: 0; }
 
-/* La tarjeta negra de generar, como la de "Earn" del resumen. */
+/* Panel de generar: dice que falta, que va a salir y cuanto tarda; el boton
+   repite lo que hace ("Generar 3 shorts"). Sin adornos: es una herramienta. */
 .launch {
-  position: relative; overflow: hidden; isolation: isolate;
   width: 100%; display: flex; flex-direction: column; gap: 10px;
-  padding: 22px 20px 18px; border-radius: 24px;
-  background: var(--cta); color: var(--cta-text);
+  padding: 16px 18px 12px; border-radius: 22px;
+  background: var(--surf); border: 1px solid var(--line);
 }
-.launch::before, .launch::after {
-  content: ""; position: absolute; z-index: -1; width: 120px; height: 150px; right: -34px; bottom: -40px;
-  border: 1.5px solid rgba(255,255,255,.16); border-radius: 16px; transform: rotate(-14deg);
-}
-.launch::after { right: -6px; bottom: -66px; transform: rotate(-4deg); }
-.launch h3 { font: 800 22px/1.2 var(--display); letter-spacing: -.01em; }
-.launch .eta { color: var(--cta-mute); font-size: 12.5px; text-align: left; margin: 0 0 4px; }
-.launch .eta b { color: var(--cta-text); font-weight: 700; }
+.launch h3 { font: 800 16px var(--display); }
+.checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.checklist li { display: flex; align-items: center; gap: 10px; }
+.checklist i { width: 18px; height: 18px; flex: none; border-radius: 50%; border: 2px dashed var(--faint); position: relative; }
+.checklist li.ok i { border: 0; background: var(--ok); }
+.checklist li.ok i::after { content: ""; position: absolute; left: 5px; top: 4.5px; width: 7px; height: 4px; border: solid #fff; border-width: 0 0 2px 2px; transform: rotate(-45deg); }
+.checklist span { min-width: 0; flex: 1; display: flex; align-items: baseline; gap: 6px; font-size: 13px; }
+.checklist b { flex: none; }
+.checklist em { min-width: 0; font-style: normal; color: var(--mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.checklist li:not(.ok) em { color: var(--bad); }
+.launch .eta { color: var(--mute); font-size: 12.5px; margin: 2px 0 0; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+.launch .eta b { color: var(--text); }
 .launch .btn { width: 100%; }
-.launch .btn.primary { background: var(--sky-hi); border-color: var(--sky-hi); color: #16171b; }
-.launch .btn.primary:hover:not(:disabled) { background: #d4e8fc; border-color: #d4e8fc; }
-.launch .btn:not(.primary) { background: transparent; color: var(--cta-text); border-color: rgba(255,255,255,.22); }
-.launch .btn:not(.primary):hover:not(:disabled) { border-color: rgba(255,255,255,.5); }
 .launch-sub { display: flex; justify-content: center; }
-.launch .link { color: var(--cta-mute); }
-.launch .link:hover:not(:disabled) { color: var(--cta-text); }
-@media (prefers-color-scheme: dark) { .launch { box-shadow: inset 0 0 0 1px var(--line); } }
 
 /* ---------------------------------------------------------------- en curso */
 .empty {
@@ -684,7 +663,7 @@ body.modal-open .main { overflow: hidden; }
 @media (max-width: 1080px) {
   .create { grid-template-columns: minmax(0, 1fr) 264px; gap: 22px; }
   .page { padding: 22px 24px 48px; }
-  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .q-row { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 760px) {
   .app { grid-template-columns: 68px minmax(0, 1fr); }
@@ -700,9 +679,8 @@ body.modal-open .main { overflow: hidden; }
 }
 @media (max-width: 560px) {
   .page { padding: 18px 16px 40px; }
-  .fields, .tiles { grid-template-columns: minmax(0, 1fr); }
+  .fields { grid-template-columns: minmax(0, 1fr); }
   .seg { grid-template-columns: 1fr; }
-  .tile .seg { display: flex; }
   .view-head { flex-direction: column; align-items: flex-start; }
   .topbar h1 { font-size: 26px; }
 }
@@ -819,44 +797,46 @@ body.modal-open .main { overflow: hidden; }
             </section>
             </div>
 
-              <div class="section-title">
+              <section class="card choices-card">
                 <h2>Qué quieres obtener</h2>
-                <select id="language" class="pill" aria-label="Idioma del pódcast">
-                  <option value="es" selected>En español</option>
-                  <option value="en">En inglés</option>
-                  <option value="auto">Detectar el idioma</option>
-                </select>
-              </div>
-              <div class="tiles">
-                <section class="tile tint-lilac">
-                  <span class="tile-k">Cuántos shorts</span>
-                  <div class="stepper">
-                    <button type="button" id="clips-down" aria-label="Uno menos">−</button>
-                    <input type="number" id="clips" min="1" max="20" value="3" inputmode="numeric" aria-label="Número de shorts">
-                    <button type="button" id="clips-up" aria-label="Uno más">+</button>
+                <div class="q-row">
+                  <div class="q-text"><b>¿Cuántos shorts?</b><span>Se eligen los mejores momentos del pódcast.</span></div>
+                  <div class="q-ctrl count-row">
+                    <div class="stepper">
+                      <button type="button" id="clips-down" aria-label="Uno menos">−</button>
+                      <input type="number" id="clips" min="1" max="20" value="3" inputmode="numeric" aria-label="Número de shorts">
+                      <button type="button" id="clips-up" aria-label="Uno más">+</button>
+                    </div>
+                    <span id="clips-unit">shorts del mismo pódcast</span>
                   </div>
-                  <span id="clips-unit">shorts del mismo pódcast</span>
-                </section>
-                <section class="tile tint-mint">
-                  <span class="tile-k">Duración de cada uno</span>
-                  <span class="tile-v" aria-hidden="true"></span>
-                  <div class="seg" role="radiogroup" aria-label="Duración de cada short">
-                    <label class="choice"><input type="radio" name="length" value="short"><b>Corto</b><em>15–30 s</em></label>
-                    <label class="choice"><input type="radio" name="length" value="normal" checked><b>Normal</b><em>25–45 s</em></label>
-                    <label class="choice"><input type="radio" name="length" value="long"><b>Largo</b><em>45–60 s</em></label>
+                </div>
+                <div class="q-row">
+                  <div class="q-text"><b>¿Cuánto dura cada uno?</b><span>Para TikTok y Reels va bien el normal.</span></div>
+                  <div class="q-ctrl seg" role="radiogroup" aria-label="Duración de cada short">
+                    <label class="choice"><input type="radio" name="length" value="short"><b>Corto</b><em>15 a 30 s</em></label>
+                    <label class="choice"><input type="radio" name="length" value="normal" checked><b>Normal</b><em>25 a 45 s</em></label>
+                    <label class="choice"><input type="radio" name="length" value="long"><b>Largo</b><em>45 a 60 s</em></label>
                   </div>
-                </section>
-                <section class="tile tint-butter">
-                  <span class="tile-k">Calidad del análisis</span>
-                  <span class="tile-v" aria-hidden="true"></span>
-                  <div class="seg" role="radiogroup" aria-label="Calidad del análisis">
-                    <label class="choice"><input type="radio" name="preset" value="fast"><b>Rápida</b><em>~3 min</em></label>
-                    <label class="choice"><input type="radio" name="preset" value="balanced" checked><b>Media</b><em>~12 min</em></label>
-                    <label class="choice"><input type="radio" name="preset" value="best"><b>Máxima</b><em>~26 min</em></label>
+                </div>
+                <div class="q-row">
+                  <div class="q-text"><b>¿Cuánto cuidado con el texto?</b><span>Más tiempo, subtítulos más exactos. Tiempo para un pódcast de 2 h.</span></div>
+                  <div class="q-ctrl seg" role="radiogroup" aria-label="Calidad del análisis">
+                    <label class="choice"><input type="radio" name="preset" value="fast"><b>Rápido</b><em>unos 3 min</em></label>
+                    <label class="choice"><input type="radio" name="preset" value="balanced" checked><b>Equilibrado</b><em>unos 12 min</em></label>
+                    <label class="choice"><input type="radio" name="preset" value="best"><b>Máximo</b><em>unos 26 min</em></label>
                   </div>
-                </section>
-              </div>
-              <p class="hint" style="margin-top:-4px">Más calidad significa subtítulos más exactos; el tiempo es para un pódcast de unas 2 horas.</p>
+                </div>
+                <div class="q-row">
+                  <div class="q-text"><label for="language"><b>¿En qué idioma hablan?</b></label><span>Acertar el idioma mejora la transcripción.</span></div>
+                  <div class="q-ctrl">
+                    <select id="language">
+                      <option value="es" selected>Español</option>
+                      <option value="en">Inglés</option>
+                      <option value="auto">No lo sé: que lo detecte</option>
+                    </select>
+                  </div>
+                </div>
+              </section>
               <div class="model-note" id="model-note" hidden>
                 <svg class="ico"><use href="#i-download"/></svg>
                 <div class="note-body"><b id="mn-title"></b><p id="mn-text"></p><div class="bar sm" id="mn-bar" hidden><i id="mn-fill"></i></div></div>
@@ -1121,10 +1101,15 @@ body.modal-open .main { overflow: hidden; }
             <p class="hint">Así se verá tu short.</p>
 
             <div class="launch">
-              <h3>Genera tus shorts</h3>
+              <h3>Antes de generar</h3>
+              <ul class="checklist" aria-live="polite">
+                <li id="chk-pod"><i></i><span><b>Pódcast</b><em>falta</em></span></li>
+                <li id="chk-bg"><i></i><span><b>Vídeo de fondo</b><em>falta</em></span></li>
+                <li id="chk-what" class="ok"><i></i><span><b id="chk-what-t">3 shorts</b><em id="chk-what-d">de 25 a 45 s</em></span></li>
+              </ul>
               <p class="eta" id="eta"></p>
               <button type="submit" form="form" class="btn primary lg" id="run">Generar mis shorts</button>
-              <button type="button" class="btn" id="review">Buscar y revisar antes de montar</button>
+              <button type="button" class="btn" id="review" title="Te enseña los momentos que encuentra y tú marcas cuáles se montan">Elegir yo los momentos</button>
               <div class="launch-sub"><button type="button" class="link" id="clear">Empezar de nuevo</button></div>
             </div>
           </aside>
@@ -1538,10 +1523,32 @@ function presetFromFields() {
 
 function updateEta() {
   const preset = PRESETS[radio("preset")];
-  const n = +$("clips").value || 1;
   const label = preset ? preset.minutes : "un rato";
-  $("eta").innerHTML = `Tardará <b>${label}</b> con un pódcast de unas 2 horas, ` +
-                       `más unos 15 segundos por cada uno de los ${n} shorts (menos con tarjeta gráfica).`;
+  $("eta").innerHTML = `Tardará <b>${label}</b> con un pódcast de 2 horas, más unos 15 s por short.`;
+  updateSummary();
+}
+
+/** Panel de generar: qué falta, qué va a salir, y el botón dice lo que hará. */
+function updateSummary() {
+  const n = Math.max(1, +$("clips").value || 1);
+  const source = (id, row) => {
+    const value = $(id).value.trim();
+    const title = $(id + "-preview").querySelector("b").textContent;
+    $(row).classList.toggle("ok", !!value);
+    $(row).querySelector("em").textContent = !value ? "falta"
+      : (title && title !== "Buscando el título…" ? title : value.split(/[\\/]/).pop());
+  };
+  source("podcast", "chk-pod");
+  source("background", "chk-bg");
+  const length = LENGTHS[radio("length")];
+  const min = length ? length.min_duration : $("min_duration").value;
+  const max = length ? length.max_duration : $("max_duration").value;
+  $("chk-what-t").textContent = n === 1 ? "1 short" : `${n} shorts`;
+  $("chk-what-d").textContent = `de ${min} a ${max} s`;
+  // Ocupado, lo que se lance va a la cola en vez de pelearse por la carpeta de trabajo.
+  const busy = $("status").dataset.state === "running";
+  $("run").textContent = busy ? "Añadir a la cola" : (n === 1 ? "Generar 1 short" : `Generar ${n} shorts`);
+  $("review").textContent = busy ? "Añadir a la cola para revisar" : "Elegir yo los momentos";
 }
 
 // ===========================================================================
@@ -1739,6 +1746,7 @@ function refreshPreview(id) {
 
   card.classList.toggle("filled", value.length > 0);
   refreshMonitor();
+  updateSummary();
   if (!value) { box.classList.remove("on"); return; }
 
   box.classList.add("on");
@@ -1816,6 +1824,7 @@ function askTitle(id, value) {
       const label = box.querySelector("b");
       if (label.textContent === "Buscando el título…") label.textContent = "Vídeo de YouTube";
     }
+    updateSummary();
   }, 500);
 }
 
@@ -2793,12 +2802,8 @@ function setStatus(status) {
   const busy = status === "running";
   $("stop").disabled = !busy;
   $("clear").disabled = busy;
-  // Estando ocupado los botones siguen valiendo: lo que lances se pone en cola
-  // en vez de pelearse por la carpeta de trabajo.
   $("skip-row").hidden = !busy || $("queue-panel").hidden;
-  $("run").textContent = busy ? "Añadir a la cola" : "Generar mis shorts";
-  $("review").textContent = busy
-    ? "Añadir a la cola para revisar" : "Buscar y revisar antes de montar";
+  updateSummary();
   if (!busy) { $("bar").style.width = "0"; $("pct").textContent = ""; }
   if (!busy) $("live-head").classList.add("idle");
   if (status === "done") { paintSteps(STEPS.length); $("stage-label").textContent = "Terminado"; }
