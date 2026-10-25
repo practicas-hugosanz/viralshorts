@@ -1,6 +1,6 @@
 [package]
 name = "viralshorts"
-version = "1.5.2"
+version = "1.5.3"
 edition = "2021"
 description = "De un podcast de YouTube a shorts verticales subtitulados"
 default-run = "viralshorts"
