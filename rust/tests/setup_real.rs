@@ -64,3 +64,19 @@ fn las_direcciones_fijadas_siguen_existiendo() {
     let graves: Vec<&String> = fallos.iter().filter(|f| !f.contains("gyan.dev")).collect();
     assert!(graves.is_empty(), "direcciones rotas: {graves:#?}");
 }
+
+#[test]
+fn el_motor_de_la_tarjeta_grafica_se_descarga_comprobado_y_arranca() {
+    if !con_red() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let estado: setup::Shared = Mutex::new(State::default());
+    setup::install(dir.path(), &[Tool::WhisperVulkan], &estado);
+    {
+        let s = estado.lock().unwrap();
+        assert!(s.done && s.error.is_none(), "la instalacion fallo: {:?}\n{}", s.error, s.log.join("\n"));
+    }
+    assert!(setup::vulkan_installed(dir.path()));
+    assert!(arranca(&setup::whisper_cli(dir.path(), "whisper-vulkan"), &["--help"]).to_lowercase().contains("usage"));
+}
