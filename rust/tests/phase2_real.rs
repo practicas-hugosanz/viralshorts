@@ -126,7 +126,7 @@ struct MotorFalso {
 }
 
 impl Engine for MotorFalso {
-    fn cuda_available(&self) -> bool {
+    fn gpu_available(&self) -> bool {
         false
     }
 
@@ -185,7 +185,7 @@ fn un_audio_sin_habla_es_un_error_claro() {
     }
     struct Mudo;
     impl Engine for Mudo {
-        fn cuda_available(&self) -> bool {
+        fn gpu_available(&self) -> bool {
             false
         }
         fn transcribe(&mut self, _: &Path, _: Device, _: &EngineOptions, _: &mut dyn FnMut(f64)) -> Result<EngineOutput, TranscribeError> {
@@ -257,4 +257,15 @@ fn cambiar_de_enlace_descarga_el_video_nuevo() {
     let mismo = download::fetch("https://youtu.be/dQw4w9WgXcQ", &base, &cfg).unwrap();
     assert_eq!(mismo.path, otro.path);
     assert_eq!(mismo.title, otro.title);
+}
+
+#[test]
+fn listar_los_ultimos_videos_de_un_canal_real() {
+    if std::env::var("VS_NET_TESTS").is_err() || ffmpeg::which("yt-dlp").is_none() {
+        eprintln!("prueba con red omitida (VS_NET_TESTS=1 y yt-dlp en el PATH)");
+        return;
+    }
+    let videos = viralshorts::download::latest_videos("https://www.youtube.com/@YouTube", 3).expect("lista del canal");
+    assert_eq!(videos.len(), 3, "{videos:?}");
+    assert!(videos.iter().all(|(id, title, _)| id.len() == 11 && !title.is_empty()), "{videos:?}");
 }

@@ -82,6 +82,10 @@ pub struct TranscribeConfig {
     pub initial_prompt: String,
     /// Correcciones fijas, `mal=bien;otra mal=otra bien`, que se aplican al texto.
     pub corrections: String,
+    /// Traducir al ingles en vez de transcribir (`-tr` de whisper). Solo lo usa
+    /// la pasada que traduce los clips elegidos.
+    #[serde(skip)]
+    pub translate: bool,
 }
 
 impl Default for TranscribeConfig {
@@ -100,6 +104,7 @@ impl Default for TranscribeConfig {
             refine_model: String::new(),
             initial_prompt: String::new(),
             corrections: String::new(),
+            translate: false,
         }
     }
 }
@@ -512,6 +517,15 @@ pub struct SubtitlesConfig {
     pub fonts_dir: Option<String>,
     /// `classic`, `box`, `marker`, `neon` o `minimal`.
     pub style: String,
+    /// Con dos personas en plano, la palabra activa de la segunda (la de la
+    /// derecha) va en este color, para saber quien dice que.
+    pub color_second: String,
+    pub speaker_colors: bool,
+    /// Idioma de los subtitulos si no es el del podcast ("en", "es"...). Vacio:
+    /// el mismo. Al ingles traduce whisper; a los demas, Claude.
+    pub translate_to: String,
+    /// Un emoji encima del bloque cuando se dice una palabra clave.
+    pub emojis: bool,
 }
 
 impl Default for SubtitlesConfig {
@@ -538,6 +552,10 @@ impl Default for SubtitlesConfig {
             censor_words: Vec::new(),
             fonts_dir: None,
             style: "classic".into(),
+            color_second: "#40C4FF".into(),
+            speaker_colors: true,
+            translate_to: String::new(),
+            emojis: false,
         }
     }
 }
@@ -644,6 +662,10 @@ pub struct OutputConfig {
     /// Al terminar de montar, borrar el video descargado del podcast (pesa
     /// cientos de MB). Si hace falta otra vez se vuelve a bajar solo.
     pub delete_source: bool,
+    /// Ademas del video: los subtitulos en .srt...
+    pub export_srt: bool,
+    /// ...y el mismo video sin ningun texto encima (para editarlo aparte).
+    pub export_clean: bool,
 }
 
 impl Default for OutputConfig {
@@ -663,6 +685,8 @@ impl Default for OutputConfig {
             csv: true,
             run_subfolder: true,
             delete_source: true,
+            export_srt: false,
+            export_clean: false,
         }
     }
 }

@@ -119,6 +119,8 @@ pub struct Plan {
     pub config: Value,
     pub podcast: PlanSource,
     pub background: PlanSource,
+    /// Mas videos de fondo: cada short usa el siguiente (en rotacion).
+    pub extra_backgrounds: Vec<PlanSource>,
     pub clips: Vec<PlanClip>,
 }
 
@@ -144,6 +146,7 @@ pub fn save(
     cfg: &Config,
     podcast: &PlanSource,
     background: &PlanSource,
+    extra_backgrounds: &[PlanSource],
     clips: &[Window],
     metadata: &HashMap<usize, ClipMetadata>,
     selected: usize,
@@ -154,6 +157,7 @@ pub fn save(
         "config": cfg.to_value(),
         "podcast": podcast,
         "background": background,
+        "fondos_extra": extra_backgrounds,
         "clips": clips.iter().enumerate().map(|(i, clip)| clip_dict(clip, metadata.get(&i), i < selected)).collect::<Vec<_>>(),
     });
     write_json(path, &data)?;
@@ -228,6 +232,10 @@ pub fn load(path: &Path) -> Result<Plan, PlanError> {
         config: if data["config"].is_object() { data["config"].clone() } else { json!({}) },
         podcast: source("podcast"),
         background: source("background"),
+        extra_backgrounds: data["fondos_extra"]
+            .as_array()
+            .map(|list| list.iter().filter_map(|v| serde_json::from_value::<PlanSource>(v.clone()).ok()).collect())
+            .unwrap_or_default(),
         clips,
     })
 }
@@ -273,6 +281,7 @@ fn words_from_json(value: &Value) -> Vec<Word> {
                         start: w[1].as_f64()?,
                         end: w[2].as_f64()?,
                         probability: w[3].as_f64().unwrap_or(1.0),
+                        speaker: None,
                     })
                 })
                 .collect()
@@ -350,12 +359,12 @@ pub fn retext_words(old: &[Word], text: &str) -> Vec<Word> {
             let mut cursor = from;
             for (word, weight) in gap_new.iter().zip(&weights) {
                 let width = (to - from) * weight / total;
-                out.push(Word { text: (*word).to_string(), start: cursor, end: cursor + width, probability: 1.0 });
+                out.push(Word { text: (*word).to_string(), start: cursor, end: cursor + width, probability: 1.0, speaker: None });
                 cursor += width;
             }
         }
         if ai < n {
-            out.push(Word { text: new[aj].to_string(), start: old[ai].start, end: old[ai].end, probability: old[ai].probability });
+            out.push(Word { text: new[aj].to_string(), start: old[ai].start, end: old[ai].end, speaker: old[ai].speaker, probability: old[ai].probability });
         }
         prev_i = ai + 1;
         prev_j = aj + 1;
@@ -531,6 +540,20 @@ mod tests {
         PlanSource { ruta: ruta.into(), titulo: "El Programa - Invitado".into(), duracion: 3600.0, url: "https://example.com/v".into() }
     }
 
+    #[test]
+    fn el_plan_recuerda_los_fondos_que_se_turnan() {
+        let dir = tempfile::tempdir().unwrap();
+        let destino = dir.path().join("plan.json");
+        save(&destino, &Config::default(), &fuente("p"), &fuente("b1"), &[fuente("b2"), fuente("b3")], &[clip(1.0)], &HashMap::new(), 1).unwrap();
+        let plan = load(&destino).unwrap();
+        assert_eq!(plan.extra_backgrounds.iter().map(|f| f.ruta.as_str()).collect::<Vec<_>>(), ["b2", "b3"]);
+        // Un plan de antes, sin la lista, sigue valiendo.
+        let mut viejo: Value = serde_json::from_str(&std::fs::read_to_string(&destino).unwrap()).unwrap();
+        viejo.as_object_mut().unwrap().remove("fondos_extra");
+        std::fs::write(&destino, viejo.to_string()).unwrap();
+        assert!(load(&destino).unwrap().extra_backgrounds.is_empty());
+    }
+
     fn clip(inicio: f64) -> Window {
         let palabras = vec![Word::new("hola", inicio, inicio + 0.4), Word::new("mundo.", inicio + 0.5, inicio + 0.9)];
         Window { score: 0.7, reason: "engancha".into(), heat: 0.5, ..Window::new(inicio, inicio + 30.0, palabras, "hola mundo.") }
@@ -584,7 +607,7 @@ mod tests {
     fn plan_con_clip_largo(dir: &Path) -> PathBuf {
         let palabras: Vec<Word> = (0..40).map(|i| Word::new(format!("p{i}"), 100.0 + i as f64, 100.0 + i as f64 + 0.8)).collect();
         let largo = Window { score: 0.7, ..Window::new(100.0, 140.0, palabras, "texto") };
-        save(&dir.join("plan.json"), &Config::default(), &fuente("p.mp4"), &fuente("b.mp4"), &[largo], &HashMap::new(), 1).unwrap()
+        save(&dir.join("plan.json"), &Config::default(), &fuente("p.mp4"), &fuente("b.mp4"), &[], &[largo], &HashMap::new(), 1).unwrap()
     }
 
     #[test]
@@ -642,7 +665,7 @@ mod tests {
         cfg.subtitles.font_size = 77;
         let metas = HashMap::from([(0, ClipMetadata::new("Titulo", "GANCHO", "Descripcion.", &["a", "b"]))]);
 
-        save(&destino, &cfg, &fuente("p.mp4"), &fuente("b.mp4"), &[clip(10.0), clip(200.0)], &metas, 1).unwrap();
+        save(&destino, &cfg, &fuente("p.mp4"), &fuente("b.mp4"), &[], &[clip(10.0), clip(200.0)], &metas, 1).unwrap();
         let leido = load(&destino).unwrap();
 
         assert_eq!(leido.clips.len(), 2);
@@ -666,7 +689,7 @@ mod tests {
         let destino = dir.path().join("plan.json");
         let mut cfg = Config::default();
         cfg.clips.num_clips = 9;
-        save(&destino, &cfg, &fuente("p"), &fuente("b"), &[clip(1.0)], &HashMap::new(), 1).unwrap();
+        save(&destino, &cfg, &fuente("p"), &fuente("b"), &[], &[clip(1.0)], &HashMap::new(), 1).unwrap();
 
         let mut recuperada = Config::default();
         recuperada.merge(&load(&destino).unwrap().config, "plan").unwrap();
@@ -677,7 +700,7 @@ mod tests {
     fn la_interfaz_puede_marcar_y_retitular() {
         let dir = tempfile::tempdir().unwrap();
         let destino = dir.path().join("plan.json");
-        save(&destino, &Config::default(), &fuente("p"), &fuente("b"), &[clip(10.0), clip(200.0)], &HashMap::new(), 2).unwrap();
+        save(&destino, &Config::default(), &fuente("p"), &fuente("b"), &[], &[clip(10.0), clip(200.0)], &HashMap::new(), 2).unwrap();
 
         update(
             &destino,
@@ -707,7 +730,7 @@ mod tests {
     fn un_ajuste_que_no_es_un_grupo_es_un_error() {
         let dir = tempfile::tempdir().unwrap();
         let destino = dir.path().join("plan.json");
-        save(&destino, &Config::default(), &fuente("p"), &fuente("b"), &[clip(1.0)], &HashMap::new(), 1).unwrap();
+        save(&destino, &Config::default(), &fuente("p"), &fuente("b"), &[], &[clip(1.0)], &HashMap::new(), 1).unwrap();
         let mut cambios = Map::new();
         cambios.insert("clips.num_clips.dentro".into(), json!(1));
         assert!(apply_config(&destino, &cambios).is_err());

@@ -36,6 +36,13 @@ pub fn whisper_url(file: &str) -> String {
     format!("https://github.com/ggml-org/whisper.cpp/releases/download/{WHISPER_RELEASE}/{file}")
 }
 
+/// Motor de whisper.cpp para tarjetas AMD e Intel (Vulkan). whisper.cpp no
+/// publica uno para Windows: se compila desde la misma version que el de CPU
+/// (install/compilar-whisper-vulkan.ps1) y se sube a las releases de la app.
+pub const VULKAN_ENGINE_URL: &str =
+    "https://github.com/practicas-hugosanz/viralshorts-releases/releases/download/motores/whisper-vulkan-b5454-x64.zip";
+pub const VULKAN_ENGINE_SHA256: &str = "f3c5851eedaee3e55fce43885dd8bae526ad8f2d3fa3d50eadaab136b9f11cb4";
+
 pub const YTDLP_URL: &str = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
 
 /// Modelos de voz que ofrece la interfaz: (nombre, MB aproximados). Pesan desde
@@ -69,6 +76,7 @@ pub enum Tool {
     YtDlp,
     Whisper,
     WhisperCuda,
+    WhisperVulkan,
     /// Un modelo de voz (ver `MODELS`).
     Model(&'static str),
 }
@@ -80,6 +88,7 @@ impl Tool {
             Tool::YtDlp => "yt-dlp (descarga de YouTube)",
             Tool::Whisper => "whisper.cpp (transcripcion)",
             Tool::WhisperCuda => "motor de transcripcion para la tarjeta NVIDIA",
+            Tool::WhisperVulkan => "motor de transcripcion para la tarjeta grafica",
             Tool::Model("tiny") => "modelo de voz tiny",
             Tool::Model("small") => "modelo de voz small",
             Tool::Model("medium") => "modelo de voz medium",
@@ -118,6 +127,31 @@ pub fn missing(root: &Path) -> Vec<Tool> {
 
 pub fn cuda_installed(root: &Path) -> bool {
     whisper_cli(root, "whisper-cuda").is_file()
+}
+
+pub fn vulkan_installed(root: &Path) -> bool {
+    whisper_cli(root, "whisper-vulkan").is_file()
+}
+
+/// El motor de la tarjeta que conviene en este equipo, si hay tarjeta: CUDA
+/// para NVIDIA y Vulkan para el resto (AMD, Intel).
+pub fn gpu_engine_for_this_pc() -> Option<Tool> {
+    if crate::transcribe::nvidia_present() {
+        Some(Tool::WhisperCuda)
+    } else if crate::transcribe::vulkan_driver() {
+        Some(Tool::WhisperVulkan)
+    } else {
+        None
+    }
+}
+
+/// Ya hay un motor de tarjeta que este equipo puede usar.
+pub fn gpu_engine_installed(root: &Path) -> bool {
+    match gpu_engine_for_this_pc() {
+        Some(Tool::WhisperCuda) => cuda_installed(root) || vulkan_installed(root),
+        Some(_) => vulkan_installed(root),
+        None => false,
+    }
 }
 
 /// Estado de la instalacion, para la pantalla de progreso.
@@ -203,6 +237,7 @@ fn install_all(root: &Path, tools: &[Tool], state: &Shared) -> Result<(), String
             }
             Tool::Whisper => install_whisper(root, &mut on_progress)?,
             Tool::WhisperCuda => install_cuda(root, &mut on_progress)?,
+            Tool::WhisperVulkan => install_vulkan(root, &mut on_progress)?,
             Tool::Model(size) => {
                 fetch::download_file_with(&model_url(size), &model_path(root, size), tool.label(), &mut on_progress).map_err(|e| e.to_string())?;
             }
@@ -268,6 +303,25 @@ fn install_cuda(root: &Path, on_progress: &mut dyn FnMut(u64, Option<u64>)) -> R
     result?;
     if !whisper_cli(root, "whisper-cuda").is_file() {
         return Err("El ZIP del motor CUDA no traia whisper-cli.exe.".into());
+    }
+    Ok(())
+}
+
+fn install_vulkan(root: &Path, on_progress: &mut dyn FnMut(u64, Option<u64>)) -> Result<(), String> {
+    let zip = scratch(root, "whisper-vulkan");
+    fetch::download_file_with(VULKAN_ENGINE_URL, &zip, "el motor de la tarjeta grafica", on_progress).map_err(|e| e.to_string())?;
+    // Es un binario compilado por nosotros: se comprueba que es exactamente ese.
+    let digest = crate::update::sha256_file(&zip).map_err(|e| e.to_string())?;
+    if !digest.eq_ignore_ascii_case(VULKAN_ENGINE_SHA256) {
+        let _ = std::fs::remove_file(&zip);
+        return Err("El motor de la tarjeta grafica llego dañado (no coincide su huella). Vuelve a intentarlo.".into());
+    }
+    let dest = root.join("bin").join("whisper-vulkan");
+    let result = extract(&zip, &dest, |name| name.ends_with(".exe") || name.ends_with(".dll"));
+    let _ = std::fs::remove_file(&zip);
+    result?;
+    if !whisper_cli(root, "whisper-vulkan").is_file() {
+        return Err("El ZIP del motor de la tarjeta no traia whisper-cli.exe.".into());
     }
     Ok(())
 }

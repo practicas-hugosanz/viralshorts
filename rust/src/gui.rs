@@ -32,7 +32,7 @@ use crate::config::Config;
 use crate::ffmpeg;
 use crate::pipeline;
 use crate::plan;
-use crate::{fonts, library, progress, setup, update};
+use crate::{channels, fonts, library, progress, setup, update, youtube};
 
 pub const DEFAULT_PORT: u16 = 8760;
 const INDEX_HTML: &str = include_str!("../../web/index.html");
@@ -81,7 +81,7 @@ enum Kind {
 
 /// La lista es cerrada a proposito: el navegador no decide que ajuste del
 /// pipeline se cambia, solo elige entre estos.
-const STYLE_FIELDS: [(&str, &str, Kind); 38] = [
+const STYLE_FIELDS: [(&str, &str, Kind); 43] = [
     ("font_name", "subtitles.font_name", Kind::Text),
     ("font_size", "subtitles.font_size", Kind::Int),
     ("color_active", "subtitles.color_active", Kind::Color),
@@ -95,7 +95,9 @@ const STYLE_FIELDS: [(&str, &str, Kind); 38] = [
     ("refine", "transcribe.refine_model", Kind::Model),
     ("vocab", "transcribe.initial_prompt", Kind::Long),
     ("corrections", "transcribe.corrections", Kind::Long),
-    ("layout_mode", "layout.mode", Kind::Choice(&["stack", "full", "center"])),
+    ("layout_mode", "layout.mode", Kind::Choice(&["stack", "full", "center", "duo"])),
+    ("color_second", "subtitles.color_second", Kind::Color),
+    ("translate", "subtitles.translate_to", Kind::Choice(&["", "en", "es", "fr", "pt", "de", "it"])),
     ("top_ratio", "layout.top_ratio", Kind::Ratio),
     ("swap", "layout.swap", Kind::Flag),
     ("sub_style", "subtitles.style", Kind::Choice(&["classic", "box", "marker", "neon", "minimal"])),
@@ -112,6 +114,9 @@ const STYLE_FIELDS: [(&str, &str, Kind); 38] = [
     ("music_duck", "audio.music_duck", Kind::Flag),
     ("format", "layout.format", Kind::Format),
     ("sfx", "audio.sfx", Kind::Flag),
+    ("emojis", "subtitles.emojis", Kind::Flag),
+    ("export_srt", "output.export_srt", Kind::Flag),
+    ("export_clean", "output.export_clean", Kind::Flag),
     ("censor_beep", "audio.censor_beep", Kind::Flag),
     ("cover_text", "output.cover_text", Kind::Flag),
     ("bg_start", "background.start", Kind::Choice(&["sequence", "random"])),
@@ -791,6 +796,10 @@ pub fn environment(root: &Path) -> Value {
         "version": update::CURRENT,
         "nvidia": nvidia_present(),
         "cuda_engine": setup::cuda_installed(root),
+        // Hay tarjeta grafica aprovechable y aun no tiene su motor: la interfaz lo ofrece.
+        "gpu_offer": setup::gpu_engine_for_this_pc().is_some() && !setup::gpu_engine_installed(root),
+        "gpu_ready": setup::gpu_engine_installed(root),
+        "gpu_kind": match setup::gpu_engine_for_this_pc() { Some(setup::Tool::WhisperCuda) => "nvidia", Some(_) => "vulkan", None => "" },
         "output_dir": configured_output_dir(root).to_string_lossy(),
     })
 }
@@ -798,12 +807,7 @@ pub fn environment(root: &Path) -> Value {
 /// Hay una tarjeta NVIDIA. Se pregunta una sola vez: `environment` se calcula
 /// en cada estado que se manda a la interfaz.
 pub fn nvidia_present() -> bool {
-    static PRESENT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *PRESENT.get_or_init(|| {
-        ffmpeg::which("nvidia-smi").is_some_and(|smi| {
-            ffmpeg::command(smi).arg("-L").stdin(Stdio::null()).output().is_ok_and(|o| o.status.success() && !o.stdout.is_empty())
-        })
-    })
+    crate::transcribe::nvidia_present()
 }
 
 /// Shorts ya generados en la carpeta de salida, con sus metadatos.
@@ -837,6 +841,7 @@ pub fn scan_output(folder: &Path) -> Vec<Value> {
                 entry["gancho"] = json!(publicacion["hook"].as_str().unwrap_or(""));
                 entry["pie"] = json!(caption.trim());
                 entry["marca"] = json!(data["fuente"]["marca"].as_str().unwrap_or(""));
+                entry["youtube"] = json!(data["youtube"]["url"].as_str().unwrap_or(""));
             }
             entry
         })
@@ -1177,6 +1182,8 @@ fn handle_get(app: &Arc<App>, request: &Request, mut stream: TcpStream) {
         "/api/frame" => serve_frame(request.query.get("src").map_or("", String::as_str), &mut stream),
         "/api/image" => serve_image(request.query.get("src").map_or("", String::as_str), &mut stream),
         "/api/reveal" => reveal(app, request, &mut stream),
+        "/api/youtube" => respond_json(&mut stream, 200, &youtube::status(&app.root)),
+        "/api/channels" => respond_json(&mut stream, 200, &json!({"channels": channels::summary(&app.root)})),
         _ => respond_error(&mut stream, 404, "no encontrado"),
     }
 }
@@ -1380,6 +1387,45 @@ fn handle_post(app: &Arc<App>, request: &Request, stream: &mut TcpStream) {
             Ok(removed) => (200, json!({"ok": true, "borrados": removed})),
             Err(error) => (400, json!({"ok": false, "error": error})),
         },
+        "/api/channels/follow" => match channels::follow(&app.root, body["url"].as_str().unwrap_or(""), &body["form"], &channels::list_with_ytdlp) {
+            Ok(channel) => (200, json!({"ok": true, "channel": channel})),
+            Err(error) => (400, json!({"ok": false, "error": error})),
+        },
+        "/api/channels/unfollow" => match channels::unfollow(&app.root, body["url"].as_str().unwrap_or("")) {
+            Ok(()) => (200, json!({"ok": true})),
+            Err(error) => (400, json!({"ok": false, "error": error})),
+        },
+        "/api/channels/check" => (200, json!({"ok": true, "queued": check_channels(app)})),
+        "/api/youtube/connect" => {
+            let secret = body["secret"].as_str().unwrap_or("").trim().to_string();
+            match youtube::connect(&app.root, Path::new(&secret), &|url| open_url(url), &youtube::Endpoints::default()) {
+                Ok(channel) => (200, json!({"ok": true, "channel": channel})),
+                Err(error) => (400, json!({"ok": false, "error": error.to_string()})),
+            }
+        }
+        "/api/youtube/disconnect" => match youtube::disconnect(&app.root) {
+            Ok(()) => (200, json!({"ok": true})),
+            Err(error) => (500, json!({"ok": false, "error": error.to_string()})),
+        },
+        "/api/youtube/upload" => {
+            let privacy = body["privacidad"].as_str().unwrap_or("private");
+            match library::upload_short(&app.job.base_dir(), &app.root, body["id"].as_str().unwrap_or(""), privacy, &youtube::Endpoints::default()) {
+                Ok(url) => (200, json!({"ok": true, "url": url})),
+                Err(error) => (400, json!({"ok": false, "error": error})),
+            }
+        }
+        // Solo direcciones de YouTube y de Google Cloud: la pagina no puede
+        // abrir cualquier cosa en el navegador.
+        "/api/open" => {
+            let url = body["url"].as_str().unwrap_or("");
+            let allowed = ["https://youtube.com/", "https://www.youtube.com/", "https://studio.youtube.com/", "https://console.cloud.google.com/"];
+            if allowed.iter().any(|prefix| url.starts_with(prefix)) && !url.contains(['"', ' ', '\n']) {
+                open_url(url);
+                (200, json!({"ok": true}))
+            } else {
+                (400, json!({"ok": false, "error": "direccion no permitida"}))
+            }
+        }
         "/api/short/rename" => match library::rename_short(&app.job.base_dir(), body["id"].as_str().unwrap_or(""), body["titulo"].as_str().unwrap_or("")) {
             Ok(()) => (200, json!({"ok": true})),
             Err(error) => (400, json!({"ok": false, "error": error})),
@@ -1410,7 +1456,7 @@ fn handle_post(app: &Arc<App>, request: &Request, stream: &mut TcpStream) {
         },
         "/api/setup/start" => {
             let tools = if body["gpu"].as_bool().unwrap_or(false) {
-                Ok(vec![setup::Tool::WhisperCuda])
+                setup::gpu_engine_for_this_pc().map(|tool| vec![tool]).ok_or_else(|| "No hay ninguna tarjeta grafica que se pueda usar.".to_string())
             } else if let Some(size) = body["model"].as_str() {
                 match setup::MODELS.iter().find(|(name, _)| *name == size) {
                     Some((name, _)) => Ok(vec![setup::Tool::Model(name)]),
@@ -1446,6 +1492,20 @@ fn run_form(app: &Arc<App>, mut form: Value) -> (u16, Value) {
         }
     }
     (200, app.job.enqueue(form))
+}
+
+/// Mira los canales seguidos y pone en la cola sus episodios nuevos.
+/// Devuelve cuantos encolo.
+pub fn check_channels(app: &Arc<App>) -> usize {
+    let jobs = channels::check(&app.root, &channels::list_with_ytdlp);
+    let count = jobs.len();
+    for job in jobs {
+        run_form(app, job);
+    }
+    if count > 0 {
+        log::info!("Canales seguidos: {count} episodio(s) nuevo(s) en la cola.");
+    }
+    count
 }
 
 fn plan_state(app: &Arc<App>) -> Value {
@@ -1537,8 +1597,14 @@ pub fn serve_forever(app: Arc<App>, listener: TcpListener) {
 }
 
 pub fn open_browser(url: &str) {
+    open_url(url);
+}
+
+/// Abre una direccion en el navegador del sistema. En Windows sin pasar por
+/// cmd: alli & y ^ separan ordenes, y las direcciones de Google van llenas de &.
+pub fn open_url(url: &str) {
     let result = if cfg!(windows) {
-        ffmpeg::command("cmd").args(["/C", "start", "", url]).spawn()
+        ffmpeg::command("rundll32").args(["url.dll,FileProtocolHandler", url]).spawn()
     } else if cfg!(target_os = "macos") {
         Command::new("open").arg(url).spawn()
     } else {
@@ -1578,6 +1644,15 @@ pub fn launch(port: u16) -> Result<Running, String> {
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(3));
         checking.start_update_check();
+    });
+    // Canales seguidos: se miran al poco de abrir y luego cada tres horas.
+    let watching = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(90));
+        loop {
+            check_channels(&watching);
+            std::thread::sleep(Duration::from_secs(3 * 3600));
+        }
     });
     Ok(Running { app, port, url })
 }
@@ -2347,7 +2422,7 @@ la guapa=La Guapa"}));
         let ruta = dir.path().join("plan.json");
         let fuente = plan::PlanSource { ruta: "p.mp4".into(), titulo: "P".into(), duracion: 10.0, url: String::new() };
         let clips: Vec<crate::scoring::Window> = (0..2).map(|i| crate::scoring::Window::new(i as f64 * 100.0, i as f64 * 100.0 + 30.0, vec![], "texto")).collect();
-        plan::save(&ruta, &Config::default(), &fuente, &fuente, &clips, &HashMap::new(), 2).unwrap();
+        plan::save(&ruta, &Config::default(), &fuente, &fuente, &[], &clips, &HashMap::new(), 2).unwrap();
 
         let (codigo, respuesta) = save_plan(&app, &json!({"ruta": ruta.to_string_lossy(), "clips": [{"n": 1, "seleccionado": false}], "style": {"font_size": 99}}));
         assert_eq!(codigo, 200);

@@ -333,7 +333,8 @@ fn header(
 }
 
 fn subtitle_events(groups: &[Group], cfg: &SubtitlesConfig, width: i64) -> Result<Vec<String>, SubtitleError> {
-    let active = hex_to_ass_color(&cfg.color_active, 0)?;
+    let active_first = hex_to_ass_color(&cfg.color_active, 0)?;
+    let active_second = hex_to_ass_color(&cfg.color_second, 0)?;
     let normal = hex_to_ass_color(&cfg.color_normal, 0)?;
     let outline = hex_to_ass_color(&cfg.color_outline, 0)?;
     let ink = hex_to_ass_color("#000000", 0)?;
@@ -357,6 +358,8 @@ fn subtitle_events(groups: &[Group], cfg: &SubtitlesConfig, width: i64) -> Resul
         let layout = fit_group(&rendered, cfg, width);
 
         for (i, word) in group.words.iter().enumerate() {
+            // Con dos personas, la palabra que suena lleva el color de quien la dice.
+            let active = if cfg.speaker_colors && word.speaker == Some(1) { &active_second } else { &active_first };
             let start = if i > 0 { word.start } else { group.start() };
             // Clave contra el parpadeo: la linea vive hasta que arranca la
             // siguiente palabra, no hasta que acaba la actual.
@@ -692,6 +695,86 @@ pub fn format_time(seconds: f64) -> String {
     format!("{hours}:{minutes:02}:{secs:02}.{centis:02}")
 }
 
+/// Los subtitulos en formato .srt, un bloque por grupo, con el texto tal cual
+/// se dijo (sin mayusculas ni censura: es para editarlo en otro programa).
+pub fn srt(words: &[Word], cfg: &SubtitlesConfig) -> String {
+    let words = tidy_words(words);
+    let groups = group_words(&words, cfg);
+    let stamp = |t: f64| {
+        let ms = (t.max(0.0) * 1000.0).round() as i64;
+        format!("{:02}:{:02}:{:02},{:03}", ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, ms % 1000)
+    };
+    let mut out = String::new();
+    for (index, group) in groups.iter().enumerate() {
+        let end = groups.get(index + 1).map_or(group.end() + TAIL_HOLD, |next| next.start().min(group.end() + TAIL_HOLD));
+        let text = group.words.iter().map(|w| w.text.trim()).collect::<Vec<_>>().join(" ");
+        out.push_str(&format!("{}\n{} --> {}\n{text}\n\n", index + 1, stamp(group.start()), stamp(end)));
+    }
+    out
+}
+
+// ----------------------------------------------------------------------------
+// Emojis segun lo que se dice
+// ----------------------------------------------------------------------------
+
+/// Un emoji encima de un bloque de subtitulos.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EmojiCue {
+    pub code: &'static str,
+    pub start: f64,
+    pub end: f64,
+    /// Arriba del emoji, en pixeles del video, y su lado.
+    pub y: i64,
+    pub size: i64,
+}
+
+/// El emoji de una palabra, si es una de las claves.
+pub fn emoji_for(word: &str) -> Option<&'static str> {
+    let folded: String = fold_word(word).chars().filter(|c| c.is_alphanumeric()).collect();
+    if folded.is_empty() {
+        return None;
+    }
+    crate::emoji_data::KEYWORDS.iter().find_map(|(code, keys)| {
+        keys.split_whitespace()
+            .any(|key| match key.strip_suffix('*') {
+                Some(prefix) => folded.starts_with(prefix),
+                None => folded == key,
+            })
+            .then_some(*code)
+    })
+}
+
+/// Donde y cuando va cada emoji: uno por bloque como mucho (el de la primera
+/// palabra clave), centrado justo encima del texto, y nunca dos seguidos
+/// iguales ni a menos de dos segundos: si no, el video se llena de pegatinas.
+pub fn emoji_cues(words: &[Word], cfg: &SubtitlesConfig, width: i64, height: i64) -> Vec<EmojiCue> {
+    if !cfg.enabled || !cfg.emojis || words.is_empty() {
+        return Vec::new();
+    }
+    let words = tidy_words(words);
+    let groups = group_words(&words, cfg);
+    let margin_v = (height as f64 * cfg.vertical_position_ratio) as i64;
+    let mut cues: Vec<EmojiCue> = Vec::new();
+    for (index, group) in groups.iter().enumerate() {
+        let Some(code) = group.words.iter().find_map(|w| emoji_for(&w.text)) else { continue };
+        if cues.last().is_some_and(|last| last.code == code || group.start() - last.start < 2.0) {
+            continue;
+        }
+        let end = match groups.get(index + 1) {
+            Some(next) => next.start().min(group.end() + TAIL_HOLD),
+            None => group.end() + TAIL_HOLD,
+        };
+        let rendered: Vec<String> = group.words.iter().map(|w| render_word(w, cfg)).collect();
+        let layout = fit_group(&rendered, cfg, width);
+        let font = layout.font_size.unwrap_or(cfg.font_size);
+        let lines = if layout.break_after.is_some() { 2 } else { 1 };
+        let size = (font as f64 * 1.45).round() as i64;
+        let top_of_text = height - margin_v - (font as f64 * 1.12 * lines as f64) as i64;
+        cues.push(EmojiCue { code, start: group.start(), end, y: (top_of_text - size - font / 6).max(0), size });
+    }
+    cues
+}
+
 /// Neutraliza los caracteres que romperian la sintaxis del .ASS.
 pub fn escape_ass_text(text: &str) -> String {
     text.replace('\\', "").replace('{', "(").replace('}', ")").replace('\r', "").replace('\n', "\\N")
@@ -828,6 +911,55 @@ mod tests {
     fn el_reparto_de_tiempos_no_toca_lo_que_ya_esta_bien() {
         let bien = texto(&[("uno", 0.0, 0.3), ("dos", 0.35, 0.6), ("tres", 0.7, 1.0)]);
         assert_eq!(tidy_words(&bien), bien);
+    }
+
+    #[test]
+    fn las_palabras_clave_llevan_su_emoji() {
+        assert_eq!(emoji_for("¡Dinero!"), Some("1f4b0"));
+        assert_eq!(emoji_for("MIEDO,"), Some("1f631"));
+        assert_eq!(emoji_for("jajajaja"), Some("1f602"));
+        assert_eq!(emoji_for("muertos"), Some("1f480"));
+        assert_eq!(emoji_for("mesa"), None);
+        assert_eq!(emoji_for("..."), None);
+        // Toda clave tiene su imagen.
+        for (code, _) in crate::emoji_data::KEYWORDS {
+            assert!(crate::emoji_data::image(code).is_some_and(|png| png.starts_with(&[0x89, b'P', b'N', b'G'])), "{code}");
+        }
+    }
+
+    #[test]
+    fn un_emoji_por_bloque_encima_del_texto_y_sin_repetir_seguido() {
+        let cfg = SubtitlesConfig { emojis: true, max_words_per_group: 2, ..Default::default() };
+        let habla = texto(&[("mucho", 0.0, 0.3), ("dinero", 0.3, 0.7), ("más", 1.0, 1.2), ("dinero", 1.2, 1.5), ("qué", 3.0, 3.2), ("miedo", 3.2, 3.6)]);
+        let cues = emoji_cues(&habla, &cfg, 1080, 1920);
+        let codigos: Vec<&str> = cues.iter().map(|c| c.code).collect();
+        assert_eq!(codigos, ["1f4b0", "1f631"], "el segundo dinero no se repite");
+        let tope_texto = 1920 - (1920.0 * cfg.vertical_position_ratio) as i64 - cfg.font_size;
+        assert!(cues.iter().all(|c| c.y + c.size < tope_texto && c.y > 0), "{cues:?}");
+        assert!(emoji_cues(&habla, &SubtitlesConfig::default(), 1080, 1920).is_empty(), "apagado de serie");
+    }
+
+    #[test]
+    fn el_srt_tiene_los_bloques_con_su_tiempo_y_el_texto_tal_cual() {
+        let cfg = SubtitlesConfig { max_words_per_group: 2, ..Default::default() };
+        let srt = srt(&texto(&[("Hola", 0.0, 0.4), ("joder,", 0.5, 0.9), ("adiós", 61.0, 61.5)]), &cfg);
+        assert_eq!(srt, "1\n00:00:00,000 --> 00:00:01,300\nHola joder,\n\n2\n00:01:01,000 --> 00:01:01,900\nadiós\n\n");
+    }
+
+    #[test]
+    fn con_dos_personas_cada_una_resalta_en_su_color() {
+        let cfg = SubtitlesConfig { max_words_per_group: 4, ..Default::default() };
+        let mut habla = texto(&[("hola", 0.0, 0.4), ("que", 0.5, 0.8), ("tal", 1.6, 2.0), ("bien", 2.1, 2.5)]);
+        habla[2].speaker = Some(1);
+        habla[3].speaker = Some(1);
+        let lineas = dialogos(&build_ass(&habla, 1080, 1920, &cfg, None, None, 5.0, None, None).unwrap());
+        let primero = hex_to_ass_color(&cfg.color_active, 0).unwrap();
+        let segundo = hex_to_ass_color(&cfg.color_second, 0).unwrap();
+        assert!(lineas[0].2.contains(&primero) && !lineas[0].2.contains(&segundo));
+        assert!(lineas.iter().find(|l| l.2.contains("TAL")).is_some_and(|l| l.2.contains(&segundo)), "{lineas:?}");
+        // Se puede apagar.
+        let sin = SubtitlesConfig { speaker_colors: false, ..cfg };
+        assert!(!build_ass(&habla, 1080, 1920, &sin, None, None, 5.0, None, None).unwrap().contains(&segundo));
     }
 
     #[test]

@@ -699,6 +699,78 @@ Otras medidas, con la misma máquina:
   whisper.cpp se descargan y arrancan en 30 s; las direcciones del motor CUDA y de
   los cinco modelos de voz responden (`VS_NET_TESTS=1`).
 
+### Transcribir con la tarjeta gráfica (versión 1.5)
+
+whisper.cpp publica motores para el procesador y para NVIDIA (CUDA), pero no
+para AMD ni Intel en Windows. Para esas tarjetas la aplicación usa un motor
+**Vulkan** compilado aquí desde la misma versión de whisper.cpp
+(`install/compilar-whisper-vulkan.ps1`) y subido a la release `motores` del
+repositorio público; la aplicación lo ofrece en cuanto ve una tarjeta con
+Vulkan (el controlador de AMD, Intel o NVIDIA lo trae) y comprueba su huella
+SHA-256 al bajarlo. Si la tarjeta falla a mitad, se repite con el procesador.
+
+Medido el 24 de octubre de 2026 en la misma máquina (RX 6600, 8 GB):
+
+| Prueba | Procesador | Tarjeta (Vulkan) | Veces más rápido |
+|---|---|---|---|
+| `medium`, beam 1, 2 min de audio | 46,0 s | 19,7 s | 2,3x |
+| `large-v3-turbo`, beam 5, 2 min de audio | 61,1 s | 12,5 s | 4,9x |
+| La aplicación entera, `medium`, 5 min de audio | 122 s | 43 s | 2,8x |
+
+El texto sale igual en los dos casos (misma versión y mismo modelo). Con
+tarjeta, el modelo más preciso (`large-v3-turbo`) va incluso más rápido que el
+`medium` en el procesador.
+
+## Funciones de la versión 1.5
+
+**Dos personas en pantalla partida** (`layout.mode: duo`). El seguimiento de
+caras agrupa los centros de todas las caras en dos grupos (k-medias en una
+dimensión); hay pantalla partida si están separados al menos un 20 % del ancho,
+salen **juntos** en el 40 % de las muestras y los dos se mueven (un cartel o
+una foto no). Se busca antes del filtro de caras quietas, porque quien escucha
+se mueve menos que quien habla. Cada mitad recorta sobre una persona (un 22 %
+más cerrado que la ventana máxima, para que no se cuele la otra). Quien habla
+sale del mismo seguimiento de bocas que el reencuadre y cada palabra lo hereda
+por su momento: la de la persona de abajo se resalta en `subtitles.color_second`.
+Un clip sin las dos a la vez (vídeos que cambian de cámara) va con el pódcast a
+pantalla completa.
+
+**Subtítulos en otro idioma** (`subtitles.translate_to`). Al inglés, whisper
+traduce el mismo audio (`-tr`) en los clips elegidos, y cada palabra conserva su
+momento real; los modelos «turbo» no saben traducir, así que se usa `medium`. A
+los demás idiomas traduce Claude frase a frase (con caché) y cada frase traducida
+ocupa el tramo de la original, repartido por la longitud de las palabras. El
+título, el gancho y los hashtags salen ya del texto traducido.
+
+**Emojis** (`subtitles.emojis`). Unas 40 familias de palabras clave (dinero,
+miedo, risa, fuego, muerte…) ponen su emoji encima del bloque de subtítulos,
+como mucho uno cada 2 segundos y nunca dos iguales seguidos. libass solo pinta
+los emojis en blanco y negro, así que van como imagen (Twemoji a 160 px, dentro
+del ejecutable) superpuesta con `overlay` mientras dura el bloque.
+
+**Varios fondos.** En `--background` caben varios separados por `|` (en la
+interfaz, «Añadir otro fondo»). El short N usa el fondo N-ésimo, en rotación, y
+cada fondo sigue por donde se quedó en su vuelta anterior. El plan de revisión
+los recuerda (`fondos_extra`).
+
+**Para editar fuera** (`output.export_srt`, `output.export_clean`): el `.srt`
+con los bloques de subtítulos (texto tal cual se dijo, sin mayúsculas ni
+censura) y `sin-subtitulos_N.mp4`, el mismo short sin subtítulos, rótulos,
+barra ni logo.
+
+**Subir a YouTube.** YouTube solo deja subir vídeos a programas con credencial
+propia: se crea gratis en Google Cloud (proyecto, API «YouTube Data API v3» y un
+«ID de cliente OAuth» de tipo *Aplicación de escritorio*) y se elige su JSON en
+Ajustes. El permiso se pide en el navegador con el flujo de escritorio de Google
+(vuelta a `127.0.0.1` con PKCE) y se guarda en `youtube.json` dentro de la
+carpeta de datos. La subida es «reanudable» y añade `#Shorts` a la
+descripción. Con una credencial nueva, YouTube deja unas 6 subidas al día.
+
+**Seguir canales** (`channels.json`). Al seguir un canal sus vídeos de ahora
+cuentan como vistos; después, al abrir la aplicación y cada 3 horas, se miran sus
+últimos 6 vídeos (`yt-dlp --flat-playlist`) y los nuevos de más de 5 minutos
+van a la cola con los ajustes guardados al seguirlo.
+
 ## Migración de Python a Rust
 
 El programa se escribió primero en Python (faster-whisper, OpenCV, el SDK de

@@ -126,14 +126,12 @@ fn doctor(args: &Args) -> i32 {
         }
     }
 
-    // La tarjeta grafica solo acelera la transcripcion si hay NVIDIA y el motor CUDA.
-    let nvidia = ffmpeg::which("nvidia-smi")
-        .is_some_and(|smi| ffmpeg::command(smi).arg("-L").output().is_ok_and(|o| o.status.success() && !o.stdout.is_empty()));
-    let cuda_engine = ffmpeg::project_root().join("bin").join("whisper-cuda").join(if cfg!(windows) { "whisper-cli.exe" } else { "whisper-cli" }).is_file();
-    match (nvidia, cuda_engine) {
-        (true, true) => println!("  OK    GPU NVIDIA: la transcripcion usara la tarjeta"),
-        (true, false) => println!("  --    GPU NVIDIA detectada, pero sin motor CUDA: se transcribe con el procesador (install\\Activar GPU NVIDIA.bat)"),
-        (false, _) => println!("  --    sin GPU NVIDIA: se transcribe con el procesador (funciona igual, tarda mas)"),
+    // La tarjeta grafica acelera la transcripcion con su motor: CUDA (NVIDIA) o Vulkan (AMD, Intel).
+    let root = ffmpeg::project_root();
+    match viralshorts::setup::gpu_engine_for_this_pc() {
+        Some(_) if viralshorts::setup::gpu_engine_installed(&root) => println!("  OK    tarjeta grafica: la transcripcion la usara"),
+        Some(tool) => println!("  --    tarjeta grafica sin su motor ({}): se transcribe con el procesador; se activa desde la app", tool.label()),
+        None => println!("  --    sin tarjeta grafica aprovechable: se transcribe con el procesador (funciona igual, tarda mas)"),
     }
 
     if ffmpeg::which("ffmpeg").is_some() {

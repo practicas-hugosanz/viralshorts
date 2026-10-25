@@ -37,7 +37,8 @@ type Result<T> = std::result::Result<T, TranscribeError>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Device {
     Cpu,
-    Cuda,
+    /// La tarjeta grafica: CUDA si es NVIDIA, Vulkan si es AMD o Intel.
+    Gpu,
 }
 
 #[derive(Debug, Clone)]
@@ -52,6 +53,8 @@ pub struct EngineOptions {
     pub offset: f64,
     /// Texto inicial (vocabulario) para orientar a whisper.
     pub prompt: Option<String>,
+    /// Traducir al ingles mientras transcribe.
+    pub translate: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -64,7 +67,7 @@ pub struct EngineOutput {
 /// Lo que el transcriptor necesita de un motor. Es un trait para poder probar
 /// la logica de reintento y de cache sin un modelo de verdad.
 pub trait Engine {
-    fn cuda_available(&self) -> bool;
+    fn gpu_available(&self) -> bool;
     fn transcribe(
         &mut self,
         wav: &Path,
@@ -77,10 +80,13 @@ pub trait Engine {
 // Mensajes con los que un motor avisa de que la GPU no se puede usar. La
 // comparacion es por texto porque ni whisper.cpp ni CUDA distinguen el fallo
 // con un tipo propio.
-const GPU_FAILURES: [&str; 8] = [
+const GPU_FAILURES: [&str; 11] = [
     "cublas",
     "cudnn",
     "cuda",
+    "vulkan",
+    "vk::",
+    "device lost",
     "gpu",
     "libcu",
     "is not found or cannot be loaded",
@@ -118,8 +124,8 @@ impl Transcriber {
         }
         match self.cfg.device.as_str() {
             "cpu" => Device::Cpu,
-            "cuda" => Device::Cuda,
-            _ if self.engine.cuda_available() => Device::Cuda,
+            "cuda" | "gpu" | "vulkan" => Device::Gpu,
+            _ if self.engine.gpu_available() => Device::Gpu,
             _ => Device::Cpu,
         }
     }
@@ -142,6 +148,7 @@ impl Transcriber {
             threads: self.threads(),
             offset: self.offset,
             prompt: vocabulary_prompt(&self.cfg.initial_prompt),
+            translate: self.cfg.translate,
         }
     }
 
@@ -153,11 +160,9 @@ impl Transcriber {
         let options = self.options();
         let device = self.resolve_device();
         match self.engine.transcribe(wav, device, &options, on_progress) {
-            Err(error) if device == Device::Cuda && is_gpu_failure(&error.0) => {
-                log::warn!("La GPU no se pudo usar para transcribir ({error}).");
-                log::warn!(
-                    "Se sigue con el procesador: tarda mas, pero termina. Para arreglar la GPU: 'install\\Activar GPU NVIDIA.bat'."
-                );
+            Err(error) if device == Device::Gpu && is_gpu_failure(&error.0) => {
+                log::warn!("La tarjeta grafica no se pudo usar para transcribir ({error}).");
+                log::warn!("Se sigue con el procesador: tarda mas, pero termina.");
                 self.cpu_only = true;
                 self.engine.transcribe(wav, Device::Cpu, &options, on_progress)
             }
@@ -303,7 +308,9 @@ impl Transcriber {
             self.cfg.model_size.clone(),
             self.cfg.language.clone().unwrap_or_else(|| "None".into()),
             self.cfg.beam_size.to_string(),
-            zones,
+            // Una traduccion no es la transcripcion: otra entrada. Sin traducir
+            // la clave queda igual que antes y las guardadas siguen valiendo.
+            if self.cfg.translate { format!("{zones}|tr") } else { zones },
         ]
         .join("|");
         let digest = Sha1::digest(payload.as_bytes());
@@ -364,7 +371,7 @@ impl Corrections {
                         tail.reverse();
                         tail.into_iter().collect()
                     };
-                    out.push(Word { text: format!("{lead}{good}{trail}"), start: first.start, end: last.end, probability: 1.0 });
+                    out.push(Word { text: format!("{lead}{good}{trail}"), start: first.start, end: last.end, probability: 1.0, speaker: None });
                     i = end;
                     continue 'next;
                 }
@@ -455,24 +462,34 @@ const DLL_NOT_FOUND: i32 = 0xC000_0135_u32 as i32;
 pub struct WhisperCpp {
     cpu_exe: Option<PathBuf>,
     cuda_exe: Option<PathBuf>,
+    /// Motor Vulkan: tarjetas AMD e Intel (y NVIDIA sin el motor CUDA).
+    vulkan_exe: Option<PathBuf>,
     models_dir: PathBuf,
-    warned_missing_cuda: bool,
 }
 
 impl WhisperCpp {
-    /// Busca los ejecutables: `bin/whisper` (CPU) y `bin/whisper-cuda`, o
-    /// `whisper-cli` en el PATH.
+    /// Busca los ejecutables: `bin/whisper` (CPU), `bin/whisper-cuda`,
+    /// `bin/whisper-vulkan`, o `whisper-cli` en el PATH.
     pub fn discover(root: &Path) -> Result<Self> {
         let exe = if cfg!(windows) { "whisper-cli.exe" } else { "whisper-cli" };
         let local = |dir: &str| Some(root.join("bin").join(dir).join(exe)).filter(|p| p.is_file());
         let cpu_exe = local("whisper").or_else(|| ffmpeg::which("whisper-cli"));
         let cuda_exe = local("whisper-cuda");
-        if cpu_exe.is_none() && cuda_exe.is_none() {
-            return Err(TranscribeError(
-                "Falta whisper.cpp (whisper-cli). Doble clic en viralshorts.bat lo instala solo.".into(),
-            ));
+        let vulkan_exe = local("whisper-vulkan");
+        if cpu_exe.is_none() && cuda_exe.is_none() && vulkan_exe.is_none() {
+            return Err(TranscribeError("Falta whisper.cpp (whisper-cli). Abre la aplicacion para que lo descargue.".into()));
         }
-        Ok(Self { cpu_exe, cuda_exe, models_dir: root.join("bin").join("models"), warned_missing_cuda: false })
+        Ok(Self { cpu_exe, cuda_exe, vulkan_exe, models_dir: root.join("bin").join("models") })
+    }
+
+    /// El motor de la tarjeta grafica que vale en este equipo: CUDA con una
+    /// NVIDIA (el mas rapido); si no, Vulkan, que sirve para AMD, Intel y
+    /// NVIDIA y solo necesita el controlador de la tarjeta.
+    fn gpu_exe(&self) -> Option<PathBuf> {
+        if let Some(cuda) = self.cuda_exe.as_ref().filter(|_| nvidia_present()) {
+            return Some(cuda.clone());
+        }
+        self.vulkan_exe.clone().filter(|_| vulkan_driver())
     }
 
     pub fn model_path(&self, size: &str) -> PathBuf {
@@ -492,21 +509,30 @@ impl WhisperCpp {
     }
 }
 
-impl Engine for WhisperCpp {
-    fn cuda_available(&self) -> bool {
-        let nvidia = ffmpeg::which("nvidia-smi").is_some_and(|smi| {
+/// Hay una tarjeta NVIDIA (su controlador trae nvidia-smi). Se mira una vez.
+pub fn nvidia_present() -> bool {
+    static PRESENT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *PRESENT.get_or_init(|| {
+        ffmpeg::which("nvidia-smi").is_some_and(|smi| {
             command(smi).arg("-L").stdin(Stdio::null()).output().is_ok_and(|o| o.status.success() && !o.stdout.is_empty())
-        });
-        if nvidia && self.cuda_exe.is_none() {
-            if !self.warned_missing_cuda {
-                log::info!(
-                    "Hay GPU NVIDIA pero falta el motor CUDA de whisper.cpp; se transcribe con el procesador. \
-                     Para usar la tarjeta: doble clic en 'install\\Activar GPU NVIDIA.bat'."
-                );
-            }
-            return false;
-        }
-        nvidia
+        })
+    })
+}
+
+/// Hay un controlador de tarjeta grafica con Vulkan (lo traen los de AMD,
+/// Intel y NVIDIA de los ultimos anos).
+pub fn vulkan_driver() -> bool {
+    if cfg!(windows) {
+        let system = std::env::var_os("SystemRoot").map_or_else(|| PathBuf::from("C:/Windows"), PathBuf::from);
+        system.join("System32").join("vulkan-1.dll").is_file()
+    } else {
+        ["/usr/lib/x86_64-linux-gnu/libvulkan.so.1", "/usr/lib/libvulkan.so.1", "/usr/lib64/libvulkan.so.1"].iter().any(|p| Path::new(p).is_file())
+    }
+}
+
+impl Engine for WhisperCpp {
+    fn gpu_available(&self) -> bool {
+        self.gpu_exe().is_some()
     }
 
     fn transcribe(
@@ -517,8 +543,8 @@ impl Engine for WhisperCpp {
         on_progress: &mut dyn FnMut(f64),
     ) -> Result<EngineOutput> {
         let exe = match device {
-            Device::Cuda => self.cuda_exe.clone(),
-            Device::Cpu => self.cpu_exe.clone().or_else(|| self.cuda_exe.clone()),
+            Device::Gpu => self.gpu_exe(),
+            Device::Cpu => self.cpu_exe.clone().or_else(|| self.cuda_exe.clone()).or_else(|| self.vulkan_exe.clone()),
         }
         .ok_or_else(|| TranscribeError("No hay ejecutable de whisper.cpp para este dispositivo.".into()))?;
         let model = self.ensure_model(&options.model_size)?;
@@ -539,13 +565,16 @@ impl Engine for WhisperCpp {
         // Sin arrastrar el texto anterior como contexto: es lento y en
         // podcasts largos provoca bucles de repeticion.
         cmd.args(["-mc", "0"]);
+        if options.translate {
+            cmd.arg("-tr");
+        }
         if let Some(prompt) = options.prompt.as_deref() {
             // Con --carry-initial-prompt el vocabulario vale en todo el audio y no
             // solo en la primera ventana (sin contexto previo: -mc 0).
             cmd.args(["--prompt", prompt, "--carry-initial-prompt"]);
         }
         if device == Device::Cpu && self.cpu_exe.as_ref() != Some(&exe) {
-            cmd.arg("-ng"); // motor CUDA usado como CPU
+            cmd.arg("-ng"); // motor de la tarjeta usado como CPU
         }
         cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
         log::debug!("Ejecutando: {cmd:?}");
@@ -667,7 +696,11 @@ pub fn drop_repetition_loops(segments: Vec<Segment>) -> Vec<Segment> {
     let mut i = 0;
     while i < segments.len() {
         let run = echo[i..].iter().take_while(|&&e| e).count();
-        if run >= 2 {
+        // Dos ecos seguidos tambien pueden ser alguien que insiste ("rapido...
+        // rapido, rapido y furioso"): solo cuentan si llevan la marca "..." con
+        // la que whisper escribe cuando se ha perdido. Con tres ya es un bucle.
+        let marked = segments[i..i + run].iter().all(|s| s.text.trim().starts_with("..."));
+        if run >= 3 || (run == 2 && marked) {
             log::info!(
                 "Quitado un bucle de la transcripcion ({} trozos repetidos desde {:.0} s: \"{}\").",
                 run,
@@ -728,6 +761,7 @@ fn words_from_tokens(tokens: &[Value], seg_start: f64, seg_end: f64) -> Vec<Word
             start: w.start,
             end: w.end,
             probability: w.probs.iter().sum::<f64>() / w.probs.len() as f64,
+            speaker: None,
         })
         .collect()
 }
@@ -759,13 +793,13 @@ mod tests {
     }
 
     impl Engine for Falso {
-        fn cuda_available(&self) -> bool {
+        fn gpu_available(&self) -> bool {
             self.tiene_gpu
         }
 
         fn transcribe(&mut self, _wav: &Path, device: Device, _o: &EngineOptions, on_progress: &mut dyn FnMut(f64)) -> Result<EngineOutput> {
             self.estado.lock().unwrap().usos.push(device);
-            if device == Device::Cuda {
+            if device == Device::Gpu {
                 if let Some(motivo) = self.gpu_falla_con {
                     return Err(TranscribeError(motivo.into()));
                 }
@@ -823,7 +857,7 @@ mod tests {
         let estado = Arc::new(Mutex::new(Estado::default()));
         let (mut t, _dir) = transcriptor(Falso::nuevo(&estado), "auto");
         let salida = t.run(Path::new("a.wav"), &mut |_| {}).unwrap();
-        assert_eq!(estado.lock().unwrap().usos, [Device::Cuda, Device::Cpu]);
+        assert_eq!(estado.lock().unwrap().usos, [Device::Gpu, Device::Cpu]);
         assert_eq!(salida.segments.len(), 1, "no se pierde ningun segmento");
     }
 
@@ -835,7 +869,7 @@ mod tests {
         t.run(Path::new("b.wav"), &mut |_| {}).unwrap();
         // La segunda llamada no vuelve a probar la GPU: seria un minuto tirado
         // por cada zona del podcast.
-        assert_eq!(estado.lock().unwrap().usos, [Device::Cuda, Device::Cpu, Device::Cpu]);
+        assert_eq!(estado.lock().unwrap().usos, [Device::Gpu, Device::Cpu, Device::Cpu]);
     }
 
     #[test]
@@ -844,7 +878,7 @@ mod tests {
         let motor = Falso { gpu_falla_con: None, ..Falso::nuevo(&estado) };
         let (mut t, _dir) = transcriptor(motor, "auto");
         t.run(Path::new("a.wav"), &mut |_| {}).unwrap();
-        assert_eq!(estado.lock().unwrap().usos, [Device::Cuda]);
+        assert_eq!(estado.lock().unwrap().usos, [Device::Gpu]);
     }
 
     #[test]
@@ -854,7 +888,7 @@ mod tests {
         let (mut t, _dir) = transcriptor(motor, "auto");
         // Reintentar en CPU no arreglaria esto: tiene que salir a la superficie.
         assert!(t.run(Path::new("a.wav"), &mut |_| {}).unwrap_err().0.contains("corrupto"));
-        assert_eq!(estado.lock().unwrap().usos, [Device::Cuda]);
+        assert_eq!(estado.lock().unwrap().usos, [Device::Gpu]);
     }
 
     #[test]
@@ -1054,6 +1088,13 @@ mod tests {
     fn repetir_una_vez_es_hablar_y_se_queda() {
         let entrada = vec![seg(0.0, "¿Qué ha pasado?"), seg(2.0, "No, no."), seg(4.0, "No."), seg(6.0, "Mira esto."), seg(8.0, "Mira.")];
         assert_eq!(drop_repetition_loops(entrada.clone()), entrada);
+        // Caso real: insistir dos veces no es un bucle de whisper.
+        let insistir = vec![seg(95.0, "vale, vale, vale"), seg(97.7, "rápido"), seg(99.0, "rápido"), seg(99.8, "rápido"), seg(101.3, "rápido y furioso")];
+        assert_eq!(drop_repetition_loops(insistir.clone()), insistir);
+        // Tres ecos seguidos, aunque no lleven la marca, si son un bucle.
+        let bucle = vec![seg(0.0, "son bichos que"), seg(2.0, "son bichos que"), seg(4.0, "son bichos que"), seg(6.0, "son bichos que"), seg(8.0, "y ya")];
+        let textos: Vec<String> = drop_repetition_loops(bucle).into_iter().map(|s| s.text).collect();
+        assert_eq!(textos, ["son bichos que", "y ya"]);
     }
 
     #[test]

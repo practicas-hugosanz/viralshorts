@@ -38,7 +38,8 @@
 **Montar bien**
 - Reencuadre que sigue la cara de quien habla y recorte de silencios.
 - Subtítulos palabra a palabra con la palabra activa resaltada, y las palabrotas tapadas si quieres.
-- Aceleración por tarjeta gráfica (NVIDIA, Intel o AMD) cuando la hay.
+- Aceleración por tarjeta gráfica (NVIDIA, Intel o AMD) cuando la hay, también para **transcribir**: con una AMD RX 6600 va de 2,8 a 4,9 veces más rápido que con el procesador.
+- **Dos personas en pantalla partida**: si salen las dos a la vez, una arriba y otra abajo, y la palabra que suena va del color de quien la dice.
 
 **Hacerlo tuyo**
 - **Composición**: dividido (con el reparto que quieras), solo el pódcast a pantalla completa, o el pódcast en una franja sobre el fondo.
@@ -50,10 +51,17 @@
 - **Edición por clip**: corrige el texto de los subtítulos, recorta cada clip y elige su estilo antes de montar.
 - **Perfiles**: guarda todos tus ajustes con un nombre y recupéralos con un clic.
 - **Acertar más con el texto**: vuelve a transcribir los clips elegidos con un modelo mayor, y añade nombres difíciles y correcciones fijas.
+- **Subtítulos en otro idioma**: al inglés sin conexión; al español, francés, portugués, alemán o italiano con Claude.
+- **Emojis según lo que se dice** («dinero» 💰, «miedo» 😱, «jajaja» 😂…) encima de los subtítulos.
+- **Varios vídeos de fondo** que se van turnando entre shorts.
+- **Para editar fuera**: los subtítulos en `.srt` y el mismo short sin ningún texto encima.
 
 **Cómodo de usar**
 - Aplicación de escritorio con instalador, sin consola ni ficheros `.bat`.
 - Transcripción en directo mientras trabaja, cola de trabajos que puedes reordenar y biblioteca de todos tus shorts con búsqueda.
+- **Sube a YouTube Shorts** con un clic, con su título, texto y hashtags (privado, oculto o público).
+- **Sigue canales**: cuando publican un episodio nuevo, se pone en la cola solo.
+- Borra el vídeo descargado al terminar para no llenar el disco.
 - Se actualiza sola desde GitHub.
 
 ## Capturas
@@ -113,6 +121,27 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
+
+### 1.5.0 (2026-10-25)
+
+- **Transcribir con tarjetas AMD e Intel**: un motor nuevo (Vulkan) que la
+  aplicación ofrece descargar (unos 18 MB) cuando ve la tarjeta. Con una AMD
+  RX 6600 transcribe de 2,8 a 4,9 veces más rápido que con el procesador. El
+  tiempo estimado tiene en cuenta la tarjeta.
+- **Dos personas en pantalla partida** (Aspecto › Composición): si salen las dos
+  a la vez, una arriba y otra abajo, con los subtítulos en la costura y la
+  palabra que suena del color de quien la dice.
+- **Subtítulos en otro idioma**: al inglés sin conexión; al español, francés,
+  portugués, alemán o italiano con Claude. El título y el gancho salen en ese
+  idioma.
+- **Subir a YouTube Shorts** desde Mis shorts, con título, texto y hashtags
+  (Ajustes › Publicar en YouTube).
+- **Seguir canales**: cuando publican un episodio nuevo se pone en la cola solo
+  (Ajustes › Seguir canales).
+- **Emojis según lo que se dice**, **varios vídeos de fondo que se turnan**, y
+  para editar fuera, **los subtítulos en .srt** y **el short sin textos**.
+- Arreglo: el filtro de bucles de Whisper de la 1.3.4 quitaba repeticiones de
+  verdad («rápido, rápido, rápido y furioso»); ahora solo quita los bucles.
 
 ### 1.4.1 (2026-10-23)
 
@@ -297,5 +326,7 @@ powershell -File install\publicar.ps1 -Version 1.2.0          # compila, etiquet
 `publicar.ps1` no publica una versión sin su entrada en el [historial de cambios](#historial-de-cambios) y usa su texto como notas de la release.
 
 ## Aviso legal
+
+Los emojis son de [Twemoji](https://github.com/jdecked/twemoji) (© Twitter y colaboradores, licencia CC-BY 4.0) y la letra de la interfaz es Manrope (SIL Open Font License 1.1).
 
 Montar un pódcast ajeno con gameplay ajeno y subirlo entra de lleno en Content ID y en las políticas de contenido no original de YouTube y TikTok. Con contenido propio, o con permiso, sin problema; si no, cuenta con reclamaciones y con posibles retiradas.

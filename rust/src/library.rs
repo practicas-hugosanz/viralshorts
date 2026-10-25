@@ -115,6 +115,25 @@ pub fn rename_short(base: &Path, id: &str, title: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Sube un short a YouTube con su titulo, pie y hashtags, y apunta la
+/// direccion en su .json para que la biblioteca la ensene.
+pub fn upload_short(base: &Path, root: &Path, id: &str, privacy: &str, endpoints: &crate::youtube::Endpoints) -> Result<String, String> {
+    let video = resolve_short(base, id).ok_or("Ese short no existe.")?;
+    let sidecar = video.with_extension("json");
+    let mut data: Value = std::fs::read_to_string(&sidecar).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_else(|| json!({}));
+    let publication = &data["publicacion"];
+    let details = crate::youtube::Upload {
+        title: publication["title"].as_str().unwrap_or("").to_string(),
+        description: publication["description"].as_str().unwrap_or("").to_string(),
+        tags: publication["hashtags"].as_array().map(|t| t.iter().filter_map(Value::as_str).map(str::to_string).collect()).unwrap_or_default(),
+        privacy: privacy.to_string(),
+    };
+    let url = crate::youtube::upload(root, &video, &details, endpoints).map_err(|e| e.to_string())?;
+    data["youtube"] = json!({"url": url, "privacidad": details.snippet()["status"]["privacyStatus"]});
+    let _ = std::fs::write(&sidecar, serde_json::to_string_pretty(&data).unwrap_or_default());
+    Ok(url)
+}
+
 // ----------------------------------------------------------------------------
 // Fotograma de vista previa
 // ----------------------------------------------------------------------------

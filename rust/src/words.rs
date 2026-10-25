@@ -17,11 +17,15 @@ pub struct Word {
     pub end: f64,
     #[serde(default = "one")]
     pub probability: f64,
+    /// Quien la dice cuando hay dos personas en plano: 0 la de la izquierda,
+    /// 1 la de la derecha. Sirve para dar a cada una su color en los subtitulos.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speaker: Option<u8>,
 }
 
 impl Word {
     pub fn new(text: impl Into<String>, start: f64, end: f64) -> Self {
-        Self { text: text.into(), start, end, probability: 1.0 }
+        Self { text: text.into(), start, end, probability: 1.0, speaker: None }
     }
 
     pub fn ends_sentence(&self) -> bool {
@@ -34,6 +38,7 @@ impl Word {
             start: self.start + offset,
             end: self.end + offset,
             probability: self.probability,
+            speaker: self.speaker,
         }
     }
 }
@@ -45,9 +50,25 @@ pub struct Track {
     pub points: Vec<(f64, f64)>,
     /// Fraccion de muestras con cara detectada.
     pub detection_ratio: f64,
+    /// Si hay dos personas en plano a la vez, el centro horizontal de cada
+    /// una (izquierda, derecha): permite la pantalla partida.
+    #[serde(default)]
+    pub duo: Option<(f64, f64)>,
+    /// Quien habla desde cada instante (t relativo al clip, 0 izquierda / 1 derecha).
+    #[serde(default)]
+    pub speakers: Vec<(f64, u8)>,
 }
 
 impl Track {
+    pub fn new(points: Vec<(f64, f64)>, detection_ratio: f64) -> Self {
+        Self { points, detection_ratio, duo: None, speakers: Vec::new() }
+    }
+
+    /// Quien habla en el instante `t` (segundos del clip, antes de quitar silencios).
+    pub fn speaker_at(&self, t: f64) -> Option<u8> {
+        self.speakers.iter().take_while(|(at, _)| *at <= t).last().or(self.speakers.first()).map(|(_, who)| *who)
+    }
+
     pub fn is_useful(&self) -> bool {
         self.points.len() >= 2 && self.detection_ratio >= 0.15
     }
@@ -139,13 +160,13 @@ mod tests {
 
     #[test]
     fn desplazar_conserva_el_resto() {
-        let w = Word { text: "x".into(), start: 1.0, end: 2.0, probability: 0.5 }.shifted(-0.5);
+        let w = Word { text: "x".into(), start: 1.0, end: 2.0, probability: 0.5, speaker: Some(1) }.shifted(-0.5);
         assert_eq!((w.start, w.end, w.probability), (0.5, 1.5, 0.5));
     }
 
     #[test]
     fn una_trayectoria_sirve_con_dos_puntos_y_deteccion_suficiente() {
-        let t = |n, r| Track { points: vec![(0.0, 0.5); n], detection_ratio: r };
+        let t = |n, r| Track::new(vec![(0.0, 0.5); n], r);
         assert!(t(2, 0.15).is_useful());
         assert!(!t(1, 1.0).is_useful());
         assert!(!t(5, 0.1).is_useful());

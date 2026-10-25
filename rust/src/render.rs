@@ -18,9 +18,14 @@ use std::sync::OnceLock;
 use crate::config::{Config, OutputConfig};
 use crate::ffmpeg::{self, even, FfmpegError, MediaInfo};
 use crate::jumpcuts::JumpCutPlan;
+use crate::subtitles::EmojiCue;
 use crate::words::Track;
 
 type Result<T> = std::result::Result<T, FfmpegError>;
+
+/// En la pantalla partida cada mitad se cierra algo sobre su persona: con la
+/// ventana maxima se colaria medio cuerpo de la otra.
+const DUO_TIGHTNESS: f64 = 0.78;
 
 pub struct RenderRequest {
     pub podcast: PathBuf,
@@ -38,6 +43,8 @@ pub struct RenderRequest {
     pub beeps: Vec<(f64, f64)>,
     /// Instantes (segundos del clip montado) en que suena un whoosh.
     pub whooshes: Vec<f64>,
+    /// Emojis encima de los subtitulos.
+    pub emojis: Vec<EmojiCue>,
 }
 
 /// Lo que el grafo necesita saber de la version de ffmpeg instalada.
@@ -78,7 +85,7 @@ pub fn render(request: &RenderRequest, cfg: &Config) -> Result<PathBuf> {
     let cfg = &cfg;
 
     let layout = &cfg.layout;
-    let (top_height, bottom_height) = panel_heights(cfg);
+    let (top_height, bottom_height) = effective_heights(request, cfg);
     let duration = request.plan.output_duration();
 
     let graph = build_graph(
@@ -92,6 +99,11 @@ pub fn render(request: &RenderRequest, cfg: &Config) -> Result<PathBuf> {
     );
 
     std::fs::create_dir_all(&request.work_dir).map_err(io_error)?;
+    for cue in &request.emojis {
+        if let Some(png) = crate::emoji_data::image(cue.code) {
+            std::fs::write(request.work_dir.join(format!("emoji_{}.png", cue.code)), png).map_err(io_error)?;
+        }
+    }
     let stem = request.output.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let script_path = request.work_dir.join(format!("{stem}.filter"));
     let filter_args = ffmpeg::write_filter_script(&graph, &script_path).map_err(io_error)?;
@@ -158,6 +170,25 @@ pub fn panel_heights(cfg: &Config) -> (i64, i64) {
     }
 }
 
+/// Pantalla partida con dos personas: el centro de cada una, si el modo es
+/// "duo" y el seguimiento de caras encontro a las dos en plano a la vez.
+pub fn duo_centres(request: &RenderRequest, cfg: &Config) -> Option<(f64, f64)> {
+    (cfg.layout.mode == "duo").then(|| request.track.as_ref().and_then(|t| t.duo)).flatten()
+}
+
+/// Altos de los dos paneles para ESTE clip: en "duo" sin dos personas en plano
+/// el podcast va a pantalla completa.
+pub fn effective_heights(request: &RenderRequest, cfg: &Config) -> (i64, i64) {
+    match (cfg.layout.mode.as_str(), duo_centres(request, cfg)) {
+        ("duo", Some(_)) => {
+            let top = even(cfg.layout.height / 2);
+            (top, cfg.layout.height - top)
+        }
+        ("duo", None) => (cfg.layout.height, 0),
+        _ => panel_heights(cfg),
+    }
+}
+
 /// `between(t,a,b)+between(t,c,d)...` para varios tramos.
 fn between_any(spans: &[&(f64, f64)]) -> String {
     spans.iter().map(|(a, b)| format!("between(t,{a:.3},{b:.3})")).collect::<Vec<_>>().join("+")
@@ -195,6 +226,12 @@ pub fn build_graph(
     let width = cfg.layout.width;
     let mut chains: Vec<String> = Vec::new();
 
+    let duo = duo_centres(request, cfg);
+    let mode = match cfg.layout.mode.as_str() {
+        "duo" if duo.is_none() => "full",
+        other => other,
+    };
+
     // --- panel superior: el podcast ---------------------------------------
     let mut top = vec!["[0:v]setpts=PTS-STARTPTS".to_string(), format!("fps={fps}")];
     top.extend(square_pixels(podcast_info));
@@ -202,21 +239,24 @@ pub fn build_graph(
         top.push(format!("select='{}'", select_expr(&request.plan.keeps)));
         top.push("setpts=N/FRAME_RATE/TB".into());
     }
-    top.extend(reframe_filters(
-        podcast_info,
-        width,
-        top_height,
-        request.track.as_ref(),
-        &request.plan,
-        cfg,
-        options,
-    ));
-    top.push("setsar=1".into());
-    chains.push(format!("{}[top]", top.join(",")));
+    if let Some((left, right)) = duo {
+        // Pantalla partida: el mismo plano dos veces, cada mitad recortada (y
+        // algo mas cerrada) sobre una de las dos personas, que no se mueven.
+        chains.push(format!("{},split=2[duo_a][duo_b]", top.join(",")));
+        for (input, output, cx, height) in [("duo_a", "top", left, top_height), ("duo_b", "bottom", right, bottom_height)] {
+            let fixed = Track::new(vec![(0.0, cx), (1.0, cx)], 1.0);
+            let mut panel = reframe_filters(podcast_info, width, height, Some(&fixed), &request.plan, cfg, options, DUO_TIGHTNESS);
+            panel.push("setsar=1".into());
+            chains.push(format!("[{input}]{}[{output}]", panel.join(",")));
+        }
+    } else {
+        top.extend(reframe_filters(podcast_info, width, top_height, request.track.as_ref(), &request.plan, cfg, options, 1.0));
+        top.push("setsar=1".into());
+        chains.push(format!("{}[top]", top.join(",")));
+    }
 
     // --- panel inferior: el gameplay --------------------------------------
-    let mode = cfg.layout.mode.as_str();
-    if mode != "full" {
+    if mode != "full" && mode != "duo" {
         let speed = cfg.background.speed.clamp(0.5, 2.0);
         let first = if (speed - 1.0).abs() < 1e-6 { "[1:v]setpts=PTS-STARTPTS".to_string() } else { format!("[1:v]setpts=(PTS-STARTPTS)/{}", fl(speed)) };
         let mut bottom = vec![first, format!("fps={fps}")];
@@ -238,6 +278,7 @@ pub fn build_graph(
     let compose = match mode {
         "full" => "[top]null".to_string(),
         "center" => format!("[bottom][top]overlay=x=0:y={}", (cfg.layout.height - top_height) / 2),
+        // En "duo" swap pone a la persona de la derecha arriba.
         _ if cfg.layout.swap => "[bottom][top]vstack=inputs=2".to_string(),
         _ => "[top][bottom]vstack=inputs=2".to_string(),
     };
@@ -254,11 +295,19 @@ pub fn build_graph(
     let clip_seconds = request.plan.output_duration();
     let bar = cfg.progress_bar.enabled && clip_seconds > 0.5;
     let has_logo = !cfg.brand.logo.is_empty();
-    if !bar && !has_logo {
+    let emojis: Vec<&EmojiCue> = request.emojis.iter().filter(|c| c.end > c.start && c.start < clip_seconds).collect();
+    if emojis.is_empty() && !bar && !has_logo {
         chains.push(format!("{composed},format=yuv420p[vout]"));
     } else {
         chains.push(format!("{composed}[base]"));
-        let mut label = "base";
+        let mut label = "base".to_string();
+        // Emojis: cada uno es una imagen (en work_dir, nombre relativo como el
+        // .ass) que aparece centrada encima del bloque mientras dura.
+        for (i, cue) in emojis.iter().enumerate() {
+            chains.push(format!("movie=emoji_{}.png,format=rgba,scale={size}:{size}[emo{i}]", cue.code, size = cue.size));
+            chains.push(format!("[{label}][emo{i}]overlay=x=(W-w)/2:y={}:enable='between(t,{:.3},{:.3})'[emoji{i}]", cue.y, cue.start, cue.end));
+            label = format!("emoji{i}");
+        }
         if bar {
             // Una barra de color que entra deslizandose desde la izquierda: en el
             // ultimo fotograma llena todo el ancho.
@@ -269,10 +318,9 @@ pub fn build_graph(
                 "color=c=0x{color}@{}:s={width}x{thickness}:r={fps}:d={clip_seconds:.3},format=rgba[bar]",
                 fl(cfg.progress_bar.opacity.clamp(0.0, 1.0))
             ));
-            let target = if has_logo { "barred" } else { "vout_bar" };
-            let tail = if has_logo { String::new() } else { ",format=yuv420p".to_string() };
-            chains.push(format!("[{label}][bar]overlay=x='-w+w*t/{clip_seconds:.3}':y={y}:eval=frame{tail}[{}]", if has_logo { target } else { "vout" }));
-            label = target;
+            let tail = if has_logo { "[barred]" } else { ",format=yuv420p[vout]" };
+            chains.push(format!("[{label}][bar]overlay=x='-w+w*t/{clip_seconds:.3}':y={y}:eval=frame{tail}"));
+            label = "barred".into();
         }
         if has_logo {
             // El logo es la tercera entrada y va por encima de todo, subtitulos y barra incluidos.
@@ -285,7 +333,7 @@ pub fn build_graph(
             ));
             chains.push(format!("[{label}][logo]overlay=x={x}:y={y},format=yuv420p[vout]"));
         } else if !bar {
-            unreachable!("sin barra ni logo se resolvio arriba");
+            chains.push(format!("[{label}]format=yuv420p[vout]"));
         }
     }
 
@@ -380,6 +428,7 @@ pub fn build_graph(
 /// Meter el fotograma entero en zoompan y dejar que encaje al panel aplasta la
 /// imagen: zoompan recorta siempre con la proporcion de la ENTRADA y luego la
 /// escala a la de SALIDA.
+#[allow(clippy::too_many_arguments)]
 fn reframe_filters(
     source: &MediaInfo,
     target_width: i64,
@@ -388,8 +437,15 @@ fn reframe_filters(
     plan: &JumpCutPlan,
     cfg: &Config,
     options: GraphOptions,
+    tightness: f64,
 ) -> Vec<String> {
     let (crop_w, crop_h) = fit_crop(source, target_width, target_height);
+    // Mas cerrado = ventana mas pequena (mismas proporciones), sin bajar de 2 px pares.
+    let (crop_w, crop_h) = if tightness < 1.0 {
+        (even((crop_w as f64 * tightness) as i64).max(2), even((crop_h as f64 * tightness) as i64).max(2))
+    } else {
+        (crop_w, crop_h)
+    };
     let centre_y = source.height as f64 * 0.45; // las caras caen algo por encima del centro
     let centre_x = centre_expression(track, plan, source.display_width() as f64, "t");
 
@@ -619,7 +675,45 @@ mod tests {
             work_dir: "w".into(),
             beeps: Vec::new(),
             whooshes: Vec::new(),
+            emojis: Vec::new(),
         }
+    }
+
+    #[test]
+    fn dos_personas_una_arriba_y_otra_abajo_sin_fondo() {
+        let mut cfg = Config::default();
+        cfg.layout.mode = "duo".into();
+        let mut pista = Track::new(vec![(0.0, 0.3), (5.0, 0.7)], 1.0);
+        pista.duo = Some((0.3, 0.7));
+        let peticion = peticion(None, Some(pista), None);
+        assert_eq!(effective_heights(&peticion, &cfg), (960, 960));
+        let grafo = build_graph(&peticion, &video(1920, 1080, 1.0), &video(1920, 1080, 1.0), 960, 960, &cfg, GraphOptions { crop_has_eval: false });
+        assert!(grafo.contains("split=2[duo_a][duo_b]"), "{grafo}");
+        assert!(grafo.contains("[top][bottom]vstack"), "{grafo}");
+        assert!(!grafo.contains("[1:v]"), "el fondo no se usa: {grafo}");
+        // Recorte mas cerrado que la ventana maxima (1080 de alto) y centrado en cada persona.
+        assert!(grafo.contains("crop=w=") && !grafo.contains("h=1080:"), "{grafo}");
+
+        // Sin dos personas en plano: podcast a pantalla completa.
+        let sola = peticion_con_pista(Track::new(vec![(0.0, 0.5), (5.0, 0.5)], 1.0));
+        assert_eq!(effective_heights(&sola, &cfg), (1920, 0));
+        let grafo = build_graph(&sola, &video(1920, 1080, 1.0), &video(1920, 1080, 1.0), 1920, 0, &cfg, GraphOptions { crop_has_eval: false });
+        assert!(grafo.contains("[top]null") && !grafo.contains("duo_a"), "{grafo}");
+    }
+
+    #[test]
+    fn los_emojis_van_encima_mientras_dura_su_bloque() {
+        let cfg = Config::default();
+        let mut con = peticion(None, None, Some("s.ass"));
+        con.emojis = vec![EmojiCue { code: "1f4b0", start: 1.0, end: 2.5, y: 900, size: 133 }];
+        let grafo = build_graph(&con, &video(1920, 1080, 1.0), &video(1920, 1080, 1.0), 960, 960, &cfg, GraphOptions { crop_has_eval: false });
+        assert!(grafo.contains("movie=emoji_1f4b0.png,format=rgba,scale=133:133[emo0]"), "{grafo}");
+        assert!(grafo.contains("[base][emo0]overlay=x=(W-w)/2:y=900:enable='between(t,1.000,2.500)'[emoji0]"), "{grafo}");
+        assert!(grafo.contains("[emoji0]format=yuv420p[vout]"), "{grafo}");
+    }
+
+    fn peticion_con_pista(pista: Track) -> RenderRequest {
+        peticion(None, Some(pista), None)
     }
 
     fn grafo_con(cfg: &Config, plan: Option<JumpCutPlan>, track: Option<Track>, ass: Option<&str>, eval: bool) -> String {
@@ -977,7 +1071,7 @@ mod tests {
     #[test]
     fn sin_trayectoria_el_centro_es_el_del_video() {
         assert_eq!(centre_expression(None, &JumpCutPlan::full(30.0), 1920.0, "t"), "960.0");
-        let vacia = Track { points: vec![], detection_ratio: 0.0 };
+        let vacia = Track::new(vec![], 0.0);
         assert_eq!(centre_expression(Some(&vacia), &JumpCutPlan::full(30.0), 1920.0, "t"), "960.0");
     }
 
@@ -987,7 +1081,7 @@ mod tests {
         // 8, que cae en el hueco eliminado [5, 7]: tras el corte esos dos
         // segundos no existen y el 8 original es el 6 del video.
         let plan = JumpCutPlan { keeps: vec![(0.0, 5.0), (7.0, 12.0)], source_duration: 12.0 };
-        let pista = Track { points: vec![(0.0, 0.25), (8.0, 0.25), (9.0, 0.75), (12.0, 0.75)], detection_ratio: 1.0 };
+        let pista = Track::new(vec![(0.0, 0.25), (8.0, 0.25), (9.0, 0.75), (12.0, 0.75)], 1.0);
         let e = centre_expression(Some(&pista), &plan, 1000.0, "t");
         for (t, esperado) in [(0.0, 250.0), (5.9, 250.0), (7.0, 750.0), (10.0, 750.0)] {
             assert!((evaluar(&e, t) - esperado).abs() < 1.0, "t={t}");
@@ -996,7 +1090,7 @@ mod tests {
 
     #[test]
     fn el_recorte_horizontal_nunca_se_sale_del_video() {
-        let pista = Track { points: vec![(0.0, 0.0), (10.0, 1.0)], detection_ratio: 1.0 };
+        let pista = Track::new(vec![(0.0, 0.0), (10.0, 1.0)], 1.0);
         let g = grafo_con(&Config::default(), None, Some(pista), None, false);
         assert!(g.contains("clip(") && g.contains(",0,in_w-1214)"), "{g}");
     }

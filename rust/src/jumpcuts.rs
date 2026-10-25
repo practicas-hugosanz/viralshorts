@@ -62,7 +62,7 @@ impl JumpCutPlan {
                     // duracion minima evita que desaparezca del subtitulo.
                     end = start + 0.08;
                 }
-                Word { text: word.text.clone(), start, end, probability: word.probability }
+                Word { text: word.text.clone(), start, end, probability: word.probability, speaker: word.speaker }
             })
             .collect()
     }

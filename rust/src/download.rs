@@ -480,6 +480,35 @@ impl YtDlpCli {
     }
 }
 
+/// La pestana de videos de un canal: lo que se pega suele ser la pagina
+/// principal (@nombre), que mezcla shorts y directos.
+pub fn channel_videos_url(url: &str) -> String {
+    let url = url.trim().trim_end_matches('/');
+    let is_channel = ["/@", "/channel/", "/c/", "/user/"].iter().any(|m| url.contains(m));
+    let has_tab = ["/videos", "/streams", "/podcasts", "/featured"].iter().any(|t| url.ends_with(t));
+    if is_channel && !has_tab { format!("{url}/videos") } else { url.to_string() }
+}
+
+/// Los ultimos videos de un canal (id, titulo, segundos), del mas nuevo al
+/// mas viejo, sin bajar nada.
+pub fn latest_videos(channel: &str, limit: usize) -> Result<Vec<(String, String, f64)>> {
+    let args: Vec<String> = ["--flat-playlist", "--playlist-end", &limit.max(1).to_string(), "-J", "--no-warnings", &channel_videos_url(channel)]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let (stdout, _) = YtDlpCli::run(&args, false)?;
+    let data: Value = serde_json::from_str(stdout.trim()).map_err(|e| DownloadError(format!("Lista del canal ilegible: {e}")))?;
+    Ok(data["entries"]
+        .as_array()
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(|e| Some((e["id"].as_str()?.to_string(), e["title"].as_str().unwrap_or("").to_string(), e["duration"].as_f64().unwrap_or(0.0))))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
 impl YtDlp for YtDlpCli {
     fn download(&self, url: &str, dest_base: &Path, cfg: &DownloadConfig) -> Result<Value> {
         Self::run(&ytdlp_args(url, cfg, Mode::Download { dest_base }), true)?;

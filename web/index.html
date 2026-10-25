@@ -399,6 +399,12 @@ input[type="color"].swatch::-webkit-color-swatch { border: 0; border-radius: 50%
 .kit-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: -4px 0 14px; }
 .kit-row select { width: auto; min-width: 200px; padding-block: 6px; }
 .screen.mode-center .seam { display: none; }
+/* Dos personas: el pódcast arriba y abajo, cada mitad mirando a una persona. */
+.pod2 { display: none; }
+.screen.mode-duo .pod { inset: 0 0 50% 0; background-position: 28% 45%; }
+.screen.mode-duo .pod2 { display: block; inset: 50% 0 0 0; background-position: 72% 45%; }
+.screen.mode-duo .gamebg { display: none; }
+.screen.mode-duo .seam { top: 50%; }
 
 /* Marca: logo y usuario en una esquina. */
 .ph-brand { position: absolute; z-index: 4; display: flex; flex-direction: column; gap: 1.2cqw; width: var(--logo-w, 14%); pointer-events: none; }
@@ -562,7 +568,19 @@ pre#log .warn { color: #b7791f; }
 /* Los de texto ocupan su fila; los de solo icono se reparten la siguiente. */
 .result .foot .btn:has(span) { flex: 1 1 100%; background: var(--ink); border-color: var(--ink); color: var(--ink-text); }
 .result .foot .btn:not(:has(span)) { flex: 1 1 0; min-width: 40px; background: var(--raise); border-color: transparent; }
-.result .foot .btn.confirm { color: var(--bad); background: var(--bad-soft); border-color: var(--bad); }
+.result .foot .bg-add { padding: 0 22px 14px; margin-top: -6px; }
+.bg-extra .source-row { padding-top: 0; }
+.ch-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line-soft); }
+.ch-item:first-child { border-top: 0; margin-top: 6px; }
+.ch-item .who { flex: 1; min-width: 0; }
+.ch-item .who b { display: block; }
+.ch-item .who span { display: block; color: var(--mute); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.yt-steps { margin: 0 0 14px; padding-left: 20px; color: var(--mute); }
+.yt-steps li { margin: 6px 0; }
+.yt-steps .link { padding: 0 2px; }
+.result .foot .btn.yt { background: #ff0033; border-color: #ff0033; color: #fff; }
+.result .foot .btn.yt.done { background: var(--raise); border-color: transparent; color: var(--text); }
+.btn.confirm { color: var(--bad); background: var(--bad-soft); border-color: var(--bad); }
 
 /* ----------------------------------------------------------------- ajustes */
 .settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
@@ -715,6 +733,7 @@ body.modal-open .main { overflow: hidden; }
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
   <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V5M7 9l5-5 5 5M5 20h14"/></symbol>
   <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></symbol>
 </svg>
 
@@ -794,6 +813,8 @@ body.modal-open .main { overflow: hidden; }
                 <button type="button" class="btn" data-browse="background" data-kind="file"><svg class="ico"><use href="#i-folder"/></svg>Archivo</button>
               </div>
               <div class="media" id="background-preview"><img alt=""><div><b></b><span></span></div></div>
+              <div id="bg-extras"></div>
+              <div class="bg-add"><button type="button" class="link" id="bg-add">+ Añadir otro fondo para ir turnándolos</button></div>
             </section>
             </div>
 
@@ -836,6 +857,20 @@ body.modal-open .main { overflow: hidden; }
                     </select>
                   </div>
                 </div>
+                <div class="q-row">
+                  <div class="q-text"><label for="st_translate"><b>¿En qué idioma van los subtítulos?</b></label><span>Para publicar en otro país. Al inglés se traduce sin conexión; a los demás idiomas, con Claude.</span></div>
+                  <div class="q-ctrl">
+                    <select id="st_translate">
+                      <option value="" selected>En el mismo que hablan</option>
+                      <option value="en">Inglés</option>
+                      <option value="es">Español</option>
+                      <option value="fr">Francés</option>
+                      <option value="pt">Portugués</option>
+                      <option value="de">Alemán</option>
+                      <option value="it">Italiano</option>
+                    </select>
+                  </div>
+                </div>
               </section>
               <div class="model-note" id="model-note" hidden>
                 <svg class="ico"><use href="#i-download"/></svg>
@@ -865,11 +900,20 @@ body.modal-open .main { overflow: hidden; }
               <div class="fields">
                 <div class="wide">
                   <span class="lbl-t">Cómo se reparte el vídeo</span>
-                  <div class="seg" role="radiogroup" aria-label="Composición">
+                  <div class="seg four" role="radiogroup" aria-label="Composición">
                     <label class="choice"><input type="radio" name="comp" value="stack" checked><b>Dividido</b><em>pódcast y fondo apilados</em></label>
                     <label class="choice"><input type="radio" name="comp" value="full"><b>Solo el pódcast</b><em>a pantalla completa</em></label>
                     <label class="choice"><input type="radio" name="comp" value="center"><b>En el centro</b><em>franja sobre el fondo</em></label>
+                    <label class="choice"><input type="radio" name="comp" value="duo"><b>Dos personas</b><em>una arriba, otra abajo</em></label>
                   </div>
+                </div>
+                <div class="wide" id="comp-duo" hidden>
+                  <label class="lbl-t" for="st_color2">Color de la segunda persona</label>
+                  <div class="swatches">
+                    <input type="color" id="st_color2" value="#40C4FF" class="swatch" title="Color de la segunda persona">
+                    <span class="hint" style="margin:0">La palabra que suena va del color de los subtítulos cuando habla la persona de arriba, y de este cuando habla la de abajo.</span>
+                  </div>
+                  <p class="hint">Si en un clip no salen las dos a la vez (un vídeo que cambia de cámara), ese clip va con el pódcast a pantalla completa. No usa el vídeo de fondo.</p>
                 </div>
                 <div class="wide">
                   <span class="lbl-t">Formato del vídeo</span>
@@ -943,6 +987,10 @@ body.modal-open .main { overflow: hidden; }
                     <option value="Verdana">Verdana</option>
                   </select>
                   <p class="hint">Tiene que estar instalada en Windows.</p>
+                </div>
+                <div class="wide">
+                  <label class="opt compact" style="padding-top:0"><span class="opt-text"><b>Emojis según lo que se dice</b><em>Cuando sale una palabra como «dinero», «miedo» o «jajaja», aparece su emoji encima de los subtítulos (como mucho uno cada 2 segundos).</em></span><input type="checkbox" class="switch" id="fx-emoji"></label>
+                  <input type="hidden" id="st_emojis" value="false">
                 </div>
               </div>
             </div>
@@ -1091,7 +1139,7 @@ body.modal-open .main { overflow: hidden; }
                   <defs><linearGradient id="pod-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9aa3b6"/><stop offset="1" stop-color="#6b7488"/></linearGradient></defs>
                   <path d="M15 80c0-17 13-25 30-25s30 8 30 25z" fill="url(#pod-g)"/>
                   <circle cx="45" cy="37" r="12.5" fill="url(#pod-g)"/>
-                </svg></div><div class="gamebg"></div><div class="seam"></div>
+                </svg></div><div class="pod pod2" aria-hidden="true"><svg viewBox="0 0 90 80" preserveAspectRatio="xMidYMax meet"><path d="M15 80c0-17 13-25 30-25s30 8 30 25z" fill="url(#pod-g)"/><circle cx="45" cy="37" r="12.5" fill="url(#pod-g)"/></svg></div><div class="gamebg"></div><div class="seam"></div>
                 <div class="ph-bar" id="ph_bar" hidden></div>
                 <div class="ph-brand tr" id="ph_brand" hidden><img id="ph_logo" alt="" hidden><div class="handle" id="ph_handle"></div></div>
                 <div class="hooktag" id="ph_hook">¿POR QUÉ NADIE LO DICE?</div>
@@ -1359,6 +1407,9 @@ body.modal-open .main { overflow: hidden; }
             </div>
             <p class="hint" id="output-hint">Cada ejecución crea su propia subcarpeta aquí dentro.</p>
             <div class="opts">
+              <label class="opt"><span class="opt-text"><b>Guardar también los subtítulos en .srt</b><em>Para retocarlos en CapCut, Premiere o DaVinci. Van junto a cada short.</em></span><input type="checkbox" class="switch" id="fx-srt"></label>
+              <label class="opt"><span class="opt-text"><b>Guardar también el vídeo sin textos</b><em>El mismo short sin subtítulos, rótulos, barra ni logo («sin-subtitulos_N.mp4»), para editarlo a tu manera. Tarda el doble en montar.</em></span><input type="checkbox" class="switch" id="fx-clean"></label>
+              <input type="hidden" id="st_srt" value="false"><input type="hidden" id="st_clean" value="false">
               <label class="opt"><span class="opt-text"><b>Borrar el vídeo descargado al terminar</b><em>El pódcast bajado de YouTube ocupa cientos de MB y, con los shorts hechos, ya no hace falta. Si después rehaces un short, se vuelve a descargar solo (sin volver a transcribir). Tus propios ficheros y el vídeo de fondo no se borran nunca.</em></span><input type="checkbox" class="switch" id="delete_source" checked></label>
             </div>
           </div>
@@ -1376,6 +1427,57 @@ body.modal-open .main { overflow: hidden; }
               <option value="brave">Brave</option>
             </select>
             <p class="hint">Sirve para vídeos con restricción de edad o cuando YouTube pide iniciar sesión. Hay que haber entrado en YouTube con ese navegador. Con Chrome y Edge puede fallar mientras están abiertos; Firefox suele ir mejor.</p>
+          </div>
+          </details>
+
+          <details class="acc" name="ajustes" id="acc-canales">
+            <summary><b>Seguir canales</b><span class="sum" id="ch-sum">Ninguno</span></summary>
+            <div class="acc-body">
+              <p class="card-sub" style="margin-top:0">Cuando un canal que sigues publica un episodio nuevo, se pone en la cola solo y te encuentras los shorts hechos. Se miran al abrir la aplicación y cada 3 horas mientras está abierta. Se montan con lo que tengas elegido en Crear al pulsar «Seguir» (vídeo de fondo, aspecto, cuántos shorts…).</p>
+              <div class="with-button">
+                <input type="text" id="ch-url" placeholder="https://www.youtube.com/@canal" spellcheck="false" aria-label="Enlace del canal">
+                <button type="button" class="btn primary" id="ch-follow">Seguir</button>
+              </div>
+              <p class="hint" id="ch-msg"></p>
+              <div id="ch-list"></div>
+              <div class="card-foot" id="ch-foot" hidden>
+                <span class="grow">Los vídeos de menos de 5 minutos (avances, shorts) no se montan.</span>
+                <button type="button" class="btn sm" id="ch-check">Mirar ahora</button>
+              </div>
+            </div>
+          </details>
+
+          <details class="acc" name="ajustes" id="acc-youtube">
+            <summary><b>Publicar en YouTube</b><span class="sum" id="yt-sum">Sin conectar</span></summary>
+            <div class="acc-body">
+            <div id="yt-off">
+              <p class="card-sub" style="margin-top:0">Con tu canal conectado, cada short de «Mis shorts» tiene un botón para subirlo con su título, su texto y sus hashtags. Se hace una vez:</p>
+              <ol class="yt-steps">
+                <li>En Google Cloud crea un proyecto, activa <b>YouTube Data API v3</b> y crea una credencial <b>ID de cliente OAuth</b> de tipo <b>Aplicación de escritorio</b>. Descarga su fichero JSON. <button type="button" class="link" id="yt-console">Abrir Google Cloud</button></li>
+                <li>Elige aquí ese fichero y pulsa «Conectar». Se abrirá el navegador para que des permiso con tu cuenta de YouTube.</li>
+              </ol>
+              <div class="with-button">
+                <input type="text" id="yt-secret" placeholder="client_secret_….json" spellcheck="false" aria-label="Fichero de la credencial de Google">
+                <button type="button" class="btn" data-browse="yt-secret" data-kind="file"><svg class="ico"><use href="#i-folder"/></svg>Elegir</button>
+                <button type="button" class="btn primary" id="yt-connect">Conectar</button>
+              </div>
+              <p class="hint" id="yt-msg"></p>
+            </div>
+            <div id="yt-on" hidden>
+              <div class="about">
+                <div class="grow"><b>Conectado</b><br><span id="yt-channel"></span></div>
+                <button type="button" class="btn" id="yt-disconnect">Desconectar</button>
+              </div>
+            </div>
+            <div style="margin-top:16px">
+              <label class="lbl-t" for="yt-privacy">Cómo se publican</label>
+              <select id="yt-privacy" style="max-width:320px">
+                <option value="private" selected>Privados: los revisas y los publicas tú</option>
+                <option value="unlisted">Ocultos: solo con el enlace</option>
+                <option value="public">Públicos: al momento</option>
+              </select>
+              <p class="hint">YouTube deja subir unos 6 vídeos al día con una credencial nueva.</p>
+            </div>
           </div>
           </details>
 
@@ -1440,12 +1542,12 @@ const STYLE  = { st_color: "color_active", st_size: "font_size",
                  st_height: "max_height", st_workers: "workers",
                  st_encoder: "encoder", st_cookies: "cookies",
                  st_refine: "refine", st_vocab: "vocab", st_corrections: "corrections",
-                 st_layout: "layout_mode", st_top: "top_ratio", st_swap: "swap",
+                 st_layout: "layout_mode", st_top: "top_ratio", st_swap: "swap", st_color2: "color_second", st_translate: "translate",
                  st_sstyle: "sub_style", st_logo: "logo", st_lpos: "logo_pos",
                  st_lsize: "logo_size", st_lop: "logo_opacity", st_handle: "handle",
                  st_bar: "bar", st_barpos: "bar_pos", st_barcolor: "bar_color",
                  st_music: "music", st_mvol: "music_volume", st_mduck: "music_duck",
-                 st_format: "format", st_sfx: "sfx", st_beep: "censor_beep", st_cover: "cover_text",
+                 st_format: "format", st_sfx: "sfx", st_emojis: "emojis", st_srt: "export_srt", st_clean: "export_clean", st_beep: "censor_beep", st_cover: "cover_text",
                  st_bgstart: "bg_start", st_bgspeed: "bg_speed", st_bgblur: "bg_blur", st_bgdim: "bg_dim",
                  st_endcard: "endcard", st_endtext: "endcard_text" };
 const LOOK   = ["st_color", "st_size", "st_pos", "st_words", "st_font",
@@ -1480,9 +1582,10 @@ const LENGTHS = {
   long:   { min_duration: 45, max_duration: 60 },
 };
 const PRESETS = {
-  fast:     { model: "small",  beam: "1", regions: "8",  refine: "",               minutes: "unos 3 minutos" },
-  balanced: { model: "medium", beam: "1", regions: "",   refine: "",               minutes: "unos 12 minutos" },
-  best:     { model: "medium", beam: "5", regions: "16", refine: "large-v3-turbo", minutes: "unos 26 minutos" },
+  // gpu: medido con la tarjeta gráfica (RX 6600 con Vulkan): 2,8 veces más rápido con medium, 4,9 con turbo.
+  fast:     { model: "small",  beam: "1", regions: "8",  refine: "",               minutes: "unos 3 minutos",  gpu: "1 minuto" },
+  balanced: { model: "medium", beam: "1", regions: "",   refine: "",               minutes: "unos 12 minutos", gpu: "unos 5 minutos" },
+  best:     { model: "medium", beam: "5", regions: "16", refine: "large-v3-turbo", minutes: "unos 26 minutos", gpu: "unos 8 minutos" },
 };
 
 function radio(name)      { const el = document.querySelector(`input[name="${name}"]:checked`); return el ? el.value : ""; }
@@ -1521,10 +1624,17 @@ function presetFromFields() {
   updateEta();
 }
 
+let GPU_READY = false;
 function updateEta() {
   const preset = PRESETS[radio("preset")];
-  const label = preset ? preset.minutes : "un rato";
-  $("eta").innerHTML = `Tardará <b>${label}</b> con un pódcast de 2 horas, más unos 15 s por short.`;
+  const label = preset ? (GPU_READY ? preset.gpu : preset.minutes) : "un rato";
+  $("eta").innerHTML = `Tardará <b>${label}</b> con un pódcast de 2 horas, más unos 15 s por short` +
+                       (GPU_READY ? " (con tu tarjeta gráfica)." : ".");
+  // Las opciones de calidad enseñan el tiempo de ESTE ordenador.
+  document.querySelectorAll('input[name="preset"]').forEach(input => {
+    const p = PRESETS[input.value];
+    if (p) input.parentNode.querySelector("em").textContent = (GPU_READY ? p.gpu : p.minutes).replace("minutos", "min").replace("minuto", "min");
+  });
   updateSummary();
 }
 
@@ -1544,7 +1654,8 @@ function updateSummary() {
   const min = length ? length.min_duration : $("min_duration").value;
   const max = length ? length.max_duration : $("max_duration").value;
   $("chk-what-t").textContent = n === 1 ? "1 short" : `${n} shorts`;
-  $("chk-what-d").textContent = `de ${min} a ${max} s`;
+  const lang = $("st_translate").selectedOptions[0];
+  $("chk-what-d").textContent = `de ${min} a ${max} s` + ($("st_translate").value ? `, subtítulos en ${lang.text.toLowerCase()}` : "");
   // Ocupado, lo que se lance va a la cola en vez de pelearse por la carpeta de trabajo.
   const busy = $("status").dataset.state === "running";
   $("run").textContent = busy ? "Añadir a la cola" : (n === 1 ? "Generar 1 short" : `Generar ${n} shorts`);
@@ -1634,6 +1745,7 @@ function paintLook() {
   const screen = $("screen");
   screen.classList.toggle("mode-full", mode === "full");
   screen.classList.toggle("mode-center", mode === "center");
+  screen.classList.toggle("mode-duo", mode === "duo");
   screen.classList.toggle("swap", mode === "stack" && $("st_swap").value === "true");
   screen.style.setProperty("--top", (+$("st_top").value * 100) + "%");
 
@@ -1702,10 +1814,12 @@ function syncLook() {
   setRadio("ratio", String(Math.round(+$("st_top").value * 100)));
   $("comp-swap").checked = $("st_swap").value === "true";
   $("comp-stack").hidden = $("st_layout").value !== "stack";
+  $("comp-duo").hidden = $("st_layout").value !== "duo";
   setRadio("sstyle", $("st_sstyle").value);
   setRadio("lpos", $("st_lpos").value);
   setRadio("fmt", $("st_format").value);
-  [["fx-sfx", "st_sfx"], ["fx-beep", "st_beep"], ["fx-cover", "st_cover"], ["fx-end", "st_endcard"]]
+  [["fx-sfx", "st_sfx"], ["fx-beep", "st_beep"], ["fx-cover", "st_cover"], ["fx-end", "st_endcard"],
+   ["fx-emoji", "st_emojis"], ["fx-srt", "st_srt"], ["fx-clean", "st_clean"]]
     .forEach(([box, hidden]) => { $(box).checked = $(hidden).value === "true"; });
   $("bar-on").checked = $("st_bar").value === "true";
   $("duck-on").checked = $("st_mduck").value !== "false";
@@ -1784,7 +1898,7 @@ function refreshMonitor() {
   clearTimeout(monitorTimer);
   // Con un archivo local cada pulsacion lanzaria un ffmpeg: se espera a que pare de teclear.
   monitorTimer = setTimeout(() => {
-    [["podcast", ".pod"], ["background", ".gamebg"]].forEach(([id, selector]) => {
+    [["podcast", ".pod"], ["podcast", ".pod2"], ["background", ".gamebg"]].forEach(([id, selector]) => {
       const node = document.querySelector(selector);
       const url = monitorImage($(id).value);
       if (!url) { node.style.backgroundImage = ""; node.classList.remove("has-img"); return; }
@@ -2041,11 +2155,13 @@ watchUpdates(false);
 
 // Tarjeta NVIDIA sin el motor de GPU: se ofrece instalarlo desde aquí.
 let gpuBusy = false;
-function showGpuOffer() {
+function showGpuOffer(kind) {
   if (gpuBusy || $("gpu").classList.contains("on")) return;
   const node = $("gpu");
-  showBanner(node, "Tu tarjeta NVIDIA puede acelerar la transcripción",
-    `<span id="gpu-text">Hay que descargar un motor extra (unos 700 MB, una sola vez). Sin él todo funciona igual, solo que más despacio.</span><br>
+  const size = kind === "nvidia" ? "unos 700 MB" : "unos 18 MB";
+  showBanner(node, kind === "nvidia" ? "Tu tarjeta NVIDIA puede acelerar la transcripción"
+                                     : "Tu tarjeta gráfica puede acelerar la transcripción",
+    `<span id="gpu-text">Hay que descargar un motor extra (${size}, una sola vez). Sin él todo funciona igual, solo que más despacio.</span><br>
      <button type="button" class="btn primary sm" id="gpu-go">Activar la GPU</button>`, false);
   $("gpu-go").addEventListener("click", async () => {
     gpuBusy = true;
@@ -2174,9 +2290,35 @@ $("mn-go").addEventListener("click", downloadNeeded);
 // ===========================================================================
 let STATE = "idle";
 
+function bgExtras() {
+  return [...document.querySelectorAll(".bg-extra input")].map(i => i.value.trim()).filter(Boolean);
+}
+function addBgExtra(value = "") {
+  const row = document.createElement("div");
+  row.className = "bg-extra";
+  const n = document.querySelectorAll(".bg-extra").length + 2;
+  row.innerHTML = `<div class="source-row"><svg class="ico"><use href="#i-link"/></svg>
+    <input type="text" placeholder="Fondo ${n}: enlace o archivo" spellcheck="false" aria-label="Fondo ${n}">
+    <button type="button" class="btn" title="Quitar este fondo" aria-label="Quitar este fondo"><svg class="ico"><use href="#i-x"/></svg></button></div>`;
+  const input = row.querySelector("input");
+  input.value = value;
+  input.addEventListener("input", saveBgExtras);
+  row.querySelector("button").addEventListener("click", () => { row.remove(); saveBgExtras(); });
+  $("bg-extras").appendChild(row);
+  return input;
+}
+function saveBgExtras() {
+  try { localStorage.setItem("viralshorts.bgextra", JSON.stringify(bgExtras())); } catch (e) {}
+}
+$("bg-add").addEventListener("click", () => addBgExtra().focus());
+try { (JSON.parse(localStorage.getItem("viralshorts.bgextra") || "[]")).forEach(v => addBgExtra(v)); } catch (e) {}
+
 function collect(review) {
   const form = { review: !!review };
   FIELDS.forEach(k => form[k] = $(k).value.trim());
+  // Varios fondos: cada short usa el siguiente.
+  const extras = bgExtras();
+  if (extras.length && form.background) form.background = [form.background, ...extras].join(" | ");
   FLAGS.forEach(k  => form[k] = $(k).checked);
   form.clips = parseInt(form.clips, 10) || 3;
   form.style = styleValues();
@@ -2585,7 +2727,7 @@ document.querySelectorAll("[data-tab-go]").forEach(b => b.addEventListener("clic
 
 // Cada plantilla fija todo el aspecto (no toca lo de "Contenido").
 const LOOK_DEFAULTS = {
-  st_layout: "stack", st_top: "0.5", st_swap: "false", st_format: "9:16",
+  st_layout: "stack", st_top: "0.5", st_swap: "false", st_format: "9:16", st_color2: "#40C4FF",
   st_sstyle: "classic", st_color: "#FFF200", st_size: "92", st_pos: "30", st_words: "3",
   st_bar: "false", st_barpos: "bottom", st_barcolor: "#ff7a18", st_sfx: "false", st_endcard: "false",
   st_bgstart: "sequence", st_bgspeed: "1", st_bgblur: "0", st_bgdim: "0",
@@ -2613,7 +2755,7 @@ function currentTemplate() {
 }
 
 const STYLE_NAMES = { classic: "Clásico", box: "Caja", marker: "Rotulador", neon: "Neón", minimal: "Sobrio" };
-const COMP_NAMES = { stack: "Dividido", full: "Solo el pódcast", center: "Franja central" };
+const COMP_NAMES = { stack: "Dividido", full: "Solo el pódcast", center: "Franja central", duo: "Dos personas" };
 
 /** Lo elegido en cada seccion, en una linea: se ve sin abrirla. */
 function paintSummaries() {
@@ -2702,6 +2844,95 @@ document.querySelectorAll("[data-browse]").forEach(button => {
 });
 
 $("form").addEventListener("submit", (event) => { event.preventDefault(); launch(false); });
+$("st_translate").addEventListener("change", updateSummary);
+
+// -- canales seguidos --------------------------------------------------------
+async function refreshChannels() {
+  let data;
+  try { data = await (await fetch("/api/channels", { headers: AUTH })).json(); } catch (e) { return; }
+  const list = $("ch-list");
+  list.innerHTML = "";
+  (data.channels || []).forEach(channel => {
+    const row = document.createElement("div");
+    row.className = "ch-item";
+    row.innerHTML = `<div class="who"><b>${escapeHtml(channel.nombre || channel.url)}</b>
+      <span>Último: ${escapeHtml(channel.ultimo || "—")} · ${channel.encolados || 0} episodio(s) montados</span></div>`;
+    const stop = iconButton("Dejar de seguir", "x");
+    stop.addEventListener("click", async () => {
+      stop.disabled = true;
+      try { await post("/api/channels/unfollow", { url: channel.url }); } catch (e) {}
+      refreshChannels();
+    });
+    row.appendChild(stop);
+    list.appendChild(row);
+  });
+  const count = (data.channels || []).length;
+  $("ch-sum").textContent = count ? `${count} canal${count === 1 ? "" : "es"}` : "Ninguno";
+  $("ch-foot").hidden = !count;
+}
+$("ch-follow").addEventListener("click", async () => {
+  const url = $("ch-url").value.trim();
+  if (!url) { $("ch-msg").textContent = "Pega el enlace del canal."; return; }
+  const form = collect(false);
+  delete form.podcast;
+  $("ch-follow").disabled = true;
+  $("ch-msg").textContent = "Mirando el canal…";
+  try {
+    const answer = await post("/api/channels/follow", { url, form });
+    $("ch-msg").textContent = `Siguiendo ${answer.channel.nombre}. Su último vídeo («${answer.channel.ultimo}») ya estaba: se montarán los que salgan a partir de ahora.`;
+    $("ch-url").value = "";
+    refreshChannels();
+  } catch (error) {
+    $("ch-msg").textContent = error.message;
+  } finally {
+    $("ch-follow").disabled = false;
+  }
+});
+$("ch-check").addEventListener("click", async () => {
+  $("ch-check").disabled = true;
+  $("ch-msg").textContent = "Mirando los canales…";
+  try {
+    const answer = await post("/api/channels/check");
+    $("ch-msg").textContent = answer.queued ? `${answer.queued} episodio(s) nuevo(s) en la cola.` : "No hay episodios nuevos.";
+    refreshChannels();
+  } catch (error) {
+    $("ch-msg").textContent = error.message;
+  } finally {
+    $("ch-check").disabled = false;
+  }
+});
+refreshChannels();
+
+// -- YouTube -----------------------------------------------------------------
+let YT = { connected: false, channel: "" };
+async function refreshYoutube() {
+  try { YT = await (await fetch("/api/youtube", { headers: AUTH })).json(); } catch (e) { return; }
+  $("yt-off").hidden = YT.connected;
+  $("yt-on").hidden = !YT.connected;
+  $("yt-channel").textContent = YT.channel ? `Canal: ${YT.channel}` : "Listo para subir.";
+  $("yt-sum").textContent = YT.connected ? (YT.channel || "Conectado") : "Sin conectar";
+}
+$("yt-console").addEventListener("click", () => post("/api/open", { url: "https://console.cloud.google.com/apis/credentials" }).catch(() => {}));
+$("yt-connect").addEventListener("click", async () => {
+  const secret = $("yt-secret").value.trim();
+  if (!secret) { $("yt-msg").textContent = "Elige primero el fichero de la credencial."; return; }
+  $("yt-connect").disabled = true;
+  $("yt-msg").textContent = "Da permiso en la ventana del navegador que se ha abierto…";
+  try {
+    const answer = await post("/api/youtube/connect", { secret });
+    if (!answer.ok) throw new Error(answer.error || "no se pudo");
+    $("yt-msg").textContent = "";
+    await refreshYoutube();
+  } catch (error) {
+    $("yt-msg").textContent = "No se ha conectado: " + error.message;
+  } finally {
+    $("yt-connect").disabled = false;
+  }
+});
+$("yt-disconnect").addEventListener("click", async () => { await post("/api/youtube/disconnect").catch(() => {}); refreshYoutube(); });
+try { const saved = localStorage.getItem("viralshorts.yt"); if (saved) $("yt-privacy").value = saved; } catch (e) {}
+$("yt-privacy").addEventListener("change", () => { try { localStorage.setItem("viralshorts.yt", $("yt-privacy").value); } catch (e) {} });
+refreshYoutube();
 $("review").addEventListener("click", () => launch(true));
 $("stop").addEventListener("click", () => post("/api/stop").catch(() => {}));
 $("queue-clear").addEventListener("click", () => post("/api/queue/clear").catch(() => {}));
@@ -2724,7 +2955,14 @@ document.querySelectorAll("#st_swatches .swatch[data-color]").forEach(button =>
 
 // -- composicion, plantilla y marca -------------------------------------------
 document.querySelectorAll('input[name="comp"]').forEach(r =>
-  r.addEventListener("change", () => { $("st_layout").value = radio("comp"); afterLook(); }));
+  r.addEventListener("change", () => {
+    const before = $("st_layout").value;
+    $("st_layout").value = radio("comp");
+    // Con dos personas los subtitulos van en la costura, no encima de la cara de abajo.
+    if (radio("comp") === "duo" && before !== "duo") $("st_pos").value = "47";
+    else if (before === "duo" && $("st_pos").value === "47") $("st_pos").value = "30";
+    afterLook();
+  }));
 document.querySelectorAll('input[name="ratio"]').forEach(r =>
   r.addEventListener("change", () => { $("st_top").value = String(+radio("ratio") / 100); afterLook(); }));
 $("comp-swap").addEventListener("change", () => { $("st_swap").value = $("comp-swap").checked ? "true" : "false"; afterLook(); });
@@ -2735,7 +2973,8 @@ document.querySelectorAll('input[name="lpos"]').forEach(r =>
 $("logo-clear").addEventListener("click", () => { $("st_logo").value = ""; afterLook(); });
 document.querySelectorAll('input[name="fmt"]').forEach(r =>
   r.addEventListener("change", () => { $("st_format").value = radio("fmt"); afterLook(); }));
-[["fx-sfx", "st_sfx"], ["fx-beep", "st_beep"], ["fx-cover", "st_cover"], ["fx-end", "st_endcard"]].forEach(([box, hidden]) =>
+[["fx-sfx", "st_sfx"], ["fx-beep", "st_beep"], ["fx-cover", "st_cover"], ["fx-end", "st_endcard"],
+ ["fx-emoji", "st_emojis"], ["fx-srt", "st_srt"], ["fx-clean", "st_clean"]].forEach(([box, hidden]) =>
   $(box).addEventListener("change", () => { $(hidden).value = $(box).checked ? "true" : "false"; afterLook(); }));
 $("bar-on").addEventListener("change", () => { $("st_bar").value = $("bar-on").checked ? "true" : "false"; afterLook(); });
 $("duck-on").addEventListener("change", () => { $("st_mduck").value = $("duck-on").checked ? "true" : "false"; afterLook(); });
@@ -3000,6 +3239,36 @@ function buildCard(item) {
     foot.appendChild(again);
   }
 
+  // YouTube: subir con un clic (o ver el que ya se subio).
+  const yt = iconButton(item.youtube ? "Ver en YouTube" : "Subir a YouTube", item.youtube ? "link" : "upload");
+  yt.classList.add("yt");
+  if (item.youtube) yt.classList.add("done");
+  yt.addEventListener("click", async () => {
+    if (item.youtube) { post("/api/open", { url: item.youtube }).catch(() => {}); return; }
+    if (!YT.connected) {
+      showBanner($("tip"), "Conecta tu canal de YouTube", "Se hace una vez, en Ajustes › Publicar en YouTube.");
+      go("ajustes"); $("acc-youtube").open = true;
+      return;
+    }
+    const label = yt.querySelector("span");
+    yt.disabled = true;
+    label.textContent = "Subiendo…";
+    try {
+      const answer = await post("/api/youtube/upload", { id: item.id, privacidad: $("yt-privacy").value });
+      if (!answer.ok) throw new Error(answer.error || "no se pudo");
+      item.youtube = answer.url;
+      label.textContent = "Ver en YouTube";
+      yt.querySelector("use").setAttribute("href", "#i-link");
+      yt.classList.add("done");
+    } catch (error) {
+      label.textContent = "Subir a YouTube";
+      showBanner($("banner"), "No se pudo subir a YouTube", escapeHtml(error.message));
+    } finally {
+      yt.disabled = false;
+    }
+  });
+  foot.appendChild(yt);
+
   const rename = iconButton("Cambiar el título", "edit", true);
   rename.addEventListener("click", () => startRename(card, item));
   foot.appendChild(rename);
@@ -3116,7 +3385,8 @@ events.onmessage = (message) => {
           "Es el programa que monta el vídeo. Cierra Viral Shorts y vuelve a abrirlo: " +
           "la primera pantalla lo descarga sola.");
       }
-      if (event.env && event.env.nvidia && event.env.cuda_engine === false) showGpuOffer();
+      if (event.env && event.env.gpu_offer) showGpuOffer(event.env.gpu_kind);
+      if (event.env && GPU_READY !== !!event.env.gpu_ready) { GPU_READY = !!event.env.gpu_ready; updateEta(); }
       break;
 
     case "job":

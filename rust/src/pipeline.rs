@@ -196,11 +196,11 @@ pub fn apply_overrides(cfg: &mut Config, args: &Args) -> Result<(), ConfigError>
 
     // Con el podcast a pantalla completa o en una franja no hay costura donde
     // poner la tarjeta de contexto: va arriba.
-    if cfg.layout.mode != "stack" && cfg.title_card.anchor == "center" {
+    if cfg.layout.mode != "stack" && cfg.layout.mode != "duo" && cfg.title_card.anchor == "center" {
         cfg.title_card.anchor = "top".into();
     }
-    if !["stack", "full", "center"].contains(&cfg.layout.mode.as_str()) {
-        return Err(ConfigError::Invalid(format!("layout.mode '{}' no existe: usa stack, full o center.", cfg.layout.mode)));
+    if !["stack", "full", "center", "duo"].contains(&cfg.layout.mode.as_str()) {
+        return Err(ConfigError::Invalid(format!("layout.mode '{}' no existe: usa stack, full, center o duo.", cfg.layout.mode)));
     }
     if !["sequence", "random"].contains(&cfg.background.start.as_str()) {
         return Err(ConfigError::Invalid(format!("background.start '{}' no existe: usa sequence o random.", cfg.background.start)));
@@ -343,6 +343,8 @@ struct Selection {
     clips: Vec<Window>,
     podcast: SourceVideo,
     background: SourceVideo,
+    /// Mas fondos, si se pidieron varios: los shorts se los van turnando.
+    extra_backgrounds: Vec<SourceVideo>,
     judge: ClipJudge,
     energy: EnergyTrack,
 }
@@ -395,6 +397,7 @@ fn run_new(args: &Args, cfg: &Config, work_dir: &Path, output_dir: &Path, starte
             cfg,
             &PlanSource::from_video(&selection.podcast),
             &PlanSource::from_video(&selection.background),
+            &selection.extra_backgrounds.iter().map(PlanSource::from_video).collect::<Vec<_>>(),
             &selection.clips,
             &written,
             preselected,
@@ -419,7 +422,8 @@ fn run_new(args: &Args, cfg: &Config, work_dir: &Path, output_dir: &Path, starte
     let written = metadata_for(&mut selection.judge, &selection.clips, &podcast.title, cfg);
     let output_dir = run_output_dir(cfg, output_dir, &podcast.title, &chrono::Local::now().format("%Y%m%d_%H%M%S").to_string());
     let numbers: Vec<usize> = (1..=selection.clips.len()).collect();
-    let results = render_all(&selection.clips, &written, &podcast, &background, cfg, work_dir, &output_dir, &numbers, Some(&selection.energy));
+    let backgrounds: Vec<Source> = std::iter::once(background).chain(selection.extra_backgrounds.iter().map(Source::from)).collect();
+    let results = render_all(&selection.clips, &written, &podcast, &backgrounds, cfg, work_dir, &output_dir, &numbers, Some(&selection.energy));
 
     finish(cfg, &output_dir);
     free_source(cfg, work_dir, &podcast, &results);
@@ -449,7 +453,14 @@ pub fn proposed_count(args: &Args, cfg: &Config) -> usize {
 fn select_clips(args: &Args, cfg: &Config, work_dir: &Path, limit: Option<usize>) -> Result<Selection, String> {
     progress::stage("descarga", "Descargando los videos");
     let podcast = download::fetch(args.podcast.as_deref().unwrap_or(""), &work_dir.join("podcast"), &cfg.download).map_err(|e| e.to_string())?;
-    let background = download::fetch(args.background.as_deref().unwrap_or(""), &work_dir.join("background"), &cfg.download).map_err(|e| e.to_string())?;
+    let wanted = split_backgrounds(args.background.as_deref().unwrap_or(""));
+    let background = download::fetch(wanted.first().map_or("", String::as_str), &work_dir.join("background"), &cfg.download).map_err(|e| e.to_string())?;
+    let extra_backgrounds = wanted
+        .iter()
+        .enumerate()
+        .skip(1)
+        .map(|(i, url)| download::fetch(url, &work_dir.join(format!("background_{}", i + 1)), &cfg.download).map_err(|e| e.to_string()))
+        .collect::<Result<Vec<_>, String>>()?;
 
     // El orden importa: la energia y el heatmap no necesitan texto y se calculan
     // en segundos, asi que sirven para decidir QUE hay que transcribir.
@@ -497,7 +508,8 @@ fn select_clips(args: &Args, cfg: &Config, work_dir: &Path, limit: Option<usize>
         return Err("No se selecciono ningun clip.".into());
     }
     refine_clips(cfg, &podcast.path, podcast.duration, &mut picked);
-    Ok(Selection { clips: picked, podcast, background, judge, energy })
+    translate_clips(cfg, &podcast.path, podcast.duration, &mut picked, &mut judge);
+    Ok(Selection { clips: picked, podcast, background, extra_backgrounds, judge, energy })
 }
 
 /// Vuelve a transcribir SOLO el trozo de cada clip elegido con un modelo mejor.
@@ -512,7 +524,7 @@ fn refine_clips(cfg: &Config, podcast: &Path, duration: f64, clips: &mut [Window
     progress::stage("transcripcion", "Afinando el texto de los clips elegidos");
     log::info!("Afinando el texto de {} clips con el modelo '{model}' (solo sus segundos, no el pódcast entero).", clips.len());
 
-    let outcome = (|| -> Result<Vec<Option<(Vec<crate::words::Word>, String)>>, String> {
+    let outcome = (|| -> Result<ClipWords, String> {
         let mut refine = cfg.transcribe.clone();
         refine.model_size = model.to_string();
         refine.beam_size = refine.beam_size.max(5);
@@ -520,21 +532,8 @@ fn refine_clips(cfg: &Config, podcast: &Path, duration: f64, clips: &mut [Window
         let mut transcriber = Transcriber::new(refine, &cfg.paths.cache_dir, Box::new(engine)).map_err(|e| e.to_string())?;
         let regions: Vec<(f64, f64)> = clips.iter().map(|c| ((c.start - 1.0).max(0.0), (c.end + 1.0).min(duration))).collect();
         let transcript = transcriber.transcribe_regions(podcast, duration, &regions).map_err(|e| e.to_string())?;
-        let all: Vec<&crate::words::Word> = transcript.segments.iter().flat_map(|s| s.words.iter()).collect();
-        Ok(clips
-            .iter()
-            .map(|clip| {
-                let mut words: Vec<crate::words::Word> =
-                    all.iter().filter(|w| w.start >= clip.start - 0.25 && w.end <= clip.end + 0.25).map(|w| (*w).clone()).collect();
-                words.sort_by(|a, b| a.start.total_cmp(&b.start));
-                words.dedup_by(|a, b| (a.start - b.start).abs() < 0.05 && a.text == b.text);
-                // Una pasada que devuelve la mitad de las palabras ha ido mal.
-                (words.len() >= 3 && words.len() * 2 >= clip.words.len()).then(|| {
-                    let text = words.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ");
-                    (words, text)
-                })
-            })
-            .collect())
+        // Una pasada que devuelve la mitad de las palabras ha ido mal.
+        Ok(words_per_clip(&transcript, clips, |found, clip| found * 2 >= clip.words.len()))
     })();
 
     match outcome {
@@ -554,6 +553,117 @@ fn refine_clips(cfg: &Config, podcast: &Path, duration: f64, clips: &mut [Window
         }
         Err(error) => log::warn!("No se pudo afinar el texto ({error}). Se sigue con el de la primera pasada."),
     }
+}
+
+/// Los videos de fondo pedidos: uno, o varios separados por | o por lineas.
+pub fn split_backgrounds(text: &str) -> Vec<String> {
+    text.split(['|', '\n']).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect()
+}
+
+/// Por clip: sus palabras nuevas y su texto, o None si la pasada no valio.
+type ClipWords = Vec<Option<(Vec<crate::words::Word>, String)>>;
+
+/// Las palabras de una pasada de whisper por zonas, repartidas por clip.
+/// `enough` decide si las encontradas valen (cuantas, frente al clip).
+fn words_per_clip(
+    transcript: &crate::words::Transcript,
+    clips: &[Window],
+    enough: impl Fn(usize, &Window) -> bool,
+) -> ClipWords {
+    let all: Vec<&crate::words::Word> = transcript.segments.iter().flat_map(|s| s.words.iter()).collect();
+    clips
+        .iter()
+        .map(|clip| {
+            let mut words: Vec<crate::words::Word> =
+                all.iter().filter(|w| w.start >= clip.start - 0.25 && w.end <= clip.end + 0.25).map(|w| (*w).clone()).collect();
+            words.sort_by(|a, b| a.start.total_cmp(&b.start));
+            words.dedup_by(|a, b| (a.start - b.start).abs() < 0.05 && a.text == b.text);
+            (words.len() >= 3 && enough(words.len(), clip)).then(|| {
+                let text = words.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ");
+                (words, text)
+            })
+        })
+        .collect()
+}
+
+/// Subtitulos en otro idioma: cambia las palabras (y el texto, del que salen
+/// titulo y gancho) de cada clip por las traducidas. Al ingles traduce whisper
+/// el mismo audio; a los demas idiomas, Claude frase a frase. Si no se puede,
+/// se queda el idioma original y se avisa.
+fn translate_clips(cfg: &Config, podcast: &Path, duration: f64, clips: &mut [Window], judge: &mut ClipJudge) {
+    let target = cfg.subtitles.translate_to.trim().to_lowercase();
+    if target.is_empty() || clips.is_empty() {
+        return;
+    }
+    let source = cfg.transcribe.language.clone().unwrap_or_default().to_lowercase();
+    if source == target {
+        return;
+    }
+    let Some(name) = crate::translate::language_name(&target) else {
+        log::warn!("Idioma de subtitulos desconocido ({target}); van en el original.");
+        return;
+    };
+    progress::stage("transcripcion", &format!("Traduciendo los subtitulos al {name}"));
+
+    if target == "en" {
+        // whisper traduce al ingles con el modelo normal; los "turbo" no saben traducir.
+        let model = [cfg.transcribe.refine_model.trim(), cfg.transcribe.model_size.trim()]
+            .into_iter()
+            .find(|m| !m.is_empty() && !m.contains("turbo"))
+            .unwrap_or("medium")
+            .to_string();
+        let outcome = (|| -> Result<ClipWords, String> {
+            let mut settings = cfg.transcribe.clone();
+            settings.model_size = model.clone();
+            settings.translate = true;
+            settings.corrections.clear(); // estan escritas para el idioma original
+            let engine = WhisperCpp::discover(&ffmpeg::project_root()).map_err(|e| e.to_string())?;
+            let mut transcriber = Transcriber::new(settings, &cfg.paths.cache_dir, Box::new(engine)).map_err(|e| e.to_string())?;
+            let regions: Vec<(f64, f64)> = clips.iter().map(|c| ((c.start - 1.0).max(0.0), (c.end + 1.0).min(duration))).collect();
+            let transcript = transcriber.transcribe_regions(podcast, duration, &regions).map_err(|e| e.to_string())?;
+            // Traducido salen menos palabras que en espanol: basta con un tercio.
+            Ok(words_per_clip(&transcript, clips, |found, clip| found * 3 >= clip.words.len()))
+        })();
+        match outcome {
+            Ok(results) => {
+                let mut done = 0;
+                for (clip, result) in clips.iter_mut().zip(results) {
+                    if let Some((words, text)) = result {
+                        clip.words = words;
+                        clip.text = text;
+                        done += 1;
+                    }
+                }
+                log::info!("Subtitulos traducidos al ingles (whisper, modelo {model}) en {done} de {} clips.", clips.len());
+            }
+            Err(error) => log::warn!("No se pudo traducir al ingles ({error}); los subtitulos van en el original."),
+        }
+        return;
+    }
+
+    if !cfg.llm.enabled || !judge.available() {
+        log::warn!("Para traducir al {name} hace falta Claude (al ingles no). Los subtitulos van en el original.");
+        progress::result(
+            "aviso",
+            json!({"titulo": format!("Sin traducir al {name}"), "texto": "Traducir a ese idioma necesita la clave de Claude. Al inglés se traduce sin ella."}),
+        );
+        return;
+    }
+    let english = crate::translate::english_name(&target).unwrap_or("English");
+    let mut done = 0;
+    for clip in clips.iter_mut() {
+        let spans = crate::translate::phrases(&clip.words, 12);
+        let originals: Vec<String> =
+            spans.iter().map(|&(a, b)| clip.words[a..b].iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ")).collect();
+        let translated = judge.translate_phrases(&originals, english);
+        if translated.iter().all(Option::is_none) {
+            continue;
+        }
+        clip.words = crate::translate::assemble(&clip.words, &spans, &translated);
+        clip.text = clip.words.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ");
+        done += 1;
+    }
+    log::info!("Subtitulos traducidos al {name} (Claude) en {done} de {} clips.", clips.len());
 }
 
 // ----------------------------------------------------------------------------
@@ -600,7 +710,10 @@ fn run_from_plan(args: &Args, plan_path: &Path, cfg: &mut Config, work_dir: &Pat
 
     let mut podcast = Source::from(&saved.podcast);
     let mut background = Source::from(&saved.background);
-    for (source, base, label) in [(&mut podcast, "podcast", "podcast"), (&mut background, "background", "video de fondo")] {
+    let mut extra: Vec<Source> = saved.extra_backgrounds.iter().map(Source::from).collect();
+    let mut sources: Vec<(&mut Source, String, &str)> = vec![(&mut podcast, "podcast".into(), "podcast"), (&mut background, "background".into(), "video de fondo")];
+    sources.extend(extra.iter_mut().enumerate().map(|(i, s)| (s, format!("background_{}", i + 2), "video de fondo")));
+    for (source, base, label) in sources {
         if source.path.is_file() {
             continue;
         }
@@ -650,7 +763,8 @@ fn run_from_plan(args: &Args, plan_path: &Path, cfg: &mut Config, work_dir: &Pat
         plan_path.file_name().unwrap_or_default().to_string_lossy(),
         wanted.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(", ")
     );
-    let results = render_all(&clips, &written, &podcast, &background, cfg, work_dir, &output_dir, &wanted, None);
+    let backgrounds: Vec<Source> = std::iter::once(background).chain(extra).collect();
+    let results = render_all(&clips, &written, &podcast, &backgrounds, cfg, work_dir, &output_dir, &wanted, None);
 
     finish(cfg, &output_dir);
     free_source(cfg, work_dir, &podcast, &results);
@@ -791,14 +905,14 @@ fn render_all(
     clips: &[Window],
     written: &HashMap<usize, ClipMetadata>,
     podcast: &Source,
-    background: &Source,
+    backgrounds: &[Source],
     cfg: &Config,
     work_dir: &Path,
     output_dir: &Path,
     numbers: &[usize],
     energy: Option<&EnergyTrack>,
 ) -> Vec<RenderResult> {
-    let background_duration = ffmpeg::probe(&background.path).map(|i| i.duration).unwrap_or(background.duration);
+    let durations: Vec<f64> = backgrounds.iter().map(|b| ffmpeg::probe(&b.path).map(|i| i.duration).unwrap_or(b.duration)).collect();
     let workers = render_workers(cfg, clips.len());
 
     if workers > 1 {
@@ -830,7 +944,12 @@ fn render_all(
                     }
                 }
 
-                let outcome = render_one(clip, number, meta, podcast, background, background_duration, cfg, work_dir, output_dir, energy);
+                // Con varios fondos, el short N usa el N-esimo (en rotacion) y
+                // cada fondo sigue por donde se quedo en su vuelta anterior.
+                let which = (number - 1) % backgrounds.len().max(1);
+                let turn = (number - 1) / backgrounds.len().max(1) + 1;
+                let outcome =
+                    render_one(clip, number, turn, meta, podcast, &backgrounds[which], durations[which], cfg, work_dir, output_dir, energy);
                 match &outcome {
                     Ok(path) => progress::result(
                         "clip_done",
@@ -869,6 +988,8 @@ fn render_all(
 fn render_one(
     clip: &Window,
     number: usize,
+    // Vuelta de su fondo: con un solo fondo es el numero del clip.
+    turn: usize,
     meta: Option<&ClipMetadata>,
     podcast: &Source,
     background: &Source,
@@ -890,11 +1011,11 @@ fn render_one(
     };
 
     // 1. Palabras del clip, con el tiempo relativo a su inicio.
-    let words: Vec<_> = clip.words.iter().map(|w| w.shifted(-clip.start)).collect();
+    let clip_words: Vec<_> = clip.words.iter().map(|w| w.shifted(-clip.start)).collect();
 
     // 2. Que silencios se quitan, y como afecta eso a los tiempos.
-    let cuts = jumpcuts::plan(&words, clip.duration(), &cfg.jumpcuts);
-    let words = cuts.remap_words(&words);
+    let cuts = jumpcuts::plan(&clip_words, clip.duration(), &cfg.jumpcuts);
+    let mut words = cuts.remap_words(&clip_words);
 
     // 3. Trayectoria del encuadre (sobre el clip sin cortar). La curva de
     //    energia le dice cuando hay alguien hablando y cuando no; si no viene
@@ -910,6 +1031,16 @@ fn render_one(
         None => None,
     };
     let track = facecrop::track_faces(&podcast.path, clip.start, clip.duration(), &cfg.reframe, Some(Path::new(&cfg.paths.cache_dir)), energy);
+    // Con dos personas en plano, cada palabra sabe quien la dice (por su
+    // momento ANTES de quitar silencios, que es el reloj del seguimiento).
+    if let Some(track) = track.as_ref().filter(|t| t.duo.is_some() && !t.speakers.is_empty()) {
+        for (word, original) in words.iter_mut().zip(&clip_words) {
+            word.speaker = track.speaker_at((original.start + original.end) / 2.0);
+        }
+    }
+    if cfg.layout.mode == "duo" && track.as_ref().and_then(|t| t.duo).is_none() {
+        log::info!("Clip {number}: no hay dos personas en plano a la vez; va con el podcast a pantalla completa.");
+    }
 
     // 4. Subtitulos + rotulo de gancho.
     let title_text = metadata::card_text(&podcast.title, meta.map_or("", |m| m.title.as_str()), cfg);
@@ -952,7 +1083,7 @@ fn render_one(
         let mixed = (clip.start.to_bits() ^ (number as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
         ((mixed >> 11) as f64 / (1u64 << 53) as f64) * usable
     } else {
-        ((number as f64 - 1.0) * clip.duration()) % usable
+        ((turn as f64 - 1.0) * clip.duration()) % usable
     };
 
     // Efectos de sonido: el pitido tapa las palabrotas; el whoosh acompana al rotulo.
@@ -969,25 +1100,47 @@ fn render_one(
         }
     }
 
+    let emojis = subtitles::emoji_cues(&words, &cfg.subtitles, cfg.layout.width, cfg.layout.height);
     let output = output_dir.join(format!("short_{number}.mp4"));
-    render::render(
-        &RenderRequest {
-            podcast: podcast.path.clone(),
-            background: background.path.clone(),
-            start: clip.start,
-            end: clip.end,
-            background_offset: offset,
-            plan: cuts.clone(),
-            track,
-            ass_name,
-            output: output.clone(),
-            work_dir: work_dir.to_path_buf(),
-            beeps,
-            whooshes,
-        },
-        cfg,
-    )
-    .map_err(|e: FfmpegError| e.to_string())?;
+    let request = RenderRequest {
+        podcast: podcast.path.clone(),
+        background: background.path.clone(),
+        start: clip.start,
+        end: clip.end,
+        background_offset: offset,
+        plan: cuts.clone(),
+        track,
+        ass_name,
+        output: output.clone(),
+        work_dir: work_dir.to_path_buf(),
+        beeps,
+        whooshes,
+        emojis,
+    };
+    render::render(&request, cfg).map_err(|e: FfmpegError| e.to_string())?;
+
+    // Para terminarlo en CapCut o Premiere: los subtitulos aparte (.srt) y el
+    // mismo video sin ningun texto encima.
+    if cfg.output.export_srt && !words.is_empty() {
+        let srt = subtitles::srt(&words, &cfg.subtitles);
+        if let Err(error) = std::fs::write(output_dir.join(format!("short_{number}.srt")), srt) {
+            log::warn!("No se pudo guardar el .srt del clip {number}: {error}");
+        }
+    }
+    if cfg.output.export_clean {
+        let mut plain = cfg.clone();
+        plain.progress_bar.enabled = false;
+        plain.brand.logo.clear();
+        let clean = RenderRequest {
+            ass_name: None,
+            emojis: Vec::new(),
+            output: output_dir.join(format!("sin-subtitulos_{number}.mp4")),
+            ..request
+        };
+        if let Err(error) = render::render(&clean, &plain) {
+            log::warn!("No se pudo montar la version sin subtitulos del clip {number}: {error}");
+        }
+    }
 
     if cfg.output.thumbnail {
         let cover = (cfg.output.cover_text && !hook_text.is_empty())
@@ -1129,6 +1282,15 @@ mod tests {
     }
 
     #[test]
+    fn varios_fondos_separados_por_barras_o_lineas() {
+        assert_eq!(split_backgrounds("a.mp4"), ["a.mp4"]);
+        assert_eq!(split_backgrounds(" https://youtu.be/x | b.mp4
+
+C:/c.mp4 "), ["https://youtu.be/x", "b.mp4", "C:/c.mp4"]);
+        assert!(split_backgrounds("  ").is_empty());
+    }
+
+    #[test]
     fn set_va_despues_y_la_duracion_minima_no_puede_pasar_de_la_maxima() {
         let mut cfg = Config::default();
         apply_overrides(&mut cfg, &args(&["--clips", "5", "--set", "clips.num_clips=9", "--set", "subtitles.font_size=80"])).unwrap();
@@ -1174,7 +1336,7 @@ mod tests {
         let clips: Vec<Window> = (0..n).map(|i| Window::new(i as f64 * 100.0, i as f64 * 100.0 + 30.0, vec![Word::new("hola.", i as f64 * 100.0, i as f64 * 100.0 + 1.0)], "hola.")).collect();
         let fuente = PlanSource { ruta: "p.mp4".into(), titulo: "P".into(), duracion: 100.0, url: String::new() };
         let meta = HashMap::from([(0, ClipMetadata::new("Titulo", "GANCHO", "Desc.", &["a"]))]);
-        plan::save(&ruta, &Config::default(), &fuente, &fuente, &clips, &meta, marcados).unwrap();
+        plan::save(&ruta, &Config::default(), &fuente, &fuente, &[], &clips, &meta, marcados).unwrap();
         plan::load(&ruta).unwrap()
     }
 

@@ -109,7 +109,8 @@ fn cache_path(video: &Path, start: f64, duration: f64, cfg: &ReframeConfig, cach
         }
     };
     let signature = [
-        "yunet-ort".to_string(),
+        // v2: guarda tambien las dos personas y quien habla (pantalla partida).
+        "yunet-ort-2".to_string(),
         identity,
         format!("{:.2}", start),
         format!("{:.2}", duration),
@@ -133,7 +134,13 @@ fn cache_path(video: &Path, start: f64, duration: f64, cfg: &ReframeConfig, cach
 fn read_cache(path: Option<&Path>) -> Option<Track> {
     let data: Value = serde_json::from_str(&std::fs::read_to_string(path?).ok()?).ok()?;
     let points = data["puntos"].as_array()?.iter().map(|p| Some((p[0].as_f64()?, p[1].as_f64()?))).collect::<Option<Vec<_>>>()?;
-    Some(Track { points, detection_ratio: data["deteccion"].as_f64()? })
+    let mut track = Track::new(points, data["deteccion"].as_f64()?);
+    track.duo = data["duo"].as_array().and_then(|d| Some((d.first()?.as_f64()?, d.get(1)?.as_f64()?)));
+    track.speakers = data["hablan"]
+        .as_array()
+        .map(|list| list.iter().filter_map(|p| Some((p[0].as_f64()?, p[1].as_u64()? as u8))).collect())
+        .unwrap_or_default();
+    Some(track)
 }
 
 /// Guarda la trayectoria. Un clip sin caras se guarda como lista vacia: tambien
@@ -145,6 +152,8 @@ fn write_cache(path: Option<&Path>, track: Option<&Track>) {
         Some(t) => json!({
             "puntos": t.points.iter().map(|(time, cx)| json!([(time * 1000.0).round() / 1000.0, (cx * 100000.0).round() / 100000.0])).collect::<Vec<_>>(),
             "deteccion": (t.detection_ratio * 10000.0).round() / 10000.0,
+            "duo": t.duo.map(|(a, b)| json!([a, b])),
+            "hablan": t.speakers.iter().map(|(time, who)| json!([(time * 1000.0).round() / 1000.0, who])).collect::<Vec<_>>(),
         }),
     };
     if let Some(parent) = path.parent() {
@@ -219,8 +228,14 @@ pub fn track_from_samples(
         return None;
     }
 
+    // La pantalla partida se busca ANTES de quitar las caras quietas: quien
+    // escucha se mueve menos que quien habla y el filtro se lo llevaria.
+    let duo = duo_positions(&samples).filter(|&(left, right)| both_alive(&samples, left, right, cfg));
+    let speakers = duo
+        .and_then(|(left, right)| speaker_centres(&samples, cfg, energy, clip_start).map(|talk| speaker_timeline(&talk, left, right)))
+        .unwrap_or_default();
     let samples = drop_static_faces(samples, cfg);
-    let centres = choose_centres(&samples, cfg, energy, clip_start);
+    let (centres, _) = choose_centres_detail(&samples, cfg, energy, clip_start);
 
     let ratio = centres.iter().filter(|(_, cx)| cx.is_some()).count() as f64 / centres.len() as f64;
     let Some(filled) = fill_gaps(&centres) else {
@@ -230,7 +245,9 @@ pub fn track_from_samples(
     };
 
     let smoothed = smooth(&filled, cfg.smoothing_window, cfg.sample_interval);
-    let track = Track { points: to_keyframes(&smoothed, cfg.deadzone, cfg.max_keyframes.max(1) as usize), detection_ratio: ratio };
+    let mut track = Track::new(to_keyframes(&smoothed, cfg.deadzone, cfg.max_keyframes.max(1) as usize), ratio);
+    track.duo = duo;
+    track.speakers = speakers;
 
     if !track.is_useful() {
         log::info!("Deteccion poco fiable ({:.0}% de las muestras); se usara recorte centrado.", ratio * 100.0);
@@ -367,9 +384,15 @@ pub fn median(values: &[f64]) -> f64 {
 
 /// De todas las caras de cada muestra, a cual se sigue.
 pub fn choose_centres(samples: &[(f64, Vec<Face>)], cfg: &ReframeConfig, energy: Option<&EnergyTrack>, clip_start: f64) -> Vec<(f64, Option<f64>)> {
+    choose_centres_detail(samples, cfg, energy, clip_start).0
+}
+
+/// Como `choose_centres`, y dice si los centros siguen a quien habla (true) o
+/// solo a la cara mas a mano (false).
+fn choose_centres_detail(samples: &[(f64, Vec<Face>)], cfg: &ReframeConfig, energy: Option<&EnergyTrack>, clip_start: f64) -> (Vec<(f64, Option<f64>)>, bool) {
     if cfg.speaker_tracking {
         if let Some(speaking) = speaker_centres(samples, cfg, energy, clip_start) {
-            return speaking;
+            return (speaking, true);
         }
     }
 
@@ -382,7 +405,66 @@ pub fn choose_centres(samples: &[(f64, Vec<Face>)], cfg: &ReframeConfig, energy:
             previous = cx;
         }
     }
-    centres
+    (centres, false)
+}
+
+/// Dos personas en plano A LA VEZ: el centro horizontal de cada una
+/// (izquierda, derecha). Se agrupan los centros de todas las caras en dos
+/// grupos; valen si estan bien separados y aparecen juntos en buena parte del
+/// clip. None con una sola persona o con un video que cambia de camara (en
+/// cada plano hay una cara, nunca las dos).
+pub fn duo_positions(samples: &[(f64, Vec<Face>)]) -> Option<(f64, f64)> {
+    let with_faces: Vec<&Vec<Face>> = samples.iter().map(|(_, faces)| faces).filter(|faces| !faces.is_empty()).collect();
+    if with_faces.len() < 3 {
+        return None;
+    }
+    let all: Vec<f64> = with_faces.iter().flat_map(|faces| faces.iter().map(|f| f.cx)).collect();
+    // k-medias con k=2 en una dimension: pocas vueltas bastan.
+    let (mut left, mut right) = (all.iter().copied().fold(f64::MAX, f64::min), all.iter().copied().fold(f64::MIN, f64::max));
+    for _ in 0..12 {
+        let middle = (left + right) / 2.0;
+        let (l, r): (Vec<f64>, Vec<f64>) = all.iter().partition(|cx| **cx < middle);
+        if l.is_empty() || r.is_empty() {
+            return None;
+        }
+        left = median(&l);
+        right = median(&r);
+    }
+    if right - left < 0.2 {
+        return None;
+    }
+    let middle = (left + right) / 2.0;
+    let together = with_faces.iter().filter(|faces| faces.iter().any(|f| f.cx < middle) && faces.iter().any(|f| f.cx >= middle)).count();
+    (together as f64 >= with_faces.len() as f64 * 0.4).then_some((left, right))
+}
+
+/// Las dos personas de la pantalla partida se mueven (aunque una escuche): un
+/// cartel o una foto no. Sin medida de movimiento (todo a cero) no se descarta.
+fn both_alive(samples: &[(f64, Vec<Face>)], left: f64, right: f64, cfg: &ReframeConfig) -> bool {
+    let middle = (left + right) / 2.0;
+    let side = |is_left: bool| -> Vec<f64> {
+        samples.iter().flat_map(|(_, faces)| faces.iter().filter(move |f| (f.cx < middle) == is_left).map(|f| f.motion)).collect()
+    };
+    let (a, b) = (side(true), side(false));
+    if a.iter().chain(&b).all(|m| *m == 0.0) {
+        return true;
+    }
+    let floor = cfg.min_face_motion * 0.5;
+    median(&a) >= floor && median(&b) >= floor
+}
+
+/// Quien habla en cada momento (0 izquierda, 1 derecha) a partir de los
+/// centros que siguen a quien habla. Solo se apuntan los cambios.
+pub fn speaker_timeline(centres: &[(f64, Option<f64>)], left: f64, right: f64) -> Vec<(f64, u8)> {
+    let mut timeline: Vec<(f64, u8)> = Vec::new();
+    for (moment, cx) in centres {
+        let Some(cx) = cx else { continue };
+        let who = u8::from((cx - right).abs() < (cx - left).abs());
+        if timeline.last().is_none_or(|(_, last)| *last != who) {
+            timeline.push((*moment, who));
+        }
+    }
+    timeline
 }
 
 /// Sigue a quien mueve la boca mientras suena audio.
@@ -850,6 +932,61 @@ mod tests {
     /// Una cara a la altura `cx` con una caja de 60x60 a 480 de ancho.
     fn cara(cx: f64, boca: f64, movimiento: f64) -> Face {
         Face { cx, area: 3600.0, box_: ((cx * 480.0) as i32 - 30, 100, 60, 60), motion: movimiento, mouth: boca }
+    }
+
+    // -- dos personas ----------------------------------------------------------
+
+    #[test]
+    fn dos_personas_a_la_vez_dan_pantalla_partida() {
+        // Plano abierto de dos: una a 0.3 y otra a 0.72, con algo de baile.
+        let muestras: Vec<(f64, Vec<Face>)> =
+            (0..20).map(|i| (i as f64 * 0.5, vec![cara(0.30 + (i % 3) as f64 * 0.01, 0.0, 0.0), cara(0.72 - (i % 2) as f64 * 0.01, 0.0, 0.0)])).collect();
+        let (izquierda, derecha) = duo_positions(&muestras).expect("hay dos personas");
+        assert!((izquierda - 0.31).abs() < 0.02 && (derecha - 0.715).abs() < 0.02, "{izquierda} {derecha}");
+    }
+
+    #[test]
+    fn una_persona_o_cambios_de_camara_no_son_pantalla_partida() {
+        let sola: Vec<(f64, Vec<Face>)> = (0..10).map(|i| (i as f64, vec![cara(0.5, 0.0, 0.0)])).collect();
+        assert_eq!(duo_positions(&sola), None);
+        // Cada plano tiene una sola cara (camaras alternas): nunca estan juntas.
+        let alternas: Vec<(f64, Vec<Face>)> = (0..10).map(|i| (i as f64, vec![cara(if i % 2 == 0 { 0.3 } else { 0.7 }, 0.0, 0.0)])).collect();
+        assert_eq!(duo_positions(&alternas), None);
+        // Dos caras pegadas (una sola persona detectada dos veces) tampoco.
+        let pegadas: Vec<(f64, Vec<Face>)> = (0..10).map(|i| (i as f64, vec![cara(0.45, 0.0, 0.0), cara(0.55, 0.0, 0.0)])).collect();
+        assert_eq!(duo_positions(&pegadas), None);
+    }
+
+    #[test]
+    fn un_cartel_quieto_no_es_la_segunda_persona() {
+        let cfg = cfg();
+        let persona = |i: usize| cara(0.3, 0.0, 3.0 + (i % 3) as f64);
+        let con_cartel: Vec<(f64, Vec<Face>)> = (0..12).map(|i| (i as f64, vec![persona(i), cara(0.75, 0.0, 0.1)])).collect();
+        let duo = duo_positions(&con_cartel).unwrap();
+        assert!(!both_alive(&con_cartel, duo.0, duo.1, &cfg), "el cartel no se mueve");
+        // Quien escucha se mueve poco, pero se mueve.
+        let dos: Vec<(f64, Vec<Face>)> = (0..12).map(|i| (i as f64, vec![persona(i), cara(0.75, 0.0, 1.0)])).collect();
+        let duo = duo_positions(&dos).unwrap();
+        assert!(both_alive(&dos, duo.0, duo.1, &cfg));
+    }
+
+    #[test]
+    fn quien_habla_se_apunta_solo_cuando_cambia() {
+        let centros = [(0.0, Some(0.3)), (0.5, Some(0.31)), (1.0, None), (1.5, Some(0.7)), (2.0, Some(0.69)), (2.5, Some(0.3))];
+        assert_eq!(speaker_timeline(&centros, 0.3, 0.7), [(0.0, 0), (1.5, 1), (2.5, 0)]);
+        let pista = Track { speakers: speaker_timeline(&centros, 0.3, 0.7), ..Track::new(vec![], 1.0) };
+        assert_eq!((pista.speaker_at(0.2), pista.speaker_at(1.6), pista.speaker_at(9.0)), (Some(0), Some(1), Some(0)));
+    }
+
+    #[test]
+    fn la_cache_guarda_las_dos_personas_y_quien_habla() {
+        let dir = tempfile::tempdir().unwrap();
+        let ruta = dir.path().join("r.json");
+        let mut pista = Track::new(vec![(0.0, 0.3), (2.0, 0.7)], 0.9);
+        pista.duo = Some((0.3, 0.7));
+        pista.speakers = vec![(0.0, 0), (1.5, 1)];
+        write_cache(Some(&ruta), Some(&pista));
+        assert_eq!(read_cache(Some(&ruta)), Some(pista));
     }
 
     // -- trayectoria -----------------------------------------------------------

@@ -74,6 +74,31 @@ Para cada clip devuelves:
 Nunca inventes datos que no esten en el clip. No uses clickbait que el clip no
 cumpla: si el clip no responde a la pregunta del gancho, cambia el gancho.";
 
+const TRANSLATE_SYSTEM: &str = "\
+Traduces subtitulos de clips de podcast. Te llegan frases numeradas, en orden, \
+de una conversacion hablada. Devuelve cada una traducida al idioma pedido, con \
+el mismo id.
+
+- Natural y hablado, como lo diria un nativo, no literal.
+- Corto: va en subtitulos de tres o cuatro palabras por pantalla.
+- Mantiene nombres propios, marcas y terminos de juegos tal cual.
+- Una frase que es solo una muletilla o un sonido (eh, mmm) se traduce por su \
+equivalente o se deja igual. Nunca la dejes vacia.";
+
+fn translate_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {"phrases": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"id": {"type": "integer"}, "text": {"type": "string"}},
+            "required": ["id", "text"],
+            "additionalProperties": false,
+        }}},
+        "required": ["phrases"],
+        "additionalProperties": false,
+    })
+}
+
 fn score_schema() -> Value {
     json!({
         "type": "object",
@@ -501,6 +526,39 @@ impl ClipJudge {
         out
     }
 
+    /// Traduce frases (en orden) al idioma `language` (su nombre en ingles).
+    /// Devuelve una por frase; None en las que no llegaron. Lo ya traducido
+    /// sale de la cache.
+    pub fn translate_phrases(&mut self, phrases: &[String], language: &str) -> Vec<Option<String>> {
+        let mut out: Vec<Option<String>> = phrases
+            .iter()
+            .map(|p| self.cache.get("translate", &self.key(p, language)).and_then(|v| v.as_str().map(str::to_string)))
+            .collect();
+        let pending: Vec<usize> = (0..phrases.len()).filter(|&i| out[i].is_none()).collect();
+        if pending.is_empty() || !self.available() {
+            return out;
+        }
+        for batch in pending.chunks(40) {
+            let items: Vec<String> = batch.iter().map(|&i| format!("<p id=\"{i}\">{}</p>", phrases[i])).collect();
+            let user = format!("Traduce al {language} estas {} frases:\n\n{}", batch.len(), items.join("\n"));
+            let data = match self.call(TRANSLATE_SYSTEM, &user, &translate_schema()) {
+                Ok(data) => data,
+                Err(error) => {
+                    log::warn!("Claude no ha podido traducir los subtitulos ({}).", short(&error.0));
+                    break;
+                }
+            };
+            for item in data["phrases"].as_array().map(Vec::as_slice).unwrap_or(&[]) {
+                let Some(index) = item["id"].as_u64().map(|i| i as usize).filter(|i| batch.contains(i)) else { continue };
+                let Some(text) = item["text"].as_str().map(str::trim).filter(|t| !t.is_empty()) else { continue };
+                self.cache.put("translate", &self.key(&phrases[index], language), json!(text));
+                out[index] = Some(text.to_string());
+            }
+        }
+        self.cache.flush();
+        out
+    }
+
     /// Identifica una peticion por su contenido Y por como se pidio. Cambiar de
     /// modelo o de esfuerzo invalida lo guardado: es otra respuesta.
     fn key(&self, text: &str, extra: &str) -> String {
@@ -619,6 +677,9 @@ mod tests {
             }
             let ids = ids(user);
             self.peticiones.borrow_mut().push(ids.clone());
+            if system == TRANSLATE_SYSTEM {
+                return Ok(json!({"phrases": ids.iter().map(|i| json!({"id": i, "text": format!(" traducida {i} ")})).collect::<Vec<_>>()}));
+            }
             if system == SCORING_SYSTEM {
                 Ok(json!({"clips": ids.iter().map(|i| json!({"id": i, "content_score": 8, "hook_score": 7, "reason": "vale"})).collect::<Vec<_>>()}))
             } else {
@@ -635,6 +696,21 @@ mod tests {
         let mut juez = ClipJudge::with_client(cfg, cache, Box::new(falso));
         juez.set_sleeper(Box::new(|_| {}));
         juez
+    }
+
+    #[test]
+    fn traduce_frase_a_frase_y_no_paga_dos_veces() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = LlmConfig::default();
+        let frases: Vec<String> = ["hola a todos", "esto es una prueba"].iter().map(|s| s.to_string()).collect();
+        let (falso, peticiones) = Falso::nuevo();
+        let mut j = juez(falso, cfg.clone(), Some(dir.path()));
+        assert_eq!(j.translate_phrases(&frases, "English"), [Some("traducida 0".into()), Some("traducida 1".into())]);
+        assert_eq!(peticiones.borrow().len(), 1);
+        // Otra vez: sale de la cache, sin peticion nueva.
+        let (otra, peticiones) = Falso::nuevo();
+        assert_eq!(juez(otra, cfg, Some(dir.path())).translate_phrases(&frases, "English")[1].as_deref(), Some("traducida 1"));
+        assert!(peticiones.borrow().is_empty());
     }
 
     // -- lotes, cache y fallos -------------------------------------------------------

@@ -45,6 +45,7 @@ fn peticion(dir: &Path, plan: JumpCutPlan, track: Option<Track>, nombre: &str) -
         work_dir: dir.join("work"),
         beeps: Vec::new(),
         whooshes: Vec::new(),
+        emojis: Vec::new(),
     }
 }
 
@@ -76,7 +77,7 @@ fn el_short_sale_vertical_con_audio_y_la_duracion_del_plan() {
 
     // Con jump cuts y una trayectoria de cara que cruza un hueco eliminado.
     let plan = JumpCutPlan { keeps: vec![(0.0, 2.0), (4.0, 6.0)], source_duration: 6.0 };
-    let pista = Track { points: vec![(0.0, 0.3), (3.0, 0.3), (4.0, 0.7), (6.0, 0.7)], detection_ratio: 1.0 };
+    let pista = Track::new(vec![(0.0, 0.3), (3.0, 0.3), (4.0, 0.7), (6.0, 0.7)], 1.0);
     let con_cortes = peticion(dir.path(), plan, Some(pista), "b.mp4");
     let salida = render(&con_cortes, &cfg).expect("render con cortes y seguimiento");
     let info = ffmpeg::probe(&salida).unwrap();

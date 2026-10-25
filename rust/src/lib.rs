@@ -5,9 +5,11 @@
 
 pub mod app;
 pub mod audio_energy;
+pub mod channels;
 pub mod config;
 pub mod context;
 pub mod download;
+pub mod emoji_data;
 pub mod exports;
 pub mod facecrop;
 pub mod fetch;
@@ -28,6 +30,8 @@ pub mod scoring;
 pub mod setup;
 pub mod subtitles;
 pub mod transcribe;
+pub mod translate;
 pub mod update;
 pub mod words;
 pub mod worklock;
+pub mod youtube;
