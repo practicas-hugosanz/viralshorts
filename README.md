@@ -122,6 +122,18 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
 
+### 1.5.1 (2026-10-25)
+
+- Arreglo importante: si un clip empezaba (o acababa) con un rato sin voz, por
+  ejemplo música, los subtítulos iban varios segundos por delante de lo que se
+  dice. Ahora el vídeo y el audio se recortan igual que los subtítulos.
+- La descarga de un modelo de voz ya no se pierde si se corta la conexión: sigue
+  por donde iba, lo reintenta sola y, si se rinde, lo bajado se guarda para el
+  siguiente intento. Dos descargas del mismo modelo (por ejemplo, el botón y un
+  trabajo en marcha) ya no se pisan.
+- «Añadir otro fondo» es ahora un botón en su sitio, y cada fondo extra tiene su
+  botón «Archivo».
+
 ### 1.5.0 (2026-10-25)
 
 - **Transcribir con tarjetas AMD e Intel**: un motor nuevo (Vulkan) que la

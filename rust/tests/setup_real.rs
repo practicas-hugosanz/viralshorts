@@ -80,3 +80,26 @@ fn el_motor_de_la_tarjeta_grafica_se_descarga_comprobado_y_arranca() {
     assert!(setup::vulkan_installed(dir.path()));
     assert!(arranca(&setup::whisper_cli(dir.path(), "whisper-vulkan"), &["--help"]).to_lowercase().contains("usage"));
 }
+
+#[test]
+fn un_modelo_a_medias_sigue_por_donde_iba_contra_huggingface() {
+    if !con_red() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let url = setup::model_url("tiny");
+    let entero = dir.path().join("entero.bin");
+    viralshorts::fetch::download_file_with(&url, &entero, "tiny", &mut |_, _| {}).unwrap();
+    let bueno = std::fs::read(&entero).unwrap();
+
+    // Como si la conexion se hubiera cortado a los 30 MB.
+    let reanudado = dir.path().join("reanudado.bin");
+    std::fs::write(dir.path().join("reanudado.bin.part"), &bueno[..30_000_000]).unwrap();
+    let mut primero = None;
+    viralshorts::fetch::download_file_with(&url, &reanudado, "tiny", &mut |hecho, _| {
+        primero.get_or_insert(hecho);
+    })
+    .unwrap();
+    assert_eq!(primero, Some(30_000_000), "empieza donde se quedo, no de cero");
+    assert!(std::fs::read(&reanudado).unwrap() == bueno, "y queda identico");
+}

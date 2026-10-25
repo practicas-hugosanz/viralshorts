@@ -568,7 +568,11 @@ pre#log .warn { color: #b7791f; }
 /* Los de texto ocupan su fila; los de solo icono se reparten la siguiente. */
 .result .foot .btn:has(span) { flex: 1 1 100%; background: var(--ink); border-color: var(--ink); color: var(--ink-text); }
 .result .foot .btn:not(:has(span)) { flex: 1 1 0; min-width: 40px; background: var(--raise); border-color: transparent; }
-.result .foot .bg-add { padding: 0 22px 14px; margin-top: -6px; }
+.bg-add { display: flex; align-items: center; gap: 10px; padding: 0 22px 16px 48px; }
+.bg-add .btn { border-color: transparent; background: color-mix(in srgb, var(--surf) 70%, transparent); padding: 5px 12px 5px 9px; }
+.bg-add .btn .ico { width: 16px; height: 16px; }
+.bg-add span { color: var(--mute); font-size: 12.5px; }
+.media.on ~ .bg-add { padding-top: 14px; }
 .bg-extra .source-row { padding-top: 0; }
 .ch-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line-soft); }
 .ch-item:first-child { border-top: 0; margin-top: 6px; }
@@ -580,7 +584,7 @@ pre#log .warn { color: #b7791f; }
 .yt-steps .link { padding: 0 2px; }
 .result .foot .btn.yt { background: #ff0033; border-color: #ff0033; color: #fff; }
 .result .foot .btn.yt.done { background: var(--raise); border-color: transparent; color: var(--text); }
-.btn.confirm { color: var(--bad); background: var(--bad-soft); border-color: var(--bad); }
+.result .foot .btn.confirm { color: var(--bad); background: var(--bad-soft); border-color: var(--bad); }
 
 /* ----------------------------------------------------------------- ajustes */
 .settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
@@ -733,6 +737,7 @@ body.modal-open .main { overflow: hidden; }
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
   <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V5M7 9l5-5 5 5M5 20h14"/></symbol>
   <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></symbol>
 </svg>
@@ -814,7 +819,7 @@ body.modal-open .main { overflow: hidden; }
               </div>
               <div class="media" id="background-preview"><img alt=""><div><b></b><span></span></div></div>
               <div id="bg-extras"></div>
-              <div class="bg-add"><button type="button" class="link" id="bg-add">+ Añadir otro fondo para ir turnándolos</button></div>
+              <div class="bg-add"><button type="button" class="btn sm" id="bg-add"><svg class="ico"><use href="#i-plus"/></svg>Añadir otro fondo</button><span>Los shorts se los irán turnando.</span></div>
             </section>
             </div>
 
@@ -2256,11 +2261,19 @@ async function downloadModel(size) {
   $("mn-text").textContent = `${info ? sizeText(info.mb) : ""}. No cierres la aplicación.`;
   try {
     await post("/api/setup/start", { model: size });
+    let lastPct = -1, lastMove = Date.now();
     for (let tries = 0; ; tries++) {
       await new Promise(r => setTimeout(r, 600));
-      const state = await (await fetch("/api/setup", { headers: AUTH })).json();
-      $("mn-fill").style.width = Math.round((state.overall || 0) * 100) + "%";
-      $("mn-text").textContent = `${Math.round((state.overall || 0) * 100)} %${info ? " de " + sizeText(info.mb) : ""}. No cierres la aplicación.`;
+      let state;
+      try { state = await (await fetch("/api/setup", { headers: AUTH })).json(); } catch (e) { continue; }
+      const pct = Math.round((state.overall || 0) * 1000) / 10;
+      if (pct !== lastPct) { lastPct = pct; lastMove = Date.now(); }
+      $("mn-fill").style.width = pct + "%";
+      // Si no avanza en un rato, la conexion se ha cortado o va lenta: la
+      // descarga se reanuda sola por donde iba.
+      const stalled = Date.now() - lastMove > 20000;
+      $("mn-text").textContent = `${Math.round(pct)} %${info ? " de " + sizeText(info.mb) : ""}. ` +
+        (stalled ? "La conexión se ha cortado o va lenta: se reanuda sola por donde iba, no hace falta empezar de nuevo." : "No cierres la aplicación.");
       if (!state.running && tries >= 2) {
         if (state.error) throw new Error(state.error);
         await loadModels();
@@ -2299,11 +2312,18 @@ function addBgExtra(value = "") {
   const n = document.querySelectorAll(".bg-extra").length + 2;
   row.innerHTML = `<div class="source-row"><svg class="ico"><use href="#i-link"/></svg>
     <input type="text" placeholder="Fondo ${n}: enlace o archivo" spellcheck="false" aria-label="Fondo ${n}">
-    <button type="button" class="btn" title="Quitar este fondo" aria-label="Quitar este fondo"><svg class="ico"><use href="#i-x"/></svg></button></div>`;
+    <button type="button" class="btn" data-pick><svg class="ico"><use href="#i-folder"/></svg>Archivo</button>
+    <button type="button" class="btn" data-drop title="Quitar este fondo" aria-label="Quitar este fondo"><svg class="ico"><use href="#i-x"/></svg></button></div>`;
   const input = row.querySelector("input");
   input.value = value;
   input.addEventListener("input", saveBgExtras);
-  row.querySelector("button").addEventListener("click", () => { row.remove(); saveBgExtras(); });
+  row.querySelector("[data-pick]").addEventListener("click", async () => {
+    try {
+      const { path } = await post("/api/browse", { kind: "file" });
+      if (path) { input.value = path; saveBgExtras(); }
+    } catch (e) {}
+  });
+  row.querySelector("[data-drop]").addEventListener("click", () => { row.remove(); saveBgExtras(); });
   $("bg-extras").appendChild(row);
   return input;
 }

@@ -23,8 +23,15 @@ impl JumpCutPlan {
         Self { keeps: vec![(0.0, duration)], source_duration: duration }
     }
 
+    /// Hay algo que quitar. No basta con mirar si hay varios tramos: con un
+    /// solo tramo que empieza tarde (o acaba pronto) tambien hay que recortar.
+    /// Si no, los subtitulos se movian (remap) y el video y el audio no, y los
+    /// subtitulos iban segundos por delante de la voz.
     pub fn enabled(&self) -> bool {
-        self.keeps.len() > 1
+        match self.keeps.as_slice() {
+            [(start, end)] => *start > 1e-3 || *end < self.source_duration - 1e-3,
+            keeps => keeps.len() > 1,
+        }
     }
 
     pub fn output_duration(&self) -> f64 {
@@ -186,6 +193,21 @@ mod tests {
     fn un_clip_sin_palabras_no_se_borra_entero() {
         let r = plan(&[], 12.0, &JumpCutsConfig::default());
         assert!((r.output_duration() - 12.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn un_solo_tramo_con_silencio_al_principio_tambien_se_recorta() {
+        // Caso real: musica sin voz al empezar el clip. Un solo tramo que
+        // empieza en el segundo 5: el video tiene que empezar ahi, igual que
+        // los subtitulos.
+        let habla = words(&[(5.3, 6.0), (6.2, 9.0), (9.1, 20.0)]);
+        let r = plan(&habla, 20.0, &JumpCutsConfig::default());
+        assert_eq!(r.keeps.len(), 1);
+        assert!(r.keeps[0].0 > 4.0);
+        assert!(r.enabled(), "con un solo tramo recortado tambien hay que cortar el video");
+        assert!((r.remap(5.3) - (5.3 - r.keeps[0].0)).abs() < 1e-9);
+        // Y el que lo cubre todo no corta nada.
+        assert!(!JumpCutPlan::full(20.0).enabled());
     }
 
     #[test]
