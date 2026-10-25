@@ -117,31 +117,34 @@ code { font: 12.5px Consolas, monospace; background: var(--raise); padding: 1px 
   background: var(--frame);
   display: flex; flex-direction: column; align-items: center;
   padding: 22px 0 18px;
-  gap: 10px;
+  gap: 8px;
 }
-.brand { display: grid; place-items: center; margin-bottom: 34px; }
+.brand { display: grid; place-items: center; margin-bottom: 26px; }
 .brand svg { width: 52px; height: 52px; flex: none; border-radius: 15px; }
 .brand b { display: none; }
+/* Cada seccion: el icono y su nombre debajo, como en las apps del movil. */
 .nav-item {
-  display: grid; place-items: center;
-  width: 48px; height: 48px; padding: 0;
-  border: 0; border-radius: 14px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  width: 80px; padding: 4px 0 6px;
+  border: 0; border-radius: 16px;
   background: transparent; color: var(--frame-ink);
   position: relative;
-  transition: color .12s, background .12s;
+  transition: color .12s;
 }
-.nav-item .ico { width: 22px; height: 22px; }
-.nav-item:hover { color: var(--frame-hi); background: rgba(255,255,255,.06); }
+.nav-item .ico { width: 22px; height: 22px; padding: 9px 14px; box-sizing: content-box; border-radius: 99px; transition: background .12s; }
+.nav-item:hover { color: var(--frame-hi); }
+.nav-item:hover .ico { background: rgba(255,255,255,.07); }
 .nav-item[aria-current="page"] { color: var(--frame-hi); }
+.nav-item[aria-current="page"] .ico { background: rgba(255,255,255,.14); }
 .nav-item[aria-current="page"]::before {
-  content: ""; position: absolute; left: -22px; top: 10px; bottom: 10px; width: 3px;
+  content: ""; position: absolute; left: -6px; top: 12px; height: 26px; width: 3px;
   border-radius: 0 3px 3px 0; background: var(--frame-hi);
 }
-.nav-item .lbl { display: none; }
-.badge { position: absolute; top: 6px; right: 6px; min-width: 9px; height: 9px; padding: 0; font-size: 0; border-radius: 99px; background: #ff6b5a; box-shadow: 0 0 0 2px var(--frame); }
+.nav-item .lbl { display: block; font: 700 11px/1.15 var(--display); letter-spacing: .01em; text-align: center; }
+.badge { position: absolute; top: 6px; right: 18px; min-width: 9px; height: 9px; padding: 0; font-size: 0; border-radius: 99px; background: #ff6b5a; box-shadow: 0 0 0 2px var(--frame); }
 .badge:empty { display: none; }
 .badge.run { width: 9px; animation: pulse 1.4s ease-in-out infinite; }
-.count { position: absolute; top: 3px; right: 0; min-width: 18px; padding: 1px 5px; border-radius: 99px; background: #34363d; color: #fff; font: 800 10px/1.4 var(--display); }
+.count { position: absolute; top: 2px; right: 10px; min-width: 18px; padding: 1px 5px; border-radius: 99px; background: #34363d; color: #fff; font: 800 10px/1.4 var(--display); }
 .count:empty { display: none; }
 .side-foot { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .ver {
@@ -690,7 +693,12 @@ body.modal-open .main { overflow: hidden; }
 @media (max-width: 760px) {
   .app { grid-template-columns: 68px minmax(0, 1fr); }
   .main { margin: 8px 8px 8px 0; border-radius: 22px; }
-  .nav-item[aria-current="page"]::before { left: -10px; }
+  .nav-item { width: 62px; }
+  .nav-item .ico { padding: 8px 10px; }
+  .nav-item .lbl { font-size: 9.5px; }
+  .nav-item[aria-current="page"]::before { left: -3px; }
+  .badge { right: 10px; }
+  .count { right: 4px; }
   .brand svg { width: 44px; height: 44px; }
   .create { grid-template-columns: minmax(0, 1fr); }
   .monitor { position: static; order: -1; }

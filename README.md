@@ -122,6 +122,12 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
 
+### 1.5.3 (2026-10-25)
+
+- El panel lateral enseña el nombre de cada apartado bajo su icono (Crear, En
+  curso, Mis shorts, Ajustes), con el actual resaltado. También en ventanas
+  estrechas.
+
 ### 1.5.2 (2026-10-25)
 
 - Arreglo: con la composición «Solo el pódcast» (o «Dos personas») ya no hace
