@@ -1655,6 +1655,11 @@ function updateSummary() {
   };
   source("podcast", "chk-pod");
   source("background", "chk-bg");
+  // Sin fondo no pasa nada si la composicion no lo usa.
+  if (!$("background").value.trim() && ["full", "duo"].includes($("st_layout").value)) {
+    $("chk-bg").classList.add("ok");
+    $("chk-bg").querySelector("em").textContent = "no hace falta con esta composición";
+  }
   const length = LENGTHS[radio("length")];
   const min = length ? length.min_duration : $("min_duration").value;
   const max = length ? length.max_duration : $("max_duration").value;
@@ -1834,6 +1839,7 @@ function afterLook() {
   syncLook();
   paintPhone();
   saveForm();
+  updateSummary();   // con «Solo el pódcast» el fondo deja de faltar
 }
 
 function paintHot() {
@@ -1997,7 +2003,10 @@ function explain(raw) {
      ["Se ha quedado sin memoria", "Elige la calidad <b>Rápida</b>, o baja el modelo de transcripción en Ajustes."]],
   ];
   for (const [pattern, [title, body, action]] of rules) if (pattern.test(text)) return { title, body, action, raw: text };
-  return { title: "Algo ha fallado", body: "Abre <b>Ver el detalle técnico</b> en «En curso» para ver qué ha pasado.", raw: text };
+  // Lo que no tiene traduccion se ensena tal cual: mandar a "En curso" no
+  // sirve si el trabajo ni siquiera llego a empezar.
+  const said = text.split("\n").map(l => l.replace(/^\s*\d\d:\d\d:\d\d\s+\w+\s+\S+\s+/, "").trim()).filter(Boolean).slice(-3).join(" ");
+  return { title: "No se ha podido generar", body: said ? escapeHtml(said) : "Abre <b>Ver el detalle técnico</b> en «En curso» para ver qué ha pasado.", raw: text };
 }
 
 /** Error traducido; si tiene arreglo con un clic, lo ofrece. */

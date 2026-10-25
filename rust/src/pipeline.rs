@@ -222,8 +222,8 @@ pub fn apply_overrides(cfg: &mut Config, args: &Args) -> Result<(), ConfigError>
 /// Ejecuta el pipeline y devuelve el codigo de salida (0 bien, 1 fallo del
 /// trabajo, 2 mal uso o mala configuracion).
 pub fn run(args: &Args) -> i32 {
-    if args.from_plan.is_none() && !(args.podcast.is_some() && args.background.is_some()) {
-        log::error!("Hacen falta --podcast y --background (o --from-plan).");
+    if args.from_plan.is_none() && args.podcast.as_deref().is_none_or(|p| p.trim().is_empty()) {
+        log::error!("Hace falta --podcast (o --from-plan).");
         return 2;
     }
 
@@ -454,7 +454,12 @@ fn select_clips(args: &Args, cfg: &Config, work_dir: &Path, limit: Option<usize>
     progress::stage("descarga", "Descargando los videos");
     let podcast = download::fetch(args.podcast.as_deref().unwrap_or(""), &work_dir.join("podcast"), &cfg.download).map_err(|e| e.to_string())?;
     let wanted = split_backgrounds(args.background.as_deref().unwrap_or(""));
-    let background = download::fetch(wanted.first().map_or("", String::as_str), &work_dir.join("background"), &cfg.download).map_err(|e| e.to_string())?;
+    // "Solo el podcast" y "Dos personas" no usan fondo: no hace falta pedirlo.
+    let background = match wanted.first() {
+        Some(first) => download::fetch(first, &work_dir.join("background"), &cfg.download).map_err(|e| e.to_string())?,
+        None if !layout_needs_background(cfg) => podcast.clone(),
+        None => return Err("Falta el video de fondo. Pega un enlace en «Vídeo de fondo», o elige la composición «Solo el pódcast».".into()),
+    };
     let extra_backgrounds = wanted
         .iter()
         .enumerate()
@@ -553,6 +558,11 @@ fn refine_clips(cfg: &Config, podcast: &Path, duration: f64, clips: &mut [Window
         }
         Err(error) => log::warn!("No se pudo afinar el texto ({error}). Se sigue con el de la primera pasada."),
     }
+}
+
+/// La composicion usa el video de fondo (dividido o franja central).
+pub fn layout_needs_background(cfg: &Config) -> bool {
+    !matches!(cfg.layout.mode.as_str(), "full" | "duo")
 }
 
 /// Los videos de fondo pedidos: uno, o varios separados por | o por lineas.
@@ -709,7 +719,12 @@ fn run_from_plan(args: &Args, plan_path: &Path, cfg: &mut Config, work_dir: &Pat
     }
 
     let mut podcast = Source::from(&saved.podcast);
-    let mut background = Source::from(&saved.background);
+    // Un plan sin fondo (composicion sin fondo): se usa el propio podcast.
+    let mut background = if saved.background.ruta.is_empty() && saved.background.url.is_empty() {
+        Source::from(&saved.podcast)
+    } else {
+        Source::from(&saved.background)
+    };
     let mut extra: Vec<Source> = saved.extra_backgrounds.iter().map(Source::from).collect();
     let mut sources: Vec<(&mut Source, String, &str)> = vec![(&mut podcast, "podcast".into(), "podcast"), (&mut background, "background".into(), "video de fondo")];
     sources.extend(extra.iter_mut().enumerate().map(|(i, s)| (s, format!("background_{}", i + 2), "video de fondo")));
@@ -1424,8 +1439,21 @@ C:/c.mp4 "), ["https://youtu.be/x", "b.mp4", "C:/c.mp4"]);
     }
 
     #[test]
-    fn sin_podcast_y_fondo_no_se_ejecuta() {
+    fn sin_podcast_no_se_ejecuta() {
         assert_eq!(run(&Args::default()), 2);
-        assert_eq!(run(&Args { podcast: Some("x".into()), ..Default::default() }), 2);
+        assert_eq!(run(&Args { podcast: Some("  ".into()), ..Default::default() }), 2);
+        // Sin fondo ya no es un error de uso: depende de la composicion (y aqui
+        // falla despues, porque "x" no existe).
+        assert_ne!(run(&Args { podcast: Some("x".into()), ..Default::default() }), 0);
+    }
+
+    #[test]
+    fn solo_las_composiciones_con_fondo_lo_piden() {
+        let mut cfg = Config::default();
+        assert!(layout_needs_background(&cfg));
+        for (mode, needs) in [("stack", true), ("center", true), ("full", false), ("duo", false)] {
+            cfg.layout.mode = mode.into();
+            assert_eq!(layout_needs_background(&cfg), needs, "{mode}");
+        }
     }
 }

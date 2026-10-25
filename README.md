@@ -122,6 +122,14 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
 
+### 1.5.2 (2026-10-25)
+
+- Arreglo: con la composición «Solo el pódcast» (o «Dos personas») ya no hace
+  falta vídeo de fondo. Antes, con el fondo vacío, «Generar» fallaba al momento
+  con un aviso genérico y no aparecía nada en «En curso».
+- Si algo falla antes de empezar, el aviso dice el motivo real en vez de mandar
+  a «En curso».
+
 ### 1.5.1 (2026-10-25)
 
 - Arreglo importante: si un clip empezaba (o acababa) con un rato sin voz, por

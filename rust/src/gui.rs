@@ -1480,9 +1480,13 @@ fn handle_post(app: &Arc<App>, request: &Request, stream: &mut TcpStream) {
 }
 
 fn run_form(app: &Arc<App>, mut form: Value) -> (u16, Value) {
-    let missing: Vec<&str> = ["podcast", "background"].into_iter().filter(|k| !truthy(&form[*k])).collect();
-    if !missing.is_empty() {
-        return (400, json!({"ok": false, "error": format!("Falta rellenar: {}", missing.join(", "))}));
+    if !truthy(&form["podcast"]) {
+        return (400, json!({"ok": false, "error": "Falta el pódcast: pega su enlace o elige un archivo."}));
+    }
+    // El fondo solo hace falta si la composicion lo usa.
+    let layout = form["style"]["layout_mode"].as_str().unwrap_or("stack");
+    if !truthy(&form["background"]) && !matches!(layout, "full" | "duo") {
+        return (400, json!({"ok": false, "error": "Falta el vídeo de fondo: pega un enlace o elige un archivo, o cambia la composición a «Solo el pódcast»."}));
     }
     if truthy(&form["review"]) {
         // Revisar antes de montar: se guarda un plan y no se renderiza nada.
@@ -1877,7 +1881,14 @@ mod tests {
         assert_eq!(pedir(puerto, "POST", "/api/run", "127.0.0.1", Some("token-de-prueba"), "{roto", &[]).0, 500);
         let (codigo, _, cuerpo) = pedir(puerto, "POST", "/api/run", "127.0.0.1", Some("token-de-prueba"), r#"{"podcast": "x"}"#, &[]);
         assert_eq!(codigo, 400);
-        assert!(cuerpo.contains("background"), "{cuerpo}");
+        assert!(cuerpo.contains("vídeo de fondo") && cuerpo.contains("Solo el pódcast"), "dice que falta y como evitarlo: {cuerpo}");
+        // Sin podcast, siempre falta algo.
+        let (codigo, _, cuerpo) = pedir(puerto, "POST", "/api/run", "127.0.0.1", Some("token-de-prueba"), r#"{"background": "b"}"#, &[]);
+        assert!(codigo == 400 && cuerpo.contains("pódcast"), "{cuerpo}");
+        // Con "Solo el podcast" el fondo no hace falta: el trabajo se acepta.
+        let (codigo, _, cuerpo) =
+            pedir(puerto, "POST", "/api/run", "127.0.0.1", Some("token-de-prueba"), r#"{"podcast": "x", "background": "", "style": {"layout_mode": "full"}}"#, &[]);
+        assert_eq!(codigo, 200, "{cuerpo}");
         assert_eq!(pedir(puerto, "POST", "/api/browse", "127.0.0.1", Some("token-de-prueba"), "{}", &[]).0, 501, "sin dialogo, a mano");
     }
 
