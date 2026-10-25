@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/img/crear.png" alt="Pantalla Crear de Viral Shorts, con el monitor 9:16 a la derecha" width="900">
+  <img src="docs/img/crear.png" alt="Pantalla Crear de Viral Shorts, con la vista previa 9:16 y la lista «Antes de generar» a la derecha" width="900">
 </p>
 
 ## Cómo funciona
@@ -73,7 +73,10 @@
   </tr>
   <tr>
     <td width="50%"><img src="docs/img/mis-shorts.png" alt="Biblioteca de shorts con búsqueda"><br><sub><b>Mis shorts.</b> Todo lo generado, con búsqueda, título editable y texto para copiar.</sub></td>
-    <td width="50%"><img src="docs/img/crear-oscuro.png" alt="Tema oscuro con composición en el centro y subtítulos neón"><br><sub><b>Tema claro u oscuro</b>, según tu Windows.</sub></td>
+    <td width="50%"><img src="docs/img/ajustes.png" alt="Ajustes agrupados por apartados"><br><sub><b>Ajustes.</b> Lo que normalmente no hace falta tocar, por apartados: YouTube, canales, tarjeta gráfica…</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/img/crear-oscuro.png" alt="Tema oscuro con la composición Dos personas y subtítulos neón"><br><sub><b>Tema claro u oscuro</b>, según tu Windows. Aquí, la composición <i>Dos personas</i> con subtítulos neón.</sub></td>
   </tr>
 </table>
 
@@ -90,7 +93,7 @@
 ## Tu primer short
 
 1. En **Crear**, pega el enlace del pódcast y el del vídeo de fondo.
-2. Elige cuántos shorts quieres, cuánto duran y la calidad del análisis (*Equilibrada* va bien para empezar).
+2. Elige cuántos shorts quieres, cuánto duran y cuánto cuidado con el texto (*Equilibrado* va bien para empezar). Si quieres, cambia el aspecto en la pestaña **Aspecto**.
 3. Pulsa **Generar** (el botón dice cuántos: «Generar 3 shorts») y mira cómo avanza en **En curso**. Cuando termina, están en **Mis shorts**.
 
 Si prefieres decidir tú qué momentos se montan, usa **Elegir yo los momentos**.
