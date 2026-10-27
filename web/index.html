@@ -685,6 +685,65 @@ body.modal-open .main { overflow: hidden; }
 .pod.has-img svg { display: none; }
 
 /* ---------------------------------------------------------------- adaptable */
+/* ------------------------------------------- elegir los trozos a mano */
+.editor { display: flex; flex-direction: column; gap: 14px; }
+.editor .card-title { margin-bottom: 4px; }
+.ed-head { display: flex; align-items: flex-start; gap: 12px; }
+.ed-head > div { flex: 1; min-width: 0; }
+.ed-head .card-sub { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-grid { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 16px; align-items: stretch; }
+.ed-stage { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ed-screen { position: relative; background: #000; border-radius: var(--r-s); overflow: hidden; aspect-ratio: 16 / 9; max-height: min(36vh, 380px); }
+.ed-screen video { width: 100%; height: 100%; display: block; object-fit: contain; }
+.ed-msg { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: #fff; background: rgba(0,0,0,.7); }
+.ed-transport { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ed-transport .grow { flex: 1; }
+.btn.round { width: 40px; height: 40px; padding: 0; }
+.ed-time { font: 700 14px var(--display); font-variant-numeric: tabular-nums; color: var(--mute); margin: 0 8px; }
+.ed-time b { color: var(--text); }
+kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--raise); color: var(--mute); }
+.btn.primary kbd { background: transparent; border-color: color-mix(in srgb, var(--ink-text) 35%, transparent); color: inherit; }
+
+.ed-side { border: 1px solid var(--line); border-radius: var(--r-s); padding: 14px; display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: auto; max-height: calc(min(36vh, 380px) + 50px); }
+.ed-side h3 { font: 800 14px var(--display); }
+.ed-empty { color: var(--mute); font-size: 13px; }
+.ed-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ed-item { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 7px 6px 7px 8px; border-radius: 12px; background: var(--lilac); }
+.ed-item.editing { outline: 2px solid var(--ink); }
+.ed-item .n { font: 800 11.5px var(--display); width: 22px; height: 22px; border-radius: 99px; display: grid; place-items: center; background: var(--ink); color: var(--ink-text); }
+.ed-item .when { display: block; font-weight: 700; font-variant-numeric: tabular-nums; font-size: 13px; }
+.ed-item .len { display: block; color: var(--mute); font-size: 12px; }
+.ed-item .ops { display: flex; }
+.ed-item .ops button { border: 0; background: none; padding: 6px; border-radius: 8px; color: var(--mute); display: grid; }
+.ed-item .ops button:hover { background: var(--surf); color: var(--text); }
+.ed-item .ops .ico { width: 16px; height: 16px; }
+
+.ed-timeline { display: flex; flex-direction: column; gap: 6px; user-select: none; -webkit-user-select: none; }
+.ed-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.ed-legend { flex: 1 1 260px; }
+.ed-legend { color: var(--mute); font-size: 12.5px; }
+.seg { display: inline-flex; background: var(--raise); border-radius: 99px; padding: 3px; }
+.seg button { border: 0; background: none; padding: 4px 11px; border-radius: 99px; font: 700 12px var(--ui); color: var(--mute); }
+.seg button.on { background: var(--surf); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.ed-overview, .ed-detail { position: relative; overflow: hidden; background: var(--raise); touch-action: none; }
+.ed-overview { height: 40px; border-radius: 10px; cursor: pointer; }
+.ed-detail { height: 104px; border-radius: 12px; cursor: crosshair; }
+.ed-overview canvas, .ed-detail canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.ed-win { position: absolute; top: 0; bottom: 0; border: 2px solid var(--ink); border-radius: 6px; pointer-events: none; min-width: 4px; }
+.ed-line { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--bad); pointer-events: none; }
+.ed-sel { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--info) 22%, transparent); border-top: 3px solid var(--info); border-bottom: 3px solid var(--info); cursor: grab; }
+.ed-sel:active { cursor: grabbing; }
+.ed-sel .h { position: absolute; top: -3px; bottom: -3px; width: 12px; background: var(--info); cursor: ew-resize; }
+.ed-sel .h.in { left: -6px; border-radius: 7px 0 0 7px; }
+.ed-sel .h.out { right: -6px; border-radius: 0 7px 7px 0; }
+.ed-sel .h::after { content: ""; position: absolute; left: 4px; top: 50%; width: 4px; height: 18px; margin-top: -9px; border: solid #fff; border-width: 0 1.5px; }
+
+.ed-selbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px 10px 16px; border-radius: var(--r-s); background: var(--sky); }
+.ed-selbar .what { flex: 1; min-width: 220px; color: var(--mute); }
+.ed-selbar .what b { color: var(--text); font-variant-numeric: tabular-nums; }
+.ed-selbar .warn { color: var(--bad); font-weight: 700; }
+@media (max-width: 900px) { .ed-grid { grid-template-columns: 1fr; } .ed-side { max-height: none; } }
+
 @media (max-width: 1080px) {
   .create { grid-template-columns: minmax(0, 1fr) 264px; gap: 22px; }
   .page { padding: 22px 24px 48px; }
@@ -745,6 +804,10 @@ body.modal-open .main { overflow: hidden; }
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
   <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="7" y="5.5" width="3.2" height="13" rx="1"/><rect x="13.8" y="5.5" width="3.2" height="13" rx="1"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M11 7l-5 5 5 5M18 7l-5 5 5 5"/></symbol>
+  <symbol id="i-fwd" viewBox="0 0 24 24"><path d="M13 7l5 5-5 5M6 7l5 5-5 5"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V5M7 9l5-5 5 5M5 20h14"/></symbol>
   <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></symbol>
@@ -1170,7 +1233,7 @@ body.modal-open .main { overflow: hidden; }
               </ul>
               <p class="eta" id="eta"></p>
               <button type="submit" form="form" class="btn primary lg" id="run">Generar mis shorts</button>
-              <button type="button" class="btn" id="review" title="Te enseña los momentos que encuentra y tú marcas cuáles se montan">Elegir yo los momentos</button>
+              <button type="button" class="btn" id="review" title="Ves el pódcast entero y marcas tú los trozos que se convierten en shorts">Elegir yo los momentos</button>
               <div class="launch-sub"><button type="button" class="link" id="clear">Empezar de nuevo</button></div>
             </div>
           </aside>
@@ -1195,6 +1258,74 @@ body.modal-open .main { overflow: hidden; }
         </div>
 
         <div class="stack">
+          <section class="card editor" id="editor-panel" hidden aria-label="Elegir los trozos">
+            <div class="ed-head">
+              <div>
+                <h2 class="card-title">Elige los trozos</h2>
+                <p class="card-sub" id="ed-title"></p>
+              </div>
+              <button type="button" class="btn ghost sm" id="ed-close" title="Cierra el editor sin montar nada">Cerrar</button>
+            </div>
+
+            <div class="ed-grid">
+              <div class="ed-stage">
+                <div class="ed-screen">
+                  <video id="ed-video" preload="auto" playsinline></video>
+                  <div class="ed-msg" id="ed-msg" hidden></div>
+                </div>
+                <div class="ed-transport">
+                  <button type="button" class="btn primary round" id="ed-play" aria-label="Reproducir" title="Reproducir o pausar (espacio)"><svg class="ico fill"><use href="#i-play"/></svg></button>
+                  <button type="button" class="btn ghost round" id="ed-back" aria-label="Atrás 5 segundos" title="Atrás 5 s (Mayús + ←)"><svg class="ico"><use href="#i-back"/></svg></button>
+                  <button type="button" class="btn ghost round" id="ed-fwd" aria-label="Adelante 5 segundos" title="Adelante 5 s (Mayús + →)"><svg class="ico"><use href="#i-fwd"/></svg></button>
+                  <span class="ed-time"><b id="ed-now">0:00</b> / <span id="ed-dur">0:00</span></span>
+                  <span class="grow"></span>
+                  <button type="button" class="btn sm" id="ed-in" title="El trozo empieza donde está el vídeo ahora">Marcar inicio <kbd>I</kbd></button>
+                  <button type="button" class="btn sm" id="ed-out" title="El trozo acaba donde está el vídeo ahora">Marcar final <kbd>O</kbd></button>
+                </div>
+              </div>
+
+              <aside class="ed-side">
+                <h3>Trozos elegidos</h3>
+                <p class="ed-empty" id="ed-empty">Todavía ninguno. Cada trozo que selecciones será un short.</p>
+                <ol class="ed-list" id="ed-list"></ol>
+              </aside>
+            </div>
+
+            <div class="ed-timeline">
+              <div class="ed-row">
+                <span class="ed-legend" id="ed-legend">Todo el pódcast</span>
+                <span class="seg" id="ed-zoom" role="group" aria-label="Zoom de la línea de tiempo">
+                  <button type="button" data-span="30">30 s</button>
+                  <button type="button" data-span="60" class="on">1 min</button>
+                  <button type="button" data-span="120">2 min</button>
+                  <button type="button" data-span="300">5 min</button>
+                </span>
+              </div>
+              <div class="ed-overview" id="ed-overview" title="Haz clic para saltar a ese punto">
+                <canvas id="ed-ov-canvas"></canvas>
+                <div class="ed-win" id="ed-win"></div>
+                <div class="ed-line" id="ed-ov-line"></div>
+              </div>
+              <div class="ed-detail" id="ed-detail">
+                <canvas id="ed-dt-canvas"></canvas>
+                <div class="ed-sel" id="ed-sel" hidden><span class="h in" title="Arrastra para mover el inicio"></span><span class="h out" title="Arrastra para mover el final"></span></div>
+                <div class="ed-line" id="ed-dt-line"></div>
+              </div>
+            </div>
+
+            <div class="ed-selbar">
+              <div class="what" id="ed-sel-what"></div>
+              <button type="button" class="btn sm" id="ed-preview" title="Reproduce solo el trozo marcado"><svg class="ico fill"><use href="#i-play"/></svg>Ver el trozo</button>
+              <button type="button" class="btn ghost sm" id="ed-drop">Descartar</button>
+              <button type="button" class="btn primary" id="ed-add">Seleccionar este trozo <kbd>Intro</kbd></button>
+            </div>
+
+            <div class="card-foot">
+              <span class="grow" id="ed-tally"></span>
+              <button type="button" class="btn primary lg" id="ed-render" disabled>Montar los shorts</button>
+            </div>
+          </section>
+
           <section id="review-panel" hidden>
             <h2 class="card-title" style="margin-bottom:6px">Elige cuáles se montan</h2>
             <p class="lead card-sub" style="margin-top:0">Estos son los momentos que ha encontrado, por orden de aparición en el pódcast. Desmarca los que no te convenzan y corrige el título o el gancho. Solo se montan los marcados.</p>
@@ -1677,7 +1808,7 @@ function updateSummary() {
   // Ocupado, lo que se lance va a la cola en vez de pelearse por la carpeta de trabajo.
   const busy = $("status").dataset.state === "running";
   $("run").textContent = busy ? "Añadir a la cola" : (n === 1 ? "Generar 1 short" : `Generar ${n} shorts`);
-  $("review").textContent = busy ? "Añadir a la cola para revisar" : "Elegir yo los momentos";
+  $("review").textContent = busy ? "Añadir a la cola para elegir" : "Elegir yo los momentos";
 }
 
 // ===========================================================================
@@ -2034,14 +2165,14 @@ function showNice(nice) {
   $("banner").querySelector(".note-body").appendChild(row);
 }
 
-let lastReview = false;
+let lastLaunch = () => launch(false);
 function retryWithCookies(browser, label) {
   $("st_cookies").value = browser;
   saveForm();
   clearBanner($("banner"));
   showBanner($("tip"), `Reintentando con las cookies de ${label}`,
     "Queda guardado en Ajustes, en «Descarga de YouTube». Si falla, cierra el navegador y vuelve a probar.");
-  launch(lastReview);
+  lastLaunch();
 }
 
 /** Aviso del pipeline (Claude caido, falta una fuente...): no es un error. */
@@ -2220,9 +2351,15 @@ const STEPS = [
   { key: "render",        label: "Montar los shorts" },
 ];
 const STAGE_TO_STEP = { descarga: 0, analisis: 1, transcripcion: 2, claude: 3, metadatos: 3, render: 4 };
+// Preparar un pódcast para elegir los trozos a mano.
+const PREP_STEPS = [
+  { key: "descarga", label: "Descargar el pódcast" },
+  { key: "analisis", label: "Preparar la línea de tiempo" },
+];
+let STEPS_NOW = STEPS;
 
 function paintSteps(current) {
-  $("steps-live").innerHTML = STEPS.map((step, i) => {
+  $("steps-live").innerHTML = STEPS_NOW.map((step, i) => {
     const skipped = step.optional && !$("llm").checked;
     let cls = "live";
     if (skipped)                cls += " skip";
@@ -2408,7 +2545,7 @@ function startFresh() {
 
 async function launch(review) {
   clearBanner($("banner"));
-  lastReview = !!review;
+  lastLaunch = () => launch(review);
   const busy = STATE === "running";
   if (!(await downloadNeeded())) return;
   try {
@@ -2417,6 +2554,7 @@ async function launch(review) {
       showBanner($("tip"), "Añadido a la cola",
         `Va en la posición ${answer.posicion}. Empezará en cuanto termine lo que hay en marcha.`);
     } else if (!busy) {
+      STEPS_NOW = STEPS;
       startFresh();
     }
     go("trabajo");
@@ -2436,7 +2574,7 @@ function renderQueue(items) {
     <div class="queue-item">
       <div class="num">${item.n}</div>
       <div class="what">${escapeHtml(shortName(item.podcast))}</div>
-      <span class="chip">${item.revisar ? "para revisar" : item.clips + " shorts"}</span>
+      <span class="chip">${item.elegir ? "para elegir los trozos" : item.trozos ? item.trozos + (item.trozos === 1 ? " trozo" : " trozos") : item.revisar ? "para revisar" : item.clips + " shorts"}</span>
       <div class="ops">
         <button type="button" data-op="up" data-n="${item.n}" aria-label="Adelantar" title="Adelantar" ${i === 0 ? "disabled" : ""}><svg class="ico"><use href="#i-up"/></svg></button>
         <button type="button" data-op="down" data-n="${item.n}" aria-label="Atrasar" title="Atrasar" ${i === list.length - 1 ? "disabled" : ""}><svg class="ico"><use href="#i-down"/></svg></button>
@@ -2466,13 +2604,15 @@ function shortName(text) {
 
 /** Vacio de "En curso" y rotulos de la barra lateral. */
 function refreshWork() {
-  const any = ["progress-panel", "queue-panel", "clips-panel", "review-panel"].some(id => !$(id).hidden);
+  const any = ["progress-panel", "queue-panel", "clips-panel", "review-panel", "editor-panel"].some(id => !$(id).hidden);
   $("work-empty").hidden = any;
   const badge = $("nav-badge");
-  if (!$("review-panel").hidden && STATE !== "running") { badge.className = "badge"; badge.textContent = "revisar"; }
+  if (!$("editor-panel").hidden && STATE !== "running") { badge.className = "badge"; badge.textContent = "elegir"; }
+  else if (!$("review-panel").hidden && STATE !== "running") { badge.className = "badge"; badge.textContent = "revisar"; }
   else if (STATE === "running")                          { badge.className = "badge run"; badge.textContent = ""; }
   else                                                   { badge.className = "badge"; badge.textContent = ""; }
   $("work-sub").textContent = STATE === "running" ? ($("stage-label").textContent || "Trabajando…")
+    : !$("editor-panel").hidden ? "Marca los trozos del pódcast que quieres convertir en shorts."
     : !$("review-panel").hidden ? "Hay momentos esperando tu revisión."
     : "Aquí ves cómo avanza cada pódcast.";
 }
@@ -2662,6 +2802,529 @@ async function renderFromPlan(only) {
     showNice(nice);
   }
 }
+
+// ===========================================================================
+// Elegir los trozos a mano: el pódcast entero en una línea de tiempo
+// ===========================================================================
+const ED_MIN = 3, ED_MAX = 180;           // segundos que puede durar un trozo
+const ED = { src: null, data: null, dur: 0, trozos: [], sel: null, editing: -1, view: 0, span: 60, stopAt: null, raf: 0 };
+const edVideo = $("ed-video");
+
+/** El botón "Elegir yo los momentos": descarga el pódcast y abre el editor. */
+async function prepareMoments() {
+  clearBanner($("banner"));
+  const podcast = $("podcast").value.trim();
+  if (!podcast) {
+    showBanner($("banner"), "Falta el pódcast", "Pega su enlace o elige un archivo, y vuelve a pulsar «Elegir yo los momentos».");
+    showTab("contenido");
+    $("podcast").focus();
+    return;
+  }
+  // Ya está preparado: no hace falta descargarlo otra vez.
+  if (ED.src && ED.src.origen === podcast && !$("editor-panel").hidden) { go("trabajo"); return; }
+  lastLaunch = prepareMoments;
+  const busy = STATE === "running";
+  try {
+    const answer = await post("/api/run", { ...collect(false), prepare: true });
+    if (answer.encolado) {
+      showBanner($("tip"), "Añadido a la cola",
+        "Cuando termine lo que hay en marcha se prepara el pódcast y podrás elegir los trozos.");
+    } else if (!busy) {
+      STEPS_NOW = PREP_STEPS;
+      startFresh();
+    }
+    go("trabajo");
+  } catch (error) {
+    showNice(explain(error.message));
+  }
+}
+
+function edClamp(t) { return Math.min(Math.max(t, 0), ED.dur || 0); }
+function edFine(t) {
+  const whole = Math.floor(Math.max(0, t));
+  return clock(whole) + "," + Math.floor((Math.max(0, t) - whole) * 10);
+}
+function edDefaultLen() {
+  const mid = (+$("min_duration").value + +$("max_duration").value) / 2;
+  return Number.isFinite(mid) && mid >= ED_MIN ? Math.round(mid) : 30;
+}
+
+async function openEditor(fuente) {
+  if (!fuente || !fuente.ruta) return;
+  const same = ED.src && ED.src.ruta === fuente.ruta;
+  ED.src = fuente;
+  $("editor-panel").hidden = false;
+  if (STATE !== "running") $("progress-panel").hidden = true;
+  $("ed-title").textContent = fuente.titulo || shortName(fuente.origen);
+  if (!same) {
+    ED.data = null;
+    ED.dur = +fuente.duracion || 0;
+    ED.trozos = edRestore(fuente.ruta);
+    ED.sel = null;
+    ED.editing = -1;
+    ED.view = 0;
+    $("ed-msg").hidden = true;
+    edVideo.src = `/api/source?t=${encodeURIComponent(TOKEN)}&v=${encodeURIComponent(fuente.ruta)}`;
+    try {
+      const response = await fetch("/api/source/info", { headers: AUTH });
+      if (response.ok) ED.data = await response.json();
+    } catch (error) { ED.data = null; }
+    if (ED.data && ED.data.duracion) ED.dur = +ED.data.duracion;
+  }
+  const heat = ED.data && ED.data.visto && ED.data.visto.length > 1;
+  $("ed-legend").textContent = heat
+    ? "Todo el pódcast. Lo más alto es lo que más se ha vuelto a ver en YouTube."
+    : "Todo el pódcast. Haz clic para saltar; abajo, arrastra sobre la onda para marcar un trozo.";
+  $("ed-dur").textContent = clock(ED.dur);
+  refreshWork();
+  edPaintAll();
+  // Recién abierto, el editor entero a la vista: vídeo y línea de tiempo.
+  if (!same) requestAnimationFrame(() => $("editor-panel").scrollIntoView({ block: "start" }));
+  if (!ED.raf) ED.raf = requestAnimationFrame(edTick);
+}
+
+/** Cierra el editor. `forget` borra también los trozos guardados. */
+function closeEditor(forget) {
+  edVideo.pause();
+  edVideo.removeAttribute("src");
+  edVideo.load();
+  if (forget && ED.src) edForget();
+  ED.src = null;
+  $("editor-panel").hidden = true;
+  post("/api/source/close", {}).catch(() => {});
+  refreshWork();
+}
+
+// Los trozos se guardan en este ordenador: cerrar la ventana no los pierde.
+function edSave() {
+  try { localStorage.setItem("viralshorts.trozos", JSON.stringify({ ruta: ED.src && ED.src.ruta, trozos: ED.trozos })); } catch (e) {}
+}
+function edRestore(ruta) {
+  try {
+    const saved = JSON.parse(localStorage.getItem("viralshorts.trozos") || "null");
+    if (saved && saved.ruta === ruta && Array.isArray(saved.trozos)) return saved.trozos.filter(t => t.length === 2);
+  } catch (e) {}
+  return [];
+}
+function edForget() {
+  try { localStorage.removeItem("viralshorts.trozos"); } catch (e) {}
+}
+
+// ---------------------------------------------------------------- pintar
+function edColors() {
+  const css = getComputedStyle(document.documentElement);
+  const v = (name) => css.getPropertyValue(name).trim();
+  return { ink: v("--ink"), faint: v("--faint"), mute: v("--mute"), sky: v("--sky-hi"), info: v("--info"), lilac: v("--lilac"), text: v("--text") };
+}
+
+function edCanvas(canvas) {
+  const box = canvas.getBoundingClientRect();
+  const ratio = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(box.width * ratio)), h = Math.max(1, Math.round(box.height * ratio));
+  if (canvas.width !== w) canvas.width = w;
+  if (canvas.height !== h) canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, box.width, box.height);
+  return [ctx, box.width, box.height];
+}
+
+/** La onda del volumen entre `from` y `to`: una barra cada 3 px con el máximo de su tramo. */
+function edWave(ctx, from, to, w, h, color) {
+  const wave = (ED.data && ED.data.onda) || [];
+  const step = (ED.data && ED.data.paso) || 0.25;
+  if (!wave.length || to <= from) return;
+  ctx.fillStyle = color;
+  const bars = Math.floor(w / 3);
+  for (let i = 0; i < bars; i++) {
+    const a = Math.floor((from + (to - from) * i / bars) / step);
+    const b = Math.max(a + 1, Math.ceil((from + (to - from) * (i + 1) / bars) / step));
+    let peak = 0;
+    for (let k = Math.max(0, a); k < b && k < wave.length; k++) if (wave[k] > peak) peak = wave[k];
+    const bar = Math.max(1.5, peak / 99 * (h - 26));
+    ctx.fillRect(i * 3, (h - 14 - bar) / 2 + 2, 2, bar);
+  }
+}
+
+function edPaintOverview() {
+  const [ctx, w, h] = edCanvas($("ed-ov-canvas"));
+  const c = edColors();
+  const dur = ED.dur || 1;
+  const heat = (ED.data && ED.data.visto) || [];
+  if (heat.length > 1) {
+    ctx.fillStyle = c.sky;
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    heat.forEach(([a, b, v]) => ctx.lineTo((a + b) / 2 / dur * w, h - 3 - v * (h - 8)));
+    ctx.lineTo(w, h);
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    edWave(ctx, 0, dur, w, h + 14, c.faint);
+  }
+  ED.trozos.forEach(([a, b]) => {
+    ctx.fillStyle = c.ink;
+    ctx.fillRect(a / dur * w, h - 7, Math.max(3, (b - a) / dur * w), 7);
+  });
+  if (ED.sel) {
+    ctx.fillStyle = c.info;
+    ctx.globalAlpha = 0.45;
+    ctx.fillRect(ED.sel[0] / dur * w, 0, Math.max(3, (ED.sel[1] - ED.sel[0]) / dur * w), h);
+    ctx.globalAlpha = 1;
+  }
+  $("ed-win").style.left = (ED.view / dur * 100) + "%";
+  $("ed-win").style.width = (Math.min(ED.span, dur) / dur * 100) + "%";
+}
+
+function edPaintDetail() {
+  const [ctx, w, h] = edCanvas($("ed-dt-canvas"));
+  const c = edColors();
+  const from = ED.view, to = ED.view + ED.span;
+  const x = (t) => (t - from) / ED.span * w;
+  ED.trozos.forEach(([a, b], i) => {
+    if (b < from || a > to || i === ED.editing) return;
+    ctx.fillStyle = c.lilac;
+    ctx.fillRect(x(a), 0, x(b) - x(a), h);
+    ctx.fillStyle = c.text;
+    ctx.font = "800 11px Manrope, sans-serif";
+    ctx.fillText(`Trozo ${i + 1}`, Math.max(x(a), 0) + 6, 15);
+  });
+  edWave(ctx, from, to, w, h, c.faint);
+  const tick = ED.span <= 30 ? 5 : ED.span <= 60 ? 10 : ED.span <= 120 ? 15 : 30;
+  ctx.fillStyle = c.mute;
+  ctx.font = "600 10.5px Manrope, sans-serif";
+  for (let t = Math.ceil(from / tick) * tick; t <= to; t += tick) {
+    ctx.fillRect(x(t), h - 5, 1, 5);
+    ctx.fillText(clock(t), x(t) + 4, h - 3);
+  }
+}
+
+function edPaintSel() {
+  const box = $("ed-sel");
+  box.hidden = !ED.sel;
+  if (!ED.sel) return;
+  box.style.left = ((ED.sel[0] - ED.view) / ED.span * 100) + "%";
+  box.style.width = ((ED.sel[1] - ED.sel[0]) / ED.span * 100) + "%";
+}
+
+function edOverlaps([a, b]) {
+  return ED.trozos.findIndex(([c, d], i) => i !== ED.editing && a < d && b > c);
+}
+
+function edPaintSelBar() {
+  const what = $("ed-sel-what");
+  const sel = ED.sel;
+  $("ed-preview").disabled = $("ed-drop").disabled = !sel;
+  if (!sel) {
+    what.textContent = "Marca dónde empieza y dónde acaba: con «Marcar inicio» y «Marcar final», con las teclas I y O, o arrastrando sobre la onda.";
+    $("ed-add").disabled = true;
+    $("ed-add").firstChild.textContent = ED.editing >= 0 ? `Guardar el trozo ${ED.editing + 1} ` : "Seleccionar este trozo ";
+    return;
+  }
+  const len = sel[1] - sel[0];
+  const clash = edOverlaps(sel);
+  let warn = "";
+  if (len < ED_MIN) warn = `Muy corto: al menos ${ED_MIN} s.`;
+  else if (len > ED_MAX) warn = "Muy largo: como mucho 3 minutos.";
+  else if (clash >= 0) warn = `Se pisa con el trozo ${clash + 1}.`;
+  what.innerHTML = `Trozo: <b>${edFine(sel[0])} → ${edFine(sel[1])}</b> <span class="chip">${len.toFixed(1).replace(".", ",")} s</span>` +
+    (warn ? ` <span class="warn">${warn}</span>` : "");
+  $("ed-add").disabled = len < ED_MIN || len > ED_MAX;
+  $("ed-add").firstChild.textContent = ED.editing >= 0 ? `Guardar el trozo ${ED.editing + 1} ` : "Seleccionar este trozo ";
+}
+
+function edPaintList() {
+  const n = ED.trozos.length;
+  $("ed-empty").hidden = n > 0;
+  $("ed-list").innerHTML = ED.trozos.map(([a, b], i) => `
+    <li class="ed-item${i === ED.editing ? " editing" : ""}" data-i="${i}">
+      <span class="n">${i + 1}</span>
+      <span><span class="when">${clock(a)} → ${clock(b)}</span><span class="len">${Math.round(b - a)} s</span></span>
+      <span class="ops">
+        <button type="button" data-op="play" title="Ver este trozo" aria-label="Ver el trozo ${i + 1}"><svg class="ico fill"><use href="#i-play"/></svg></button>
+        <button type="button" data-op="edit" title="Cambiar dónde empieza o acaba" aria-label="Cambiar el trozo ${i + 1}"><svg class="ico"><use href="#i-edit"/></svg></button>
+        <button type="button" data-op="rm" title="Quitar" aria-label="Quitar el trozo ${i + 1}"><svg class="ico"><use href="#i-x"/></svg></button>
+      </span>
+    </li>`).join("");
+  const total = ED.trozos.reduce((sum, [a, b]) => sum + (b - a), 0);
+  $("ed-render").disabled = n === 0;
+  $("ed-render").textContent = n === 1 ? "Montar 1 short" : n ? `Montar ${n} shorts` : "Montar los shorts";
+  $("ed-tally").textContent = n
+    ? `${n === 1 ? "1 trozo elegido" : n + " trozos elegidos"}, ${clock(total)} en total. Se montan con el aspecto de «Crear».`
+    : "Todavía no has elegido ningún trozo.";
+}
+
+function edPaintPlayhead() {
+  const t = edVideo.currentTime || 0;
+  $("ed-now").textContent = clock(t);
+  const inView = t >= ED.view && t <= ED.view + ED.span;
+  $("ed-dt-line").hidden = !inView;
+  if (inView) $("ed-dt-line").style.left = ((t - ED.view) / ED.span * 100) + "%";
+  $("ed-ov-line").style.left = (t / (ED.dur || 1) * 100) + "%";
+}
+
+function edPaintAll() {
+  if ($("editor-panel").hidden) return;
+  edPaintOverview();
+  edPaintDetail();
+  edPaintSel();
+  edPaintSelBar();
+  edPaintList();
+  edPaintPlayhead();
+  document.querySelectorAll("#ed-zoom button").forEach(b => b.classList.toggle("on", +b.dataset.span === ED.span));
+}
+
+/** Lo que cambia mientras se reproduce: la línea roja, y la vista la sigue. */
+function edTick() {
+  if ($("editor-panel").hidden || !ED.src) { ED.raf = 0; return; }
+  const t = edVideo.currentTime || 0;
+  if (ED.stopAt !== null && t >= ED.stopAt) {
+    edVideo.pause();
+    ED.stopAt = null;
+  }
+  if (!edVideo.paused && (t > ED.view + ED.span * 0.94 || t < ED.view)) {
+    edSetView(t - ED.span * 0.06);
+  }
+  edPaintPlayhead();
+  ED.raf = requestAnimationFrame(edTick);
+}
+
+function edSetView(start) {
+  ED.view = Math.min(Math.max(0, start), Math.max(0, (ED.dur || 0) - ED.span));
+  edPaintDetail();
+  edPaintSel();
+  edPaintOverview();
+  edPaintPlayhead();
+}
+
+/** Que `t` quede a la vista en la línea de detalle. */
+function edReveal(t) {
+  if (t < ED.view || t > ED.view + ED.span) edSetView(t - ED.span * 0.3);
+}
+
+function edSeek(t) {
+  if (!ED.dur) return;
+  edVideo.currentTime = edClamp(t);
+  edPaintPlayhead();
+}
+
+// ---------------------------------------------------------------- acciones
+function edPlayPause() {
+  if (!ED.src) return;
+  ED.stopAt = null;
+  if (edVideo.paused) edVideo.play().catch(() => {}); else edVideo.pause();
+}
+function edMarkIn() {
+  const t = edVideo.currentTime || 0;
+  ED.sel = ED.sel && t < ED.sel[1] - 0.5 ? [t, ED.sel[1]] : [t, edClamp(t + edDefaultLen())];
+  edReveal(t);
+  edPaintAll();
+}
+function edMarkOut() {
+  const t = edVideo.currentTime || 0;
+  ED.sel = ED.sel && t > ED.sel[0] + 0.5 ? [ED.sel[0], t] : [edClamp(t - edDefaultLen()), t];
+  edReveal(t);
+  edPaintAll();
+}
+function edAdd() {
+  if (!ED.sel || $("ed-add").disabled) return;
+  const piece = [Math.round(ED.sel[0] * 100) / 100, Math.round(ED.sel[1] * 100) / 100];
+  if (ED.editing >= 0) ED.trozos[ED.editing] = piece; else ED.trozos.push(piece);
+  ED.trozos.sort((x, y) => x[0] - y[0]);
+  ED.sel = null;
+  ED.editing = -1;
+  edSave();
+  edPaintAll();
+}
+function edDrop() {
+  ED.sel = null;
+  ED.editing = -1;
+  edPaintAll();
+}
+function edPlayRange([a, b]) {
+  edSeek(a);
+  edReveal(a);
+  ED.stopAt = b;
+  edVideo.play().catch(() => {});
+}
+
+async function edRender() {
+  if (!ED.src || !ED.trozos.length) return;
+  clearBanner($("banner"));
+  const busy = STATE === "running";
+  if (!(await downloadNeeded())) return;
+  try {
+    const form = { ...collect(false), podcast: ED.src.origen || $("podcast").value.trim(), moments: ED.trozos };
+    const answer = await post("/api/run", form);
+    const count = ED.trozos.length;
+    closeEditor(true);
+    if (answer.encolado) {
+      showBanner($("tip"), "Añadido a la cola",
+        `Tus ${count === 1 ? "trozo se montará" : count + " trozos se montarán"} en cuanto termine lo que hay en marcha (posición ${answer.posicion}).`);
+    } else if (!busy) {
+      STEPS_NOW = STEPS;
+      startFresh();
+    }
+    go("trabajo");
+  } catch (error) {
+    showNice(explain(error.message));
+  }
+}
+
+// ---------------------------------------------------------------- ratón y teclado
+$("ed-detail").addEventListener("pointerdown", (down) => {
+  if (!ED.dur || down.button !== 0) return;
+  const area = $("ed-detail");
+  const box = area.getBoundingClientRect();
+  const at = (clientX) => edClamp(ED.view + (clientX - box.left) / box.width * ED.span);
+  const handle = down.target.closest(".h");
+  const mode = handle ? (handle.classList.contains("in") ? "in" : "out") : down.target.closest("#ed-sel") ? "move" : "new";
+  const t0 = at(down.clientX);
+  const start = ED.sel ? [...ED.sel] : null;
+  let moved = false;
+  area.setPointerCapture(down.pointerId);
+  const onMove = (event) => {
+    if (!moved && Math.abs(event.clientX - down.clientX) < 4) return;
+    if (!moved) edVideo.pause();
+    moved = true;
+    const t = at(event.clientX);
+    if (mode === "in") ED.sel = [Math.min(t, start[1] - 0.5), start[1]];
+    else if (mode === "out") ED.sel = [start[0], Math.max(t, start[0] + 0.5)];
+    else if (mode === "move") {
+      const len = start[1] - start[0];
+      const a = Math.min(Math.max(0, start[0] + t - t0), ED.dur - len);
+      ED.sel = [a, a + len];
+    } else ED.sel = [Math.min(t0, t), Math.max(t0, t)];
+    // Se ve el fotograma del borde que se mueve: así se corta justo donde toca.
+    edSeek(mode === "out" || (mode === "new" && t > t0) ? ED.sel[1] : ED.sel[0]);
+    edPaintSel();
+    edPaintSelBar();
+    edPaintOverview();
+  };
+  const onUp = () => {
+    area.removeEventListener("pointermove", onMove);
+    area.removeEventListener("pointerup", onUp);
+    area.removeEventListener("pointercancel", onUp);
+    if (!moved) edSeek(t0);
+    edPaintAll();
+  };
+  area.addEventListener("pointermove", onMove);
+  area.addEventListener("pointerup", onUp);
+  area.addEventListener("pointercancel", onUp);
+});
+
+$("ed-detail").addEventListener("wheel", (event) => {
+  if (!ED.dur) return;
+  event.preventDefault();
+  if (event.ctrlKey) {
+    const spans = [30, 60, 120, 300];
+    const i = spans.indexOf(ED.span);
+    edZoom(spans[Math.min(spans.length - 1, Math.max(0, i + (event.deltaY > 0 ? 1 : -1)))]);
+    return;
+  }
+  const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+  edSetView(ED.view + delta / $("ed-detail").clientWidth * ED.span);
+}, { passive: false });
+
+$("ed-overview").addEventListener("pointerdown", (down) => {
+  if (!ED.dur || down.button !== 0) return;
+  const area = $("ed-overview");
+  const jump = (clientX) => {
+    const box = area.getBoundingClientRect();
+    const t = edClamp((clientX - box.left) / box.width * ED.dur);
+    edSetView(t - ED.span / 2);
+    edSeek(t);
+  };
+  area.setPointerCapture(down.pointerId);
+  jump(down.clientX);
+  const onMove = (event) => jump(event.clientX);
+  const onUp = () => {
+    area.removeEventListener("pointermove", onMove);
+    area.removeEventListener("pointerup", onUp);
+  };
+  area.addEventListener("pointermove", onMove);
+  area.addEventListener("pointerup", onUp);
+});
+
+function edZoom(span) {
+  const t = edVideo.currentTime || 0;
+  const centre = ED.sel ? (ED.sel[0] + ED.sel[1]) / 2 : t;
+  ED.span = span;
+  edSetView(centre - span / 2);
+  edPaintAll();
+}
+document.querySelectorAll("#ed-zoom button").forEach(b => b.addEventListener("click", () => edZoom(+b.dataset.span)));
+
+$("ed-list").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-op]");
+  if (!button) return;
+  const i = +button.closest(".ed-item").dataset.i;
+  const piece = ED.trozos[i];
+  if (button.dataset.op === "play") edPlayRange(piece);
+  if (button.dataset.op === "edit") {
+    ED.editing = i;
+    ED.sel = [...piece];
+    edVideo.pause();
+    edSeek(piece[0]);
+    edSetView(piece[0] - Math.max(5, (ED.span - (piece[1] - piece[0])) / 2));
+    edPaintAll();
+  }
+  if (button.dataset.op === "rm") {
+    ED.trozos.splice(i, 1);
+    if (ED.editing === i) { ED.editing = -1; ED.sel = null; } else if (ED.editing > i) ED.editing--;
+    edSave();
+    edPaintAll();
+  }
+});
+
+$("ed-play").addEventListener("click", edPlayPause);
+$("ed-back").addEventListener("click", () => edSeek((edVideo.currentTime || 0) - 5));
+$("ed-fwd").addEventListener("click", () => edSeek((edVideo.currentTime || 0) + 5));
+$("ed-in").addEventListener("click", edMarkIn);
+$("ed-out").addEventListener("click", edMarkOut);
+$("ed-add").addEventListener("click", edAdd);
+$("ed-drop").addEventListener("click", edDrop);
+$("ed-preview").addEventListener("click", () => { if (ED.sel) edPlayRange(ED.sel); });
+$("ed-render").addEventListener("click", edRender);
+$("ed-close").addEventListener("click", () => closeEditor(false));
+
+const edPlayIcon = () => {
+  const playing = !edVideo.paused;
+  $("ed-play").innerHTML = `<svg class="ico fill"><use href="#i-${playing ? "pause" : "play"}"/></svg>`;
+  $("ed-play").setAttribute("aria-label", playing ? "Pausar" : "Reproducir");
+};
+edVideo.addEventListener("play", edPlayIcon);
+edVideo.addEventListener("pause", edPlayIcon);
+edVideo.addEventListener("seeked", edPaintPlayhead);
+edVideo.addEventListener("loadedmetadata", () => {
+  if (!ED.dur && Number.isFinite(edVideo.duration)) { ED.dur = edVideo.duration; $("ed-dur").textContent = clock(ED.dur); edPaintAll(); }
+});
+edVideo.addEventListener("error", () => {
+  if (!ED.src) return;
+  $("ed-msg").hidden = false;
+  $("ed-msg").textContent = "Este vídeo no se puede ver aquí. Puedes elegir los trozos igualmente con la línea de tiempo, guiándote por la onda.";
+});
+
+document.addEventListener("keydown", (event) => {
+  if (!ED.src || $("editor-panel").hidden || VIEW !== "trabajo") return;
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.target.closest("input, textarea, select, [contenteditable]")) return;
+  const key = event.key;
+  const handled = () => event.preventDefault();
+  if (key === " ") { handled(); edPlayPause(); }
+  else if (key === "i" || key === "I") { handled(); edMarkIn(); }
+  else if (key === "o" || key === "O") { handled(); edMarkOut(); }
+  else if (key === "Enter" && !event.target.closest("button")) { handled(); edAdd(); }
+  else if (key === "Escape") { handled(); edDrop(); }
+  else if (key === "ArrowLeft" || key === "ArrowRight") {
+    handled();
+    const step = event.shiftKey ? 5 : 1;
+    const t = (edVideo.currentTime || 0) + (key === "ArrowLeft" ? -step : step);
+    edSeek(t);
+    edReveal(edClamp(t));
+  }
+});
+window.addEventListener("resize", () => edPaintAll());
 
 // ===========================================================================
 // Perfiles de ajustes
@@ -2970,7 +3633,7 @@ $("yt-disconnect").addEventListener("click", async () => { await post("/api/yout
 try { const saved = localStorage.getItem("viralshorts.yt"); if (saved) $("yt-privacy").value = saved; } catch (e) {}
 $("yt-privacy").addEventListener("change", () => { try { localStorage.setItem("viralshorts.yt", $("yt-privacy").value); } catch (e) {} });
 refreshYoutube();
-$("review").addEventListener("click", () => launch(true));
+$("review").addEventListener("click", prepareMoments);
 $("stop").addEventListener("click", () => post("/api/stop").catch(() => {}));
 $("queue-clear").addEventListener("click", () => post("/api/queue/clear").catch(() => {}));
 $("review-save").addEventListener("click", () => saveReview(false));
@@ -3082,8 +3745,8 @@ function setStatus(status) {
   updateSummary();
   if (!busy) { $("bar").style.width = "0"; $("pct").textContent = ""; }
   if (!busy) $("live-head").classList.add("idle");
-  if (status === "done") { paintSteps(STEPS.length); $("stage-label").textContent = "Terminado"; }
-  if (!busy && !$("review-panel").hidden) $("progress-panel").hidden = true;
+  if (status === "done") { paintSteps(STEPS_NOW.length); $("stage-label").textContent = "Terminado"; }
+  if (!busy && (!$("review-panel").hidden || !$("editor-panel").hidden)) $("progress-panel").hidden = true;
   refreshWork();
 }
 
@@ -3392,8 +4055,10 @@ events.onmessage = (message) => {
         $("log").textContent = "";
         event.log.forEach(appendLog);
       }
+      STEPS_NOW = event.elegir ? PREP_STEPS : STEPS;
       renderQueue(event.queue || []);
       if (event.plan) renderReview(event.plan);
+      if (event.fuente) openEditor(event.fuente);
       renderClips(event.clips || []);
       (event.notices || []).forEach(showNotice);
       (event.live || []).forEach(addLive);
@@ -3403,7 +4068,7 @@ events.onmessage = (message) => {
         $("output").placeholder = event.env.output_dir;
         $("output-hint").textContent = `Si lo dejas vacío se usa ${event.env.output_dir}. Cada ejecución crea su propia subcarpeta.`;
       }
-      if (event.status === "running" || !$("review-panel").hidden) go("trabajo");
+      if (event.status === "running" || !$("review-panel").hidden || event.fuente) go("trabajo");
       refreshWork();
       if (event.env && event.env.font_ok === false) {
         showBanner($("banner"), `Falta la fuente «${escapeHtml(event.env.font)}»`,
@@ -3433,6 +4098,7 @@ events.onmessage = (message) => {
         $("log").textContent = "";
         clearLive();
         $("progress-panel").hidden = false;
+        STEPS_NOW = event.elegir ? PREP_STEPS : STEPS;
         paintSteps(0);
         refreshWork();
       }
@@ -3467,6 +4133,11 @@ events.onmessage = (message) => {
       renderReview({ ruta: event.ruta, clips: event.clips || [] });
       $("stage-label").textContent = "Momentos listos para revisar";
       refreshWork();
+      go("trabajo");
+      break;
+    case "fuente":
+      openEditor(event);
+      $("stage-label").textContent = "Pódcast listo: elige los trozos";
       go("trabajo");
       break;
     case "clip_done":   noteResult(event); loadLibrarySoon(); break;

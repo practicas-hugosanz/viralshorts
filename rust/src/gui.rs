@@ -270,7 +270,11 @@ pub fn build_command(form: &Value) -> Vec<String> {
         args.extend(["--set".to_string(), format!("{setting}={}", value_text(&value))]);
     }
 
-    if truthy(&form["plan_out"]) {
+    if truthy(&form["prepare"]) {
+        args.push("--prepare".into());
+    } else if let Some(moments) = moments_arg(&form["moments"]) {
+        args.extend(["--moments".into(), moments]);
+    } else if truthy(&form["plan_out"]) {
         args.extend(["--plan-out".into(), text("plan_out")]);
         if truthy(&form["propose"]) {
             if let Some(n) = form_number(form, "propose") {
@@ -281,6 +285,19 @@ pub fn build_command(form: &Value) -> Vec<String> {
         args.push("--dry-run".into());
     }
     args
+}
+
+/// Los trozos elegidos a mano (`[[inicio, fin], ...]`) como los pide
+/// `--moments`. Los que no tienen sentido se quedan fuera.
+pub fn moments_arg(value: &Value) -> Option<String> {
+    let parts: Vec<String> = value
+        .as_array()?
+        .iter()
+        .filter_map(|pair| Some((pair.get(0)?.as_f64()?, pair.get(1)?.as_f64()?)))
+        .filter(|(start, end)| start.is_finite() && end.is_finite() && *start >= 0.0 && end - start >= 1.0)
+        .map(|(start, end)| format!("{start:.2}-{end:.2}"))
+        .collect();
+    (!parts.is_empty()).then(|| parts.join(","))
 }
 
 /// Montar los clips marcados de un plan ya revisado.
@@ -389,6 +406,10 @@ struct State {
     base_dir: PathBuf,
     plan_path: Option<PathBuf>,
     plan_clips: Vec<Value>,
+    /// Podcast preparado para elegir los trozos a mano (el evento "fuente").
+    source: Option<Value>,
+    /// El trabajo en marcha solo prepara un podcast para elegir a mano.
+    preparing: bool,
     pending: Vec<Value>,
     killer: Option<Box<dyn Fn() + Send + Sync>>,
 }
@@ -444,6 +465,8 @@ impl Job {
             "live": state.live,
             "output_dir": state.output_dir.to_string_lossy(),
             "plan": plan_summary(&state),
+            "fuente": state.source,
+            "elegir": state.preparing,
             "queue": queue_summary(&state),
             "env": environment(&self.root),
         })
@@ -471,6 +494,16 @@ impl Job {
 
     pub fn plan_path(&self) -> Option<PathBuf> {
         self.lock().plan_path.clone()
+    }
+
+    /// El podcast preparado para elegir a mano, si lo hay.
+    pub fn source(&self) -> Option<Value> {
+        self.lock().source.clone()
+    }
+
+    /// Cierra el editor de trozos: el podcast deja de ofrecerse.
+    pub fn close_source(&self) {
+        self.lock().source = None;
     }
 
     pub fn plan_summary(&self) -> Option<Value> {
@@ -583,11 +616,17 @@ impl Job {
             // pantalla tienen que ser los de esta ejecucion.
             state.plan_path = form["plan_out"].as_str().filter(|p| !p.is_empty()).map(PathBuf::from);
             state.plan_clips.clear();
+            // Montar los trozos elegidos cierra el editor; preparar otro
+            // podcast lo sustituye cuando llega su "fuente".
+            if form["moments"].is_array() || truthy(&form["prepare"]) {
+                state.source = None;
+            }
             build_command(&form)
         };
 
+        state.preparing = truthy(&form["prepare"]) && !truthy(&form["from_plan"]);
         let queue = queue_summary(state);
-        self.publish(json!({"type": "job", "status": "running", "queue": queue}));
+        self.publish(json!({"type": "job", "status": "running", "queue": queue, "elegir": state.preparing}));
         self.push_log(state, format!("$ {}", args.join(" ")));
 
         match (self.spawner)(&args, &self.root) {
@@ -688,6 +727,7 @@ impl Job {
                     state.plan_path = event["ruta"].as_str().map(PathBuf::from);
                     state.plan_clips = event["clips"].as_array().cloned().unwrap_or_default();
                 }
+                "fuente" => state.source = Some(event.clone()),
                 _ => {}
             }
         }
@@ -716,6 +756,8 @@ fn empty_state() -> State {
         base_dir: PathBuf::from("output"),
         plan_path: None,
         plan_clips: Vec::new(),
+        source: None,
+        preparing: false,
         pending: Vec::new(),
         killer: None,
     }
@@ -737,6 +779,8 @@ fn queue_summary(state: &State) -> Value {
                     "podcast": item["podcast"].as_str().unwrap_or(""),
                     "clips": item["clips"].as_i64().unwrap_or(0),
                     "revisar": truthy(&item["review"]),
+                    "elegir": truthy(&item["prepare"]),
+                    "trozos": item["moments"].as_array().map_or(0, Vec::len),
                 })
             })
             .collect(),
@@ -1177,6 +1221,8 @@ fn handle_get(app: &Arc<App>, request: &Request, mut stream: TcpStream) {
         "/api/state" => respond_json(&mut stream, 200, &app.job.snapshot()),
         "/api/events" => serve_events(app, stream),
         "/api/video" => serve_file(app, request.query.get("f").map_or("", String::as_str), request, &mut stream),
+        "/api/source" => serve_source(app, request, &mut stream),
+        "/api/source/info" => source_info(app, &mut stream),
         "/api/existing" => respond_json(&mut stream, 200, &json!({"results": library::scan_library(&app.job.base_dir())})),
         "/api/profiles" => respond_json(&mut stream, 200, &json!({"profiles": library::load_profiles(&app.root)})),
         "/api/frame" => serve_frame(request.query.get("src").map_or("", String::as_str), &mut stream),
@@ -1288,8 +1334,39 @@ fn serve_file(app: &Arc<App>, name: &str, request: &Request, stream: &mut TcpStr
     if !canonical.starts_with(&base) {
         return respond_error(stream, 403, "prohibido");
     }
-    let Ok(mut file) = std::fs::File::open(&canonical) else { return respond_error(stream, 404, "no encontrado") };
+    stream_file(&canonical, request, stream);
+}
+
+/// El podcast preparado para elegir los trozos a mano. La ruta sale del
+/// estado del servidor, nunca de la peticion.
+fn serve_source(app: &Arc<App>, request: &Request, stream: &mut TcpStream) {
+    let path = app.job.source().and_then(|s| s["ruta"].as_str().map(PathBuf::from));
+    match path.filter(|p| p.is_file()) {
+        Some(path) => stream_file(&path, request, stream),
+        None => respond_error(stream, 404, "no hay ningun podcast preparado"),
+    }
+}
+
+/// Lo que pinta la linea de tiempo del editor (lo mas visto y el volumen).
+fn source_info(app: &Arc<App>, stream: &mut TcpStream) {
+    let data = app
+        .job
+        .source()
+        .and_then(|s| s["datos"].as_str().map(PathBuf::from))
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok());
+    match data {
+        Some(data) => respond_json(stream, 200, &data),
+        None => respond_error(stream, 404, "no hay ningun podcast preparado"),
+    }
+}
+
+/// Manda un fichero con soporte de Range: sin el, el navegador no puede
+/// saltar por la barra de tiempo del video.
+fn stream_file(path: &Path, request: &Request, stream: &mut TcpStream) {
+    let Ok(mut file) = std::fs::File::open(path) else { return respond_error(stream, 404, "no encontrado") };
     let size = file.metadata().map_or(0, |m| m.len());
+    let name = path.to_string_lossy().to_lowercase();
     let mime = match name.rsplit('.').next().unwrap_or("") {
         "jpg" => "image/jpeg",
         "webm" => "video/webm",
@@ -1443,6 +1520,10 @@ fn handle_post(app: &Arc<App>, request: &Request, stream: &mut TcpStream) {
             (200, json!({"ok": true}))
         }
         "/api/plan" => (200, plan_state(app)),
+        "/api/source/close" => {
+            app.job.close_source();
+            (200, json!({"ok": true}))
+        }
         "/api/plan/save" => save_plan(app, &body),
         "/api/plan/render" => render_plan(app, &body),
         "/api/title" => (200, probe_title(body["url"].as_str().unwrap_or(""), &app.titles)),
@@ -1483,9 +1564,13 @@ fn run_form(app: &Arc<App>, mut form: Value) -> (u16, Value) {
     if !truthy(&form["podcast"]) {
         return (400, json!({"ok": false, "error": "Falta el pódcast: pega su enlace o elige un archivo."}));
     }
-    // El fondo solo hace falta si la composicion lo usa.
+    if form.get("moments").is_some_and(|m| !m.is_null()) && moments_arg(&form["moments"]).is_none() {
+        return (400, json!({"ok": false, "error": "No has elegido ningún trozo: marca el principio y el final y pulsa «Seleccionar este trozo»."}));
+    }
+    // El fondo solo hace falta si la composicion lo usa, y para preparar el
+    // podcast (elegir a mano) todavia no.
     let layout = form["style"]["layout_mode"].as_str().unwrap_or("stack");
-    if !truthy(&form["background"]) && !matches!(layout, "full" | "duo") {
+    if !truthy(&form["background"]) && !matches!(layout, "full" | "duo") && !truthy(&form["prepare"]) {
         return (400, json!({"ok": false, "error": "Falta el vídeo de fondo: pega un enlace o elige un archivo, o cambia la composición a «Solo el pódcast»."}));
     }
     if truthy(&form["review"]) {
@@ -2243,6 +2328,86 @@ la guapa=La Guapa"}));
         for esperado in ["job", "stage", "clips", "salida", "aviso", "clip_done", "plan", "log"] {
             assert!(tipos.contains(&esperado.to_string()), "falta {esperado}: {tipos:?}");
         }
+    }
+
+    // -- elegir los trozos a mano --------------------------------------------------------------
+
+    #[test]
+    fn los_trozos_elegidos_pasan_como_moments_y_los_raros_se_quedan_fuera() {
+        assert_eq!(moments_arg(&json!([[12, 40], [130.5, 170.25]])).as_deref(), Some("12.00-40.00,130.50-170.25"));
+        assert_eq!(moments_arg(&json!([[40, 12], [5, 5.5], [-3, 10], ["a", 9], [1]])), None, "al reves, cortos, negativos o rotos no");
+        assert_eq!(moments_arg(&json!([])), None);
+        assert_eq!(moments_arg(&Value::Null), None);
+    }
+
+    #[test]
+    fn preparar_y_montar_trozos_lanzan_el_pipeline_con_sus_argumentos() {
+        use clap::Parser;
+        #[derive(Parser)]
+        struct Cli {
+            #[command(flatten)]
+            args: pipeline::Args,
+        }
+        let parsea = |form: Value| Cli::try_parse_from(std::iter::once("viralshorts".to_string()).chain(build_command(&form))).unwrap().args;
+        let preparar = parsea(json!({"podcast": "p", "background": "", "prepare": true, "plan_out": "x.json"}));
+        assert!(preparar.prepare && preparar.plan_out.is_none() && preparar.moments.is_none());
+        let montar = parsea(json!({"podcast": "p", "background": "b", "moments": [[1, 31]]}));
+        assert_eq!((montar.prepare, montar.moments.as_deref()), (false, Some("1.00-31.00")));
+    }
+
+    #[test]
+    fn preparar_no_pide_fondo_y_unos_trozos_vacios_se_rechazan() {
+        let (app, _puerto, b) = app_de_prueba();
+        let (codigo, respuesta) = run_form(&app, json!({"podcast": "p", "background": "", "prepare": true}));
+        assert_eq!(codigo, 200, "{respuesta}");
+        assert!(b.lanzados.lock().unwrap()[0].contains(&"--prepare".to_string()));
+        let (codigo, respuesta) = run_form(&app, json!({"podcast": "p", "background": "b", "moments": []}));
+        assert_eq!(codigo, 400);
+        assert!(respuesta["error"].as_str().unwrap().contains("trozo"));
+        b.job.stop();
+    }
+
+    #[test]
+    fn el_podcast_preparado_se_sirve_al_editor_y_montar_lo_cierra() {
+        let dir = tempfile::tempdir().unwrap();
+        let video = dir.path().join("podcast.mp4");
+        std::fs::write(&video, b"0123456789").unwrap();
+        let datos = dir.path().join("editor.json");
+        std::fs::write(&datos, json!({"duracion": 10.0, "onda": [1, 99], "paso": 0.25, "visto": []}).to_string()).unwrap();
+        let (_app, puerto, b) = app_de_prueba();
+        let t = Some("token-de-prueba");
+        assert_eq!(pedir(puerto, "GET", "/api/source", "127.0.0.1", t, "", &[]).0, 404, "sin preparar no hay nada");
+
+        b.job.handle_event(&json!({"type": "fuente", "ruta": video.to_string_lossy(), "datos": datos.to_string_lossy(), "origen": "p", "duracion": 10.0}).to_string());
+        assert_eq!(b.job.snapshot()["fuente"]["origen"], "p");
+        let (codigo, cabeceras, cuerpo) = pedir(puerto, "GET", "/api/source?t=token-de-prueba", "127.0.0.1", None, "", &[("Range", "bytes=2-5")]);
+        assert_eq!((codigo, cuerpo.as_str()), (206, "2345"));
+        assert!(cabeceras.contains("bytes 2-5/10"), "{cabeceras}");
+        let (codigo, _, info) = pedir(puerto, "GET", "/api/source/info", "127.0.0.1", t, "", &[]);
+        assert_eq!(codigo, 200);
+        assert!(info.contains("\"onda\":[1,99]"), "{info}");
+        assert_eq!(pedir(puerto, "GET", "/api/source", "127.0.0.1", None, "", &[]).0, 403, "sin token no");
+
+        // Montar los trozos cierra el editor: el podcast deja de ofrecerse.
+        b.job.enqueue(json!({"podcast": "p", "background": "b", "moments": [[1, 5]]}));
+        assert!(b.job.source().is_none());
+        assert_eq!(pedir(puerto, "GET", "/api/source", "127.0.0.1", t, "", &[]).0, 404);
+        b.job.stop();
+    }
+
+    #[test]
+    fn cerrar_el_editor_olvida_el_podcast_y_la_cola_dice_que_es_cada_cosa() {
+        let b = banco(vec![], 0, false);
+        b.job.handle_event(&json!({"type": "fuente", "ruta": "x.mp4"}).to_string());
+        b.job.close_source();
+        assert!(b.job.snapshot()["fuente"].is_null());
+        b.job.enqueue(json!({"podcast": "p0", "background": "b", "prepare": true}));
+        assert_eq!(b.job.snapshot()["elegir"], true, "lo que corre solo prepara");
+        b.job.enqueue(json!({"podcast": "p1", "background": "", "prepare": true}));
+        b.job.enqueue(json!({"podcast": "p2", "background": "b", "moments": [[1, 5], [9, 20]]}));
+        let cola = b.job.snapshot()["queue"].clone();
+        assert_eq!((cola[0]["elegir"].clone(), cola[1]["trozos"].clone()), (json!(true), json!(2)));
+        b.job.stop();
     }
 
     #[test]

@@ -9,7 +9,7 @@ use std::path::Path;
 use crate::ffmpeg::{self, FfmpegError};
 
 const SAMPLE_RATE: u32 = 16_000;
-const HOP_SECONDS: f64 = 0.25;
+pub const HOP_SECONDS: f64 = 0.25;
 
 /// Nivel RMS normalizado (0..1) muestreado cada `hop` segundos.
 #[derive(Debug, Clone)]

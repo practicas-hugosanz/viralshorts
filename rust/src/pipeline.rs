@@ -15,6 +15,13 @@
 //! viralshorts --from-plan work/plans/plan.json --only 1,4,7
 //! ```
 //!
+//! Elegir los trozos a mano (la interfaz lo hace con su linea de tiempo):
+//!
+//! ```text
+//! viralshorts --podcast <URL> --prepare
+//! viralshorts --podcast <URL> --background <URL> --moments 754-790,2462-2493
+//! ```
+//!
 //! Todo lo ajustable esta en config.yaml. Los argumentos de linea de comandos
 //! tienen prioridad, y `--set clave=valor` llega a cualquier ajuste.
 
@@ -127,6 +134,12 @@ pub struct Args {
     /// Con --from-plan: renderizar solo estos numeros de clip.
     #[arg(long, value_name = "N,N", help_heading = "Montaje en dos tiempos")]
     pub only: Option<String>,
+    /// Solo descargar el podcast y preparar su linea de tiempo para elegir a mano.
+    #[arg(long, help_heading = "Elegir a mano")]
+    pub prepare: bool,
+    /// Montar exactamente estos trozos, en segundos: 754-790,2462-2493.
+    #[arg(long, value_name = "INICIO-FIN,...", help_heading = "Elegir a mano")]
+    pub moments: Option<String>,
     #[arg(short, long, global = true)]
     pub verbose: bool,
 }
@@ -256,9 +269,17 @@ pub fn run(args: &Args) -> i32 {
         return 2;
     }
 
-    let code = match &args.from_plan {
-        Some(path) => run_from_plan(args, path, &mut cfg, &work_dir, started),
-        None => run_new(args, &cfg, &work_dir, &output_dir, started),
+    let code = match (&args.from_plan, &args.moments) {
+        (Some(path), _) => run_from_plan(args, path, &mut cfg, &work_dir, started),
+        _ if args.prepare => run_prepare(args, &cfg, &work_dir),
+        (None, Some(moments)) => match parse_moments(moments) {
+            Ok(moments) => run_manual(args, &cfg, &work_dir, &output_dir, &moments, started),
+            Err(error) => {
+                log::error!("{error}");
+                2
+            }
+        },
+        (None, None) => run_new(args, &cfg, &work_dir, &output_dir, started),
     };
     lock.release();
     code
@@ -364,19 +385,7 @@ fn run_new(args: &Args, cfg: &Config, work_dir: &Path, output_dir: &Path, starte
     };
 
     report_selection(&selection.clips);
-    progress::result(
-        "clips",
-        json!({"clips": selection.clips.iter().enumerate().map(|(i, c)| json!({
-            "n": i + 1,
-            "inicio": round(c.start, 2),
-            "fin": round(c.end, 2),
-            "marca": hms(c.start),
-            "duracion": round(c.duration(), 1),
-            "puntuacion": round(c.score, 3),
-            "motivo": c.reason,
-            "texto": c.text.chars().take(400).collect::<String>(),
-        })).collect::<Vec<_>>()}),
-    );
+    clips_event(&selection.clips);
 
     if args.dry_run && !making_plan {
         log::info!("--dry-run: no se renderiza nada.");
@@ -430,6 +439,23 @@ fn run_new(args: &Args, cfg: &Config, work_dir: &Path, output_dir: &Path, starte
     report_results(&results, selection.clips.len(), started.elapsed().as_secs_f64())
 }
 
+/// Los clips elegidos, para que la interfaz los ensene antes de montarlos.
+fn clips_event(clips: &[Window]) {
+    progress::result(
+        "clips",
+        json!({"clips": clips.iter().enumerate().map(|(i, c)| json!({
+            "n": i + 1,
+            "inicio": round(c.start, 2),
+            "fin": round(c.end, 2),
+            "marca": hms(c.start),
+            "duracion": round(c.duration(), 1),
+            "puntuacion": round(c.score, 3),
+            "motivo": c.reason,
+            "texto": c.text.chars().take(400).collect::<String>(),
+        })).collect::<Vec<_>>()}),
+    );
+}
+
 /// Carpeta donde caen los shorts de ESTA ejecucion, y se la dice a la interfaz.
 pub fn run_output_dir(cfg: &Config, base: &Path, title: &str, tag: &str) -> PathBuf {
     let folder = if cfg.output.run_subfolder { exports::run_folder(base, title, tag) } else { base.to_path_buf() };
@@ -453,19 +479,7 @@ pub fn proposed_count(args: &Args, cfg: &Config) -> usize {
 fn select_clips(args: &Args, cfg: &Config, work_dir: &Path, limit: Option<usize>) -> Result<Selection, String> {
     progress::stage("descarga", "Descargando los videos");
     let podcast = download::fetch(args.podcast.as_deref().unwrap_or(""), &work_dir.join("podcast"), &cfg.download).map_err(|e| e.to_string())?;
-    let wanted = split_backgrounds(args.background.as_deref().unwrap_or(""));
-    // "Solo el podcast" y "Dos personas" no usan fondo: no hace falta pedirlo.
-    let background = match wanted.first() {
-        Some(first) => download::fetch(first, &work_dir.join("background"), &cfg.download).map_err(|e| e.to_string())?,
-        None if !layout_needs_background(cfg) => podcast.clone(),
-        None => return Err("Falta el video de fondo. Pega un enlace en «Vídeo de fondo», o elige la composición «Solo el pódcast».".into()),
-    };
-    let extra_backgrounds = wanted
-        .iter()
-        .enumerate()
-        .skip(1)
-        .map(|(i, url)| download::fetch(url, &work_dir.join(format!("background_{}", i + 1)), &cfg.download).map_err(|e| e.to_string()))
-        .collect::<Result<Vec<_>, String>>()?;
+    let (background, extra_backgrounds) = fetch_backgrounds(args, cfg, work_dir, &podcast)?;
 
     // El orden importa: la energia y el heatmap no necesitan texto y se calculan
     // en segundos, asi que sirven para decidir QUE hay que transcribir.
@@ -515,6 +529,24 @@ fn select_clips(args: &Args, cfg: &Config, work_dir: &Path, limit: Option<usize>
     refine_clips(cfg, &podcast.path, podcast.duration, &mut picked);
     translate_clips(cfg, &podcast.path, podcast.duration, &mut picked, &mut judge);
     Ok(Selection { clips: picked, podcast, background, extra_backgrounds, judge, energy })
+}
+
+/// El video de fondo y, si se pidieron varios, los demas.
+fn fetch_backgrounds(args: &Args, cfg: &Config, work_dir: &Path, podcast: &SourceVideo) -> Result<(SourceVideo, Vec<SourceVideo>), String> {
+    let wanted = split_backgrounds(args.background.as_deref().unwrap_or(""));
+    // "Solo el podcast" y "Dos personas" no usan fondo: no hace falta pedirlo.
+    let background = match wanted.first() {
+        Some(first) => download::fetch(first, &work_dir.join("background"), &cfg.download).map_err(|e| e.to_string())?,
+        None if !layout_needs_background(cfg) => podcast.clone(),
+        None => return Err("Falta el video de fondo. Pega un enlace en «Vídeo de fondo», o elige la composición «Solo el pódcast».".into()),
+    };
+    let extra_backgrounds = wanted
+        .iter()
+        .enumerate()
+        .skip(1)
+        .map(|(i, url)| download::fetch(url, &work_dir.join(format!("background_{}", i + 1)), &cfg.download).map_err(|e| e.to_string()))
+        .collect::<Result<Vec<_>, String>>()?;
+    Ok((background, extra_backgrounds))
 }
 
 /// Vuelve a transcribir SOLO el trozo de cada clip elegido con un modelo mejor.
@@ -679,6 +711,159 @@ fn translate_clips(cfg: &Config, podcast: &Path, duration: f64, clips: &mut [Win
 // ----------------------------------------------------------------------------
 // Render a partir de un plan revisado
 // ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// Elegir a mano: preparar el podcast y montar los trozos marcados
+// ----------------------------------------------------------------------------
+
+/// Primer paso de elegir a mano: deja el podcast descargado y escribe lo que
+/// la linea de tiempo de la interfaz necesita (lo mas visto y el volumen).
+fn run_prepare(args: &Args, cfg: &Config, work_dir: &Path) -> i32 {
+    progress::stage("descarga", "Descargando el pódcast");
+    let origin = args.podcast.as_deref().unwrap_or("");
+    let podcast = match download::fetch(origin, &work_dir.join("podcast"), &cfg.download) {
+        Ok(podcast) => podcast,
+        Err(error) => {
+            log::error!("No se pudo descargar el podcast: {error}");
+            return 1;
+        }
+    };
+
+    // El volumen ayuda a cortar en una pausa; si no se puede sacar, la linea
+    // de tiempo sale sin onda y se elige igual.
+    progress::stage("analisis", "Preparando la línea de tiempo");
+    let waves = match audio_energy::analyse(&podcast.path, podcast.duration) {
+        Ok(track) => track.level.iter().map(|level| (level * 99.0).round() as u8).collect(),
+        Err(error) => {
+            log::warn!("Sin onda de volumen en la linea de tiempo ({error}).");
+            Vec::new()
+        }
+    };
+    let path = std::path::absolute(&podcast.path).unwrap_or(podcast.path.clone());
+    let data = timeline_data(&podcast, origin, &path, &waves, audio_energy::HOP_SECONDS);
+    let data_path = std::path::absolute(work_dir.join("editor.json")).unwrap_or(work_dir.join("editor.json"));
+    if let Err(error) = std::fs::write(&data_path, data.to_string()) {
+        log::error!("No se pudo guardar {}: {error}", data_path.display());
+        return 1;
+    }
+    progress::result(
+        "fuente",
+        json!({
+            "ruta": path.to_string_lossy(),
+            "titulo": podcast.title,
+            "duracion": round(podcast.duration, 2),
+            "origen": origin,
+            "datos": data_path.to_string_lossy(),
+        }),
+    );
+    log::info!("Podcast listo para elegir los trozos a mano ({}).", hms(podcast.duration));
+    0
+}
+
+/// Lo que pinta la linea de tiempo: lo mas visto de YouTube (si lo hay) y el
+/// volumen, de 0 a 99, una muestra cada `hop` segundos.
+pub fn timeline_data(podcast: &SourceVideo, origin: &str, path: &Path, waves: &[u8], hop: f64) -> Value {
+    json!({
+        "ruta": path.to_string_lossy(),
+        "titulo": podcast.title,
+        "duracion": round(podcast.duration, 2),
+        "origen": origin,
+        "visto": podcast.heatmap.iter().map(|h| json!([round(h.start, 2), round(h.end, 2), round(h.value, 3)])).collect::<Vec<_>>(),
+        "paso": hop,
+        "onda": waves,
+    })
+}
+
+/// "754-790,2462.5-2493" en pares (inicio, fin), en el orden en que vienen.
+pub fn parse_moments(text: &str) -> Result<Vec<(f64, f64)>, String> {
+    let moments: Vec<(f64, f64)> = text
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let (start, end) = part.split_once('-').ok_or_else(|| format!("Trozo mal escrito: '{part}' (se espera INICIO-FIN en segundos)."))?;
+            let parse = |value: &str| value.trim().parse::<f64>().ok().filter(|v| v.is_finite() && *v >= 0.0);
+            match (parse(start), parse(end)) {
+                (Some(start), Some(end)) if end - start >= 1.0 => Ok((start, end)),
+                (Some(_), Some(_)) => Err(format!("El trozo '{part}' dura menos de un segundo.")),
+                _ => Err(format!("Trozo mal escrito: '{part}' (se espera INICIO-FIN en segundos).")),
+            }
+        })
+        .collect::<Result<_, _>>()?;
+    if moments.is_empty() {
+        return Err("--moments no trae ningun trozo.".into());
+    }
+    Ok(moments)
+}
+
+/// Monta exactamente los trozos elegidos a mano: sin buscar ni puntuar nada,
+/// solo transcribe esos segundos y los monta tal cual.
+fn run_manual(args: &Args, cfg: &Config, work_dir: &Path, output_dir: &Path, moments: &[(f64, f64)], started: Instant) -> i32 {
+    check_fonts(cfg);
+    let mut judge = ClipJudge::new(cfg.llm.clone(), Some(Path::new(&cfg.paths.cache_dir)));
+    let chosen = (|| -> Result<(Vec<Window>, SourceVideo, SourceVideo, Vec<SourceVideo>), String> {
+        progress::stage("descarga", "Descargando los videos");
+        let podcast = download::fetch(args.podcast.as_deref().unwrap_or(""), &work_dir.join("podcast"), &cfg.download).map_err(|e| e.to_string())?;
+        let (background, extra_backgrounds) = fetch_backgrounds(args, cfg, work_dir, &podcast)?;
+        let mut clips = manual_windows(moments, podcast.duration);
+        if clips.is_empty() {
+            return Err("Los trozos elegidos se salen del vídeo.".into());
+        }
+
+        progress::stage("transcripcion", "Transcribiendo los trozos elegidos");
+        let engine = WhisperCpp::discover(&ffmpeg::project_root()).map_err(|e| e.to_string())?;
+        let mut transcriber = Transcriber::new(cfg.transcribe.clone(), &cfg.paths.cache_dir, Box::new(engine)).map_err(|e| e.to_string())?;
+        let regions: Vec<(f64, f64)> = clips.iter().map(|c| ((c.start - 1.0).max(0.0), (c.end + 1.0).min(podcast.duration))).collect();
+        let transcript = transcriber.transcribe_regions(&podcast.path, podcast.duration, &regions).map_err(|e| e.to_string())?;
+        // Un trozo sin voz (musica, un silencio) se monta igual, sin subtitulos.
+        let found_words = words_per_clip(&transcript, &clips, |_, _| true);
+        for (clip, found) in clips.iter_mut().zip(found_words) {
+            if let Some((words, text)) = found {
+                clip.words = words;
+                clip.text = text;
+            }
+        }
+        refine_clips(cfg, &podcast.path, podcast.duration, &mut clips);
+        translate_clips(cfg, &podcast.path, podcast.duration, &mut clips, &mut judge);
+        Ok((clips, podcast, background, extra_backgrounds))
+    })();
+    let (clips, podcast, background, extra_backgrounds) = match chosen {
+        Ok(chosen) => chosen,
+        Err(error) => {
+            log::error!("No se pudieron preparar los trozos elegidos: {error}");
+            return 1;
+        }
+    };
+
+    report_selection(&clips);
+    clips_event(&clips);
+    let podcast = Source::from(&podcast);
+    progress::stage("metadatos", "Escribiendo titulos y hashtags");
+    let written = metadata_for(&mut judge, &clips, &podcast.title, cfg);
+    let output_dir = run_output_dir(cfg, output_dir, &podcast.title, &chrono::Local::now().format("%Y%m%d_%H%M%S").to_string());
+    let numbers: Vec<usize> = (1..=clips.len()).collect();
+    let backgrounds: Vec<Source> = std::iter::once(Source::from(&background)).chain(extra_backgrounds.iter().map(Source::from)).collect();
+    let results = render_all(&clips, &written, &podcast, &backgrounds, cfg, work_dir, &output_dir, &numbers, None);
+
+    finish(cfg, &output_dir);
+    free_source(cfg, work_dir, &podcast, &results);
+    report_results(&results, clips.len(), started.elapsed().as_secs_f64())
+}
+
+/// Los trozos como clips, recortados a lo que dura el video.
+pub fn manual_windows(moments: &[(f64, f64)], duration: f64) -> Vec<Window> {
+    moments
+        .iter()
+        .map(|&(start, end)| (start.max(0.0), if duration > 0.0 { end.min(duration) } else { end }))
+        .filter(|(start, end)| end - start >= 1.0)
+        .map(|(start, end)| {
+            let mut clip = Window::new(start, end, Vec::new(), String::new());
+            clip.reason = "Elegido a mano".into();
+            clip.score = 1.0;
+            clip
+        })
+        .collect()
+}
 
 fn run_from_plan(args: &Args, plan_path: &Path, cfg: &mut Config, work_dir: &Path, started: Instant) -> i32 {
     let saved = match plan::load(plan_path) {
@@ -1269,6 +1454,44 @@ mod tests {
             args: Args,
         }
         Cli::parse_from(std::iter::once("viralshorts").chain(lista.iter().copied())).args
+    }
+
+    // -- elegir a mano --------------------------------------------------------------
+
+    #[test]
+    fn los_trozos_se_leen_en_segundos_y_los_mal_escritos_se_explican() {
+        assert_eq!(parse_moments("754-790, 2462.5-2493").unwrap(), vec![(754.0, 790.0), (2462.5, 2493.0)]);
+        assert_eq!(parse_moments("10-20,").unwrap(), vec![(10.0, 20.0)]);
+        assert!(parse_moments("").is_err());
+        assert!(parse_moments("20-10").unwrap_err().contains("menos de un segundo"));
+        assert!(parse_moments("1:00-2:00").unwrap_err().contains("mal escrito"));
+        assert!(parse_moments("5").unwrap_err().contains("mal escrito"));
+        let leidos = args(&["--podcast", "p", "--moments", "1-31"]);
+        assert_eq!((leidos.moments.as_deref(), leidos.prepare), (Some("1-31"), false));
+        assert!(args(&["--podcast", "p", "--prepare"]).prepare);
+    }
+
+    #[test]
+    fn los_trozos_se_recortan_a_lo_que_dura_el_video() {
+        let clips = manual_windows(&[(10.0, 40.0), (290.0, 330.0), (299.5, 320.0)], 300.0);
+        assert_eq!(clips.iter().map(|c| (c.start, c.end)).collect::<Vec<_>>(), vec![(10.0, 40.0), (290.0, 300.0)], "el que queda en medio segundo fuera");
+        assert!(clips.iter().all(|c| c.reason == "Elegido a mano" && c.words.is_empty()));
+    }
+
+    #[test]
+    fn la_linea_de_tiempo_lleva_lo_mas_visto_y_la_onda() {
+        let video = SourceVideo {
+            path: PathBuf::from("w/podcast.mp4"),
+            title: "Episodio".into(),
+            duration: 3600.0,
+            heatmap: vec![download::HeatPoint { start: 0.0, end: 36.0, value: 0.5 }],
+            info: Value::Null,
+        };
+        let datos = timeline_data(&video, "https://youtu.be/x", Path::new("C:/w/podcast.mp4"), &[0, 50, 99], 0.25);
+        assert_eq!((datos["titulo"].clone(), datos["duracion"].clone(), datos["paso"].clone()), (json!("Episodio"), json!(3600.0), json!(0.25)));
+        assert_eq!(datos["visto"], json!([[0.0, 36.0, 0.5]]));
+        assert_eq!(datos["onda"], json!([0, 50, 99]));
+        assert_eq!(datos["origen"], "https://youtu.be/x");
     }
 
     // -- argumentos y ajustes ------------------------------------------------------

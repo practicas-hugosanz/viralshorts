@@ -32,7 +32,7 @@
 **Elegir bien**
 - Preselección por *most replayed* de YouTube y energía del audio: solo se transcribe lo que importa, así un pódcast de 3 horas no tarda 3 horas.
 - Empieza donde empieza el tema, no a media frase.
-- Modo *revisar antes de montar*: ves todos los candidatos y marcas cuáles se montan.
+- **Elegir yo los momentos**: el pódcast entero en una línea de tiempo, como en un editor de vídeo; marcas dónde empieza y acaba cada trozo, lo seleccionas y cada trozo es un short.
 - Funciona **sin cuenta y sin IA de pago**; con una clave de Claude los textos están redactados en vez de extraídos.
 
 **Montar bien**
@@ -96,7 +96,7 @@
 2. Elige cuántos shorts quieres, cuánto duran y cuánto cuidado con el texto (*Equilibrado* va bien para empezar). Si quieres, cambia el aspecto en la pestaña **Aspecto**.
 3. Pulsa **Generar** (el botón dice cuántos: «Generar 3 shorts») y mira cómo avanza en **En curso**. Cuando termina, están en **Mis shorts**.
 
-Si prefieres decidir tú qué momentos se montan, usa **Elegir yo los momentos**.
+Si prefieres decidir tú qué trozos se montan, usa **Elegir yo los momentos**: descarga el pódcast y te lo enseña con su línea de tiempo (lo más visto en YouTube arriba, la onda del sonido abajo). Marca el inicio y el final con los botones, con las teclas I y O o arrastrando sobre la onda, pulsa **Seleccionar este trozo** y, cuando tengas los que quieras, **Montar**.
 
 ## ¿Hace falta Claude?
 
@@ -115,6 +115,7 @@ viralshorts --podcast <URL> --background <URL_gameplay>               # lo norma
 viralshorts --podcast <URL> --background <URL> --dry-run              # ver qué elegiría, sin montar
 viralshorts --podcast <URL> --background <URL> --plan-out plan.json   # elegir ahora y revisar
 viralshorts --from-plan plan.json --only 1,4                          # montar solo lo que valga
+viralshorts --podcast <URL> --background <URL> --moments 754-790,2462-2493   # montar justo estos trozos (en segundos)
 viralshorts doctor                                                    # qué herramientas ve
 ```
 
@@ -124,6 +125,18 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
+
+### 1.6.0 (2026-10-27)
+
+- «Elegir yo los momentos» funciona ahora como un editor de vídeo: descarga el
+  pódcast y lo enseña entero con una línea de tiempo (lo más visto en YouTube
+  arriba y la onda del sonido abajo, con zoom de 30 s a 5 min). Marcas dónde
+  empieza y dónde acaba cada trozo (con los botones, con las teclas I y O o
+  arrastrando sobre la onda), lo seleccionas y, al montar, cada trozo es un
+  short tal cual lo elegiste.
+- Los trozos se pueden ver antes, cambiar o quitar, y se recuerdan aunque cierres
+  la ventana.
+- En la línea de comandos: `--prepare` y `--moments INICIO-FIN,...`.
 
 ### 1.5.3 (2026-10-25)
 
