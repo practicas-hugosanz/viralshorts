@@ -126,6 +126,15 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
 
+### 1.6.1 (2026-10-28)
+
+- Ajustes rehecho para que no sea un laberinto: en vez de once desplegables,
+  seis apartados con nombre claro (Cómo queda el short, Elegir los momentos,
+  Texto y subtítulos, YouTube, Archivos y velocidad, Aplicación), todo a la
+  vista, con un índice lateral que sigue por dónde vas y un buscador.
+- Cada ajuste dice para qué sirve en una línea, y los que ya se eligen en Crear
+  (duración, calidad del texto) lo indican.
+
 ### 1.6.0 (2026-10-27)
 
 - «Elegir yo los momentos» funciona ahora como un editor de vídeo: descarga el

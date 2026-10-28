@@ -685,6 +685,45 @@ body.modal-open .main { overflow: hidden; }
 .pod.has-img svg { display: none; }
 
 /* ---------------------------------------------------------------- adaptable */
+/* ------------------------------------------------------------- ajustes */
+.set-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 28px; align-items: start; }
+.set-nav { position: sticky; top: 0; display: flex; flex-direction: column; gap: 12px; }
+.set-nav input { border-radius: 99px; }
+.set-links { display: flex; flex-direction: column; gap: 2px; }
+.set-links button { border: 0; background: none; text-align: left; padding: 9px 14px; border-radius: 12px; font-weight: 700; color: var(--mute); }
+.set-links button:hover { background: var(--raise); color: var(--text); }
+.set-links button.on { background: var(--ink); color: var(--ink-text); }
+.set-links button[hidden] { display: none; }
+.set-main { display: flex; flex-direction: column; gap: 34px; min-width: 0; }
+.set-sec { display: flex; flex-direction: column; gap: 12px; scroll-margin-top: 8px; }
+.set-sec h2 { font: 800 20px var(--display); letter-spacing: -.01em; }
+.set-lead { color: var(--mute); max-width: 66ch; margin-top: -6px; }
+.set-card { border: 1px solid var(--line); border-radius: 18px; background: var(--surf); padding: 6px 20px; display: flex; flex-direction: column; }
+.set-card > .opt, .set-card > .set-row { border-top: 1px solid var(--line-soft); padding: 14px 0; }
+.set-card > :is(.opt, .set-row):first-child { border-top: 0; }
+.set-card > .set-sub + * { margin-top: 0; }
+.set-sub { display: flex; align-items: center; gap: 10px; font: 800 15.5px var(--display); padding: 14px 0 8px; }
+.set-text { color: var(--mute); max-width: 66ch; margin-bottom: 10px; }
+.set-card .yt-steps { margin: 0 0 12px; }
+.set-card .with-button + .hint, .set-card #ch-list, .set-card #yt-on { margin-bottom: 12px; }
+.set-card > .about { padding: 14px 0; }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.set-row.column { flex-direction: column; align-items: stretch; gap: 10px; }
+.set-row .opt-text { flex: 1; min-width: 0; cursor: default; }
+.set-ctl { flex: 0 0 300px; max-width: 100%; }
+.set-inline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--mute); font-weight: 700; }
+.set-inline input[type="number"] { width: 84px; text-align: center; }
+.set-none { color: var(--mute); padding: 18px 0; }
+mark.set-hit { background: var(--butter); color: inherit; border-radius: 4px; padding: 0 2px; }
+@media (max-width: 900px) {
+  .set-layout { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .set-nav { position: static; min-width: 0; }
+  .set-links { flex-direction: row; overflow-x: auto; padding-bottom: 2px; }
+  .set-links button { white-space: nowrap; border-radius: 99px; }
+  .set-row { flex-direction: column; align-items: stretch; gap: 10px; }
+  .set-ctl { flex-basis: auto; }
+}
+
 /* ------------------------------------------- elegir los trozos a mano */
 .editor { display: flex; flex-direction: column; gap: 14px; }
 .editor .card-title { margin-bottom: 4px; }
@@ -1402,238 +1441,246 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
         <header class="view-head">
           <div>
             <h1>Ajustes</h1>
-            <p>Lo que normalmente no hace falta tocar. Se guardan solos.</p>
+            <p>Lo normal es no tener que tocar nada. Los cambios se guardan solos.</p>
           </div>
         </header>
 
-        <div class="acc-list">
-          <details class="acc" name="ajustes">
-            <summary><b>Elegir los momentos</b><span class="sum">Claude, búsqueda rápida, dónde empezar</span></summary>
-            <div class="acc-body">
-            <div class="opts">
-              <label class="opt"><span class="opt-text"><b>Que Claude elija y titule</b><em>Lee la transcripción, escoge los momentos con más gancho y redacta título, descripción y hashtags. Necesita una clave de API de Anthropic. Apagado, los textos se extraen de las frases del propio invitado.</em></span><input type="checkbox" class="switch" id="llm" checked></label>
-              <label class="opt"><span class="opt-text"><b>Búsqueda rápida de momentos</b><em>Localiza primero las zonas calientes y solo transcribe esas. Sin esto, un pódcast de 3 h tarda casi 2 horas en vez de 10 minutos.</em></span><input type="checkbox" class="switch" id="prescan" checked></label>
-              <label class="opt"><span class="opt-text"><b>Empezar donde empieza el tema</b><em>Evita recortes que empiezan a media frase. Apagado, se elige solo por lo más rebobinado.</em></span><input type="checkbox" class="switch" id="context" checked></label>
+        <div class="set-layout">
+          <nav class="set-nav" aria-label="Apartados de Ajustes">
+            <input type="text" id="set-q" placeholder="Buscar un ajuste" aria-label="Buscar un ajuste" spellcheck="false" autocomplete="off">
+            <div class="set-links" id="set-links">
+              <button type="button" data-sec="set-montaje">Cómo queda el short</button>
+              <button type="button" data-sec="set-momentos">Elegir los momentos</button>
+              <button type="button" data-sec="set-texto">Texto y subtítulos</button>
+              <button type="button" data-sec="set-youtube">YouTube</button>
+              <button type="button" data-sec="set-archivos">Archivos y velocidad</button>
+              <button type="button" data-sec="set-app">Aplicación</button>
             </div>
-          </div>
-          </details>
+          </nav>
 
-          <details class="acc" name="ajustes">
-            <summary><b>Montaje</b><span class="sum">Seguir la cara, silencios, zoom, palabrotas</span></summary>
-            <div class="acc-body">
-            <div class="opts">
-              <label class="opt"><span class="opt-text"><b>Seguir la cara</b><em>El encuadre se mueve hacia quien habla en vez de recortar por el centro.</em></span><input type="checkbox" class="switch" id="reframe" checked></label>
-              <label class="opt"><span class="opt-text"><b>Quitar los silencios</b><em>Corta las pausas largas para que el clip vaya más rápido.</em></span><input type="checkbox" class="switch" id="jumpcuts" checked></label>
-              <label class="opt"><span class="opt-text"><b>Zoom lento</b><em>Un acercamiento suave y continuo para que el plano no se quede muerto.</em></span><input type="checkbox" class="switch" id="zoom" checked></label>
-              <label class="opt"><span class="opt-text"><b>Tarjeta de contexto al empezar</b><em>Durante los primeros 2,5 segundos aparece arriba el título del clip, para que quien llega de golpe entienda de qué se habla.</em></span><input type="checkbox" class="switch" id="title_card" checked></label>
-              <label class="opt"><span class="opt-text"><b>Tapar las palabrotas</b><em>En los subtítulos, «puta» sale como «p#ta». Se lee igual, pero deja de ser literal para los filtros de las plataformas. El audio no se toca.</em></span><input type="checkbox" class="switch" id="censor" checked></label>
-            </div>
-          </div>
-          </details>
+          <div class="set-main">
+            <p class="set-none" id="set-none" hidden></p>
 
-          <details class="acc" name="ajustes">
-            <summary><b>Límites de tiempo</b><span class="sum">Duración de los clips y qué se ignora</span></summary>
-            <div class="acc-body">
-            <div class="fields">
-              <div><label class="lbl-t" for="min_duration">Duración mínima (s)</label><input type="number" id="min_duration" value="25" min="5" max="180"></div>
-              <div><label class="lbl-t" for="max_duration">Duración máxima (s)</label><input type="number" id="max_duration" value="45" min="5" max="180"></div>
-              <div><label class="lbl-t" for="head_skip">Ignorar el principio (s)</label><input type="number" id="head_skip" value="60" min="0"></div>
-              <div><label class="lbl-t" for="tail_skip">Ignorar el final (s)</label><input type="number" id="tail_skip" value="30" min="0"></div>
-            </div>
-            <p class="hint">Se salta la intro y la despedida, donde casi nunca está el mejor momento.</p>
-          </div>
-          </details>
+            <section class="set-sec" id="set-montaje">
+              <h2>Cómo queda el short</h2>
+              <p class="set-lead">El aspecto (composición, subtítulos, tu marca) se elige en Crear, en la pestaña Aspecto. Esto es lo que se hace al montar.</p>
+              <div class="set-card opts">
+                <label class="opt"><span class="opt-text"><b>Seguir la cara</b><em>El encuadre se mueve hacia quien habla en vez de recortar por el centro.</em></span><input type="checkbox" class="switch" id="reframe" checked></label>
+                <label class="opt"><span class="opt-text"><b>Quitar los silencios</b><em>Corta las pausas largas para que el clip vaya más rápido. También en los trozos que eliges a mano.</em></span><input type="checkbox" class="switch" id="jumpcuts" checked></label>
+                <label class="opt"><span class="opt-text"><b>Zoom lento</b><em>Un acercamiento suave y continuo para que el plano no se quede muerto.</em></span><input type="checkbox" class="switch" id="zoom" checked></label>
+                <label class="opt"><span class="opt-text"><b>Tarjeta de contexto al empezar</b><em>Durante los primeros 2,5 segundos aparece arriba el título del clip, para que quien llega de golpe entienda de qué se habla.</em></span><input type="checkbox" class="switch" id="title_card" checked></label>
+                <label class="opt"><span class="opt-text"><b>Tapar las palabrotas</b><em>En los subtítulos, «puta» sale como «p#ta». Se lee igual, pero deja de ser literal para los filtros de las plataformas. El audio no se toca.</em></span><input type="checkbox" class="switch" id="censor" checked></label>
+              </div>
+            </section>
 
-          <details class="acc" name="ajustes">
-            <summary><b>Transcripción</b><span class="sum">Modelo de voz y precisión</span></summary>
-            <div class="acc-body">
-            <div class="fields">
-              <div class="wide">
-                <label class="lbl-t" for="model">Modelo</label>
-                <select id="model">
-                  <option value="tiny">tiny: volando, con erratas</option>
-                  <option value="small">small: rápido</option>
-                  <option value="medium" selected>medium: recomendado</option>
-                  <option value="large-v3-turbo">large-v3-turbo: casi como large-v3, bastante más rápido</option>
-                  <option value="large-v3">large-v3: el mejor, muy lento sin GPU</option>
-                </select>
+            <section class="set-sec" id="set-momentos">
+              <h2>Elegir los momentos</h2>
+              <p class="set-lead">Cómo busca los mejores trozos cuando pulsas «Generar». Si los eliges tú a mano, esto no cuenta.</p>
+              <div class="set-card">
+                <label class="opt"><span class="opt-text"><b>Que Claude elija y titule</b><em>Lee la transcripción, escoge los momentos con más gancho y redacta título, descripción y hashtags. Necesita una clave de API de Anthropic. Apagado, los textos salen de las frases del propio invitado.</em></span><input type="checkbox" class="switch" id="llm" checked></label>
+                <label class="opt"><span class="opt-text"><b>Búsqueda rápida de momentos</b><em>Localiza primero las zonas calientes y solo transcribe esas. Sin esto, un pódcast de 3 h tarda casi 2 horas en vez de 10 minutos.</em></span><input type="checkbox" class="switch" id="prescan" checked></label>
+                <label class="opt"><span class="opt-text"><b>Empezar donde empieza el tema</b><em>Evita recortes que empiezan a media frase. Apagado, se elige solo por lo más rebobinado.</em></span><input type="checkbox" class="switch" id="context" checked></label>
+                <div class="set-row">
+                  <div class="opt-text"><b>Duración de cada short</b><em>Lo mismo que «¿Cuánto dura cada uno?» en Crear, pero al segundo.</em></div>
+                  <div class="set-inline">
+                    <span>de</span><input type="number" id="min_duration" value="25" min="5" max="180" aria-label="Duración mínima en segundos">
+                    <span>a</span><input type="number" id="max_duration" value="45" min="5" max="180" aria-label="Duración máxima en segundos"><span>s</span>
+                  </div>
+                </div>
+                <div class="set-row">
+                  <div class="opt-text"><b>Saltarse la intro y la despedida</b><em>Segundos que no se miran al principio y al final, donde casi nunca está lo mejor.</em></div>
+                  <div class="set-inline">
+                    <input type="number" id="head_skip" value="60" min="0" aria-label="Segundos que se ignoran al principio"><span>s al principio,</span>
+                    <input type="number" id="tail_skip" value="30" min="0" aria-label="Segundos que se ignoran al final"><span>s al final</span>
+                  </div>
+                </div>
+                <div class="set-row">
+                  <label class="opt-text" for="regions"><b>Zonas que se examinan</b><em>Con la búsqueda rápida: cuántas zonas del pódcast se escuchan.</em></label>
+                  <div class="set-ctl">
+                    <select id="regions">
+                      <option value="">Automático</option>
+                      <option value="8">8: más rápido</option>
+                      <option value="16">16: más variedad</option>
+                      <option value="24">24: todo el pódcast</option>
+                    </select>
+                  </div>
+                </div>
               </div>
-              <div>
-                <label class="lbl-t" for="beam">Precisión de la escucha</label>
-                <select id="beam">
-                  <option value="1" selected>Rápida</option>
-                  <option value="3">Media</option>
-                  <option value="5">Máxima</option>
-                </select>
-              </div>
-              <div>
-                <label class="lbl-t" for="regions">Zonas que se examinan</label>
-                <select id="regions">
-                  <option value="">Automático</option>
-                  <option value="8">8: más rápido</option>
-                  <option value="16">16: más variedad</option>
-                  <option value="24">24: todo el pódcast</option>
-                </select>
-              </div>
-            </div>
-          </div>
-          </details>
+            </section>
 
-          <details class="acc" name="ajustes">
-            <summary><b>Acertar más con el texto</b><span class="sum">Afinado, nombres difíciles, correcciones</span></summary>
-            <div class="acc-body">
-            <p class="card-sub">Lo que se lee en pantalla sale de la transcripción: estos ajustes la mejoran sin tocar el resto.</p>
-            <div class="fields">
-              <div class="wide">
-                <label class="lbl-t" for="st_refine">Afinar los clips elegidos con un modelo mejor</label>
-                <select id="st_refine">
-                  <option value="" selected>No</option>
-                  <option value="medium">medium</option>
-                  <option value="large-v3-turbo">large-v3-turbo (recomendado)</option>
-                  <option value="large-v3">large-v3</option>
-                </select>
-                <p class="hint">El pódcast entero se transcribe rápido para poder elegir; después se vuelve a escuchar solo el trozo de cada clip (unos segundos) con el modelo grande. Cuesta un par de minutos y mejora los subtítulos, el título y el gancho.</p>
+            <section class="set-sec" id="set-texto">
+              <h2>Texto y subtítulos</h2>
+              <p class="set-lead">Lo que se lee en pantalla sale de la transcripción. «¿Cuánto cuidado con el texto?» en Crear ya elige el modelo y la precisión; aquí puedes ajustarlos a mano.</p>
+              <div class="set-card">
+                <div class="set-row">
+                  <label class="opt-text" for="model"><b>Modelo de voz</b><em>Cuanto más grande, mejor entiende y más tarda.</em></label>
+                  <div class="set-ctl">
+                    <select id="model">
+                      <option value="tiny">tiny: volando, con erratas</option>
+                      <option value="small">small: rápido</option>
+                      <option value="medium" selected>medium: recomendado</option>
+                      <option value="large-v3-turbo">large-v3-turbo: casi como large-v3, bastante más rápido</option>
+                      <option value="large-v3">large-v3: el mejor, muy lento sin GPU</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="set-row">
+                  <label class="opt-text" for="beam"><b>Precisión de la escucha</b><em>Máxima acierta algo más con palabras dudosas, y tarda más.</em></label>
+                  <div class="set-ctl">
+                    <select id="beam">
+                      <option value="1" selected>Rápida</option>
+                      <option value="3">Media</option>
+                      <option value="5">Máxima</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="set-row">
+                  <label class="opt-text" for="st_refine"><b>Repasar los clips con un modelo mejor</b><em>Después de elegir, vuelve a escuchar solo los segundos de cada clip con un modelo grande. Cuesta un par de minutos y mejora subtítulos, título y gancho.</em></label>
+                  <div class="set-ctl">
+                    <select id="st_refine">
+                      <option value="" selected>No</option>
+                      <option value="medium">medium</option>
+                      <option value="large-v3-turbo">large-v3-turbo (recomendado)</option>
+                      <option value="large-v3">large-v3</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="set-row column">
+                  <label class="opt-text" for="st_vocab"><b>Nombres y palabras difíciles</b><em>Separados por comas. Ayuda a que escriba bien los nombres del invitado y las palabras raras.</em></label>
+                  <input type="text" id="st_vocab" maxlength="500" placeholder="Ibai, Auronplay, Twitch, Valorant" spellcheck="false">
+                </div>
+                <div class="set-row column">
+                  <label class="opt-text" for="st_corrections"><b>Correcciones fijas</b><em>Una por línea, «como lo escribe mal = como debe salir». Se aplican a todos los subtítulos, sin importar mayúsculas.</em></label>
+                  <textarea id="st_corrections" maxlength="500" placeholder="spotifai = Spotify&#10;la guapa = La Guapa" spellcheck="false"></textarea>
+                </div>
               </div>
-              <div class="wide">
-                <label class="lbl-t" for="st_vocab">Nombres y palabras difíciles</label>
-                <input type="text" id="st_vocab" maxlength="500" placeholder="Ibai, Auronplay, Twitch, Valorant" spellcheck="false">
-                <p class="hint">Separados por comas. Ayuda a que whisper escriba bien los nombres del invitado y las palabras raras.</p>
-              </div>
-              <div class="wide">
-                <label class="lbl-t" for="st_corrections">Correcciones fijas</label>
-                <textarea id="st_corrections" maxlength="500" placeholder="spotifai = Spotify&#10;la guapa = La Guapa" spellcheck="false"></textarea>
-                <p class="hint">Una por línea, «como lo escribe mal = como debe salir». Se aplican a todos los subtítulos, sin importar mayúsculas.</p>
-              </div>
-            </div>
-          </div>
-          </details>
+            </section>
 
-          <details class="acc" name="ajustes">
-            <summary><b>Rendimiento</b><span class="sum">Calidad de descarga, tarjeta gráfica</span></summary>
-            <div class="acc-body">
-            <div class="fields">
-              <div class="wide">
-                <label class="lbl-t" for="st_height">Calidad de la descarga</label>
-                <select id="st_height">
-                  <option value="1080" selected>1080p: la mejor imagen</option>
-                  <option value="720">720p: la mitad de tiempo</option>
-                  <option value="480">480p: solo si tu conexión va justa</option>
-                </select>
+            <section class="set-sec" id="set-youtube">
+              <h2>YouTube</h2>
+              <p class="set-lead">Subir tus shorts, montar solo los episodios nuevos de un canal y descargar vídeos que piden iniciar sesión.</p>
+              <div class="set-card" id="acc-youtube">
+                <h3 class="set-sub">Publicar en YouTube <span class="chip" id="yt-sum">Sin conectar</span></h3>
+                <div id="yt-off">
+                  <p class="set-text">Con tu canal conectado, cada short de «Mis shorts» tiene un botón para subirlo con su título, su texto y sus hashtags. Se hace una vez:</p>
+                  <ol class="yt-steps">
+                    <li>En Google Cloud crea un proyecto, activa <b>YouTube Data API v3</b> y crea una credencial <b>ID de cliente OAuth</b> de tipo <b>Aplicación de escritorio</b>. Descarga su fichero JSON. <button type="button" class="link" id="yt-console">Abrir Google Cloud</button></li>
+                    <li>Elige aquí ese fichero y pulsa «Conectar». Se abrirá el navegador para que des permiso con tu cuenta de YouTube.</li>
+                  </ol>
+                  <div class="with-button">
+                    <input type="text" id="yt-secret" placeholder="client_secret_….json" spellcheck="false" aria-label="Fichero de la credencial de Google">
+                    <button type="button" class="btn" data-browse="yt-secret" data-kind="file"><svg class="ico"><use href="#i-folder"/></svg>Elegir</button>
+                    <button type="button" class="btn primary" id="yt-connect">Conectar</button>
+                  </div>
+                  <p class="hint" id="yt-msg"></p>
+                </div>
+                <div id="yt-on" hidden>
+                  <div class="about">
+                    <div class="grow"><b>Conectado</b><br><span id="yt-channel"></span></div>
+                    <button type="button" class="btn" id="yt-disconnect">Desconectar</button>
+                  </div>
+                </div>
+                <div class="set-row">
+                  <label class="opt-text" for="yt-privacy"><b>Cómo se publican</b><em>YouTube deja subir unos 6 vídeos al día con una credencial nueva.</em></label>
+                  <div class="set-ctl">
+                    <select id="yt-privacy">
+                      <option value="private" selected>Privados: los revisas y los publicas tú</option>
+                      <option value="unlisted">Ocultos: solo con el enlace</option>
+                      <option value="public">Públicos: al momento</option>
+                    </select>
+                  </div>
+                </div>
               </div>
-              <div>
-                <label class="lbl-t" for="st_workers">Shorts a la vez</label>
-                <select id="st_workers">
-                  <option value="0" selected>Automático</option>
-                  <option value="1">Uno: el ordenador queda libre</option>
-                  <option value="2">Dos</option>
-                  <option value="3">Tres: con muchos núcleos</option>
-                </select>
-              </div>
-              <div>
-                <label class="lbl-t" for="st_encoder">Tarjeta gráfica</label>
-                <select id="st_encoder">
-                  <option value="auto" selected>Usarla si la hay</option>
-                  <option value="off">Solo el procesador</option>
-                </select>
-              </div>
-            </div>
-            <p class="hint">Con GPU el montaje va varias veces más rápido; los archivos salen algo más grandes.</p>
-          </div>
-          </details>
 
-          <details class="acc" name="ajustes">
-            <summary><b>Dónde se guardan</b><span class="sum">Carpeta de los shorts, espacio en disco</span></summary>
-            <div class="acc-body">
-            <label class="lbl-t" for="output">Carpeta de los shorts</label>
-            <div class="with-button">
-              <input type="text" id="output" value="" placeholder="La de config.yaml" spellcheck="false">
-              <button type="button" class="btn" data-browse="output" data-kind="folder"><svg class="ico"><use href="#i-folder"/></svg>Elegir</button>
-            </div>
-            <p class="hint" id="output-hint">Cada ejecución crea su propia subcarpeta aquí dentro.</p>
-            <div class="opts">
-              <label class="opt"><span class="opt-text"><b>Guardar también los subtítulos en .srt</b><em>Para retocarlos en CapCut, Premiere o DaVinci. Van junto a cada short.</em></span><input type="checkbox" class="switch" id="fx-srt"></label>
-              <label class="opt"><span class="opt-text"><b>Guardar también el vídeo sin textos</b><em>El mismo short sin subtítulos, rótulos, barra ni logo («sin-subtitulos_N.mp4»), para editarlo a tu manera. Tarda el doble en montar.</em></span><input type="checkbox" class="switch" id="fx-clean"></label>
-              <input type="hidden" id="st_srt" value="false"><input type="hidden" id="st_clean" value="false">
-              <label class="opt"><span class="opt-text"><b>Borrar el vídeo descargado al terminar</b><em>El pódcast bajado de YouTube ocupa cientos de MB y, con los shorts hechos, ya no hace falta. Si después rehaces un short, se vuelve a descargar solo (sin volver a transcribir). Tus propios ficheros y el vídeo de fondo no se borran nunca.</em></span><input type="checkbox" class="switch" id="delete_source" checked></label>
-            </div>
-          </div>
-          </details>
-
-          <details class="acc" name="ajustes">
-            <summary><b>Descarga de YouTube</b><span class="sum">Cookies del navegador</span></summary>
-            <div class="acc-body">
-            <label class="lbl-t" for="st_cookies">Usar las cookies de mi navegador</label>
-            <select id="st_cookies">
-              <option value="" selected>No</option>
-              <option value="firefox">Firefox</option>
-              <option value="edge">Edge</option>
-              <option value="chrome">Chrome</option>
-              <option value="brave">Brave</option>
-            </select>
-            <p class="hint">Sirve para vídeos con restricción de edad o cuando YouTube pide iniciar sesión. Hay que haber entrado en YouTube con ese navegador. Con Chrome y Edge puede fallar mientras están abiertos; Firefox suele ir mejor.</p>
-          </div>
-          </details>
-
-          <details class="acc" name="ajustes" id="acc-canales">
-            <summary><b>Seguir canales</b><span class="sum" id="ch-sum">Ninguno</span></summary>
-            <div class="acc-body">
-              <p class="card-sub" style="margin-top:0">Cuando un canal que sigues publica un episodio nuevo, se pone en la cola solo y te encuentras los shorts hechos. Se miran al abrir la aplicación y cada 3 horas mientras está abierta. Se montan con lo que tengas elegido en Crear al pulsar «Seguir» (vídeo de fondo, aspecto, cuántos shorts…).</p>
-              <div class="with-button">
-                <input type="text" id="ch-url" placeholder="https://www.youtube.com/@canal" spellcheck="false" aria-label="Enlace del canal">
-                <button type="button" class="btn primary" id="ch-follow">Seguir</button>
+              <div class="set-card" id="acc-canales">
+                <h3 class="set-sub">Seguir canales <span class="chip" id="ch-sum">Ninguno</span></h3>
+                <p class="set-text">Cuando un canal que sigues publica un episodio nuevo, se pone en la cola solo y te encuentras los shorts hechos. Se mira al abrir la aplicación y cada 3 horas. Se montan con lo que tengas elegido en Crear al pulsar «Seguir» (vídeo de fondo, aspecto, cuántos shorts…).</p>
+                <div class="with-button">
+                  <input type="text" id="ch-url" placeholder="https://www.youtube.com/@canal" spellcheck="false" aria-label="Enlace del canal">
+                  <button type="button" class="btn primary" id="ch-follow">Seguir</button>
+                </div>
+                <p class="hint" id="ch-msg"></p>
+                <div id="ch-list"></div>
+                <div class="card-foot" id="ch-foot" hidden>
+                  <span class="grow">Los vídeos de menos de 5 minutos (avances, shorts) no se montan.</span>
+                  <button type="button" class="btn sm" id="ch-check">Mirar ahora</button>
+                </div>
               </div>
-              <p class="hint" id="ch-msg"></p>
-              <div id="ch-list"></div>
-              <div class="card-foot" id="ch-foot" hidden>
-                <span class="grow">Los vídeos de menos de 5 minutos (avances, shorts) no se montan.</span>
-                <button type="button" class="btn sm" id="ch-check">Mirar ahora</button>
-              </div>
-            </div>
-          </details>
 
-          <details class="acc" name="ajustes" id="acc-youtube">
-            <summary><b>Publicar en YouTube</b><span class="sum" id="yt-sum">Sin conectar</span></summary>
-            <div class="acc-body">
-            <div id="yt-off">
-              <p class="card-sub" style="margin-top:0">Con tu canal conectado, cada short de «Mis shorts» tiene un botón para subirlo con su título, su texto y sus hashtags. Se hace una vez:</p>
-              <ol class="yt-steps">
-                <li>En Google Cloud crea un proyecto, activa <b>YouTube Data API v3</b> y crea una credencial <b>ID de cliente OAuth</b> de tipo <b>Aplicación de escritorio</b>. Descarga su fichero JSON. <button type="button" class="link" id="yt-console">Abrir Google Cloud</button></li>
-                <li>Elige aquí ese fichero y pulsa «Conectar». Se abrirá el navegador para que des permiso con tu cuenta de YouTube.</li>
-              </ol>
-              <div class="with-button">
-                <input type="text" id="yt-secret" placeholder="client_secret_….json" spellcheck="false" aria-label="Fichero de la credencial de Google">
-                <button type="button" class="btn" data-browse="yt-secret" data-kind="file"><svg class="ico"><use href="#i-folder"/></svg>Elegir</button>
-                <button type="button" class="btn primary" id="yt-connect">Conectar</button>
+              <div class="set-card">
+                <div class="set-row">
+                  <label class="opt-text" for="st_cookies"><b>Si YouTube pide iniciar sesión</b><em>Usa las cookies de tu navegador para vídeos con restricción de edad o cuando YouTube sospecha. Hay que haber entrado en YouTube con ese navegador; con Chrome y Edge abiertos puede fallar, Firefox suele ir mejor.</em></label>
+                  <div class="set-ctl">
+                    <select id="st_cookies">
+                      <option value="" selected>No usar cookies</option>
+                      <option value="firefox">Firefox</option>
+                      <option value="edge">Edge</option>
+                      <option value="chrome">Chrome</option>
+                      <option value="brave">Brave</option>
+                    </select>
+                  </div>
+                </div>
               </div>
-              <p class="hint" id="yt-msg"></p>
-            </div>
-            <div id="yt-on" hidden>
-              <div class="about">
-                <div class="grow"><b>Conectado</b><br><span id="yt-channel"></span></div>
-                <button type="button" class="btn" id="yt-disconnect">Desconectar</button>
-              </div>
-            </div>
-            <div style="margin-top:16px">
-              <label class="lbl-t" for="yt-privacy">Cómo se publican</label>
-              <select id="yt-privacy" style="max-width:320px">
-                <option value="private" selected>Privados: los revisas y los publicas tú</option>
-                <option value="unlisted">Ocultos: solo con el enlace</option>
-                <option value="public">Públicos: al momento</option>
-              </select>
-              <p class="hint">YouTube deja subir unos 6 vídeos al día con una credencial nueva.</p>
-            </div>
-          </div>
-          </details>
+            </section>
 
-          <details class="acc" name="ajustes">
-            <summary><b>Aplicación</b><span class="sum">Versión y actualizaciones</span></summary>
-            <div class="acc-body">
-            <div class="about">
-              <div class="grow"><b id="about-version">Viral Shorts</b><br><span id="about-status">Las actualizaciones se descargan solas desde GitHub.</span></div>
-              <button type="button" class="btn" id="upd-check"><svg class="ico"><use href="#i-refresh"/></svg>Buscar actualizaciones</button>
-            </div>
+            <section class="set-sec" id="set-archivos">
+              <h2>Archivos y velocidad</h2>
+              <p class="set-lead">Dónde quedan los shorts, qué más se guarda y cuánto aprieta al ordenador.</p>
+              <div class="set-card">
+                <div class="set-row column">
+                  <label class="opt-text" for="output"><b>Carpeta de los shorts</b><em id="output-hint">Cada ejecución crea su propia subcarpeta aquí dentro.</em></label>
+                  <div class="with-button">
+                    <input type="text" id="output" value="" placeholder="La de config.yaml" spellcheck="false">
+                    <button type="button" class="btn" data-browse="output" data-kind="folder"><svg class="ico"><use href="#i-folder"/></svg>Elegir</button>
+                  </div>
+                </div>
+                <label class="opt"><span class="opt-text"><b>Borrar el vídeo descargado al terminar</b><em>El pódcast bajado de YouTube ocupa cientos de MB y, con los shorts hechos, ya no hace falta. Si después rehaces un short, se vuelve a descargar solo. Tus propios ficheros y el vídeo de fondo no se borran nunca.</em></span><input type="checkbox" class="switch" id="delete_source" checked></label>
+                <label class="opt"><span class="opt-text"><b>Guardar también los subtítulos en .srt</b><em>Para retocarlos en CapCut, Premiere o DaVinci. Van junto a cada short.</em></span><input type="checkbox" class="switch" id="fx-srt"></label>
+                <label class="opt"><span class="opt-text"><b>Guardar también el vídeo sin textos</b><em>El mismo short sin subtítulos, rótulos, barra ni logo («sin-subtitulos_N.mp4»), para editarlo a tu manera. Tarda el doble en montar.</em></span><input type="checkbox" class="switch" id="fx-clean"></label>
+                <div class="set-row">
+                  <label class="opt-text" for="st_height"><b>Calidad de la descarga</b><em>Menos calidad, descarga más rápida.</em></label>
+                  <div class="set-ctl">
+                    <select id="st_height">
+                      <option value="1080" selected>1080p: la mejor imagen</option>
+                      <option value="720">720p: la mitad de tiempo</option>
+                      <option value="480">480p: solo si tu conexión va justa</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="set-row">
+                  <label class="opt-text" for="st_encoder"><b>Montar con la tarjeta gráfica</b><em>Va varias veces más rápido; los archivos salen algo más grandes.</em></label>
+                  <div class="set-ctl">
+                    <select id="st_encoder">
+                      <option value="auto" selected>Usarla si la hay</option>
+                      <option value="off">Solo el procesador</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="set-row">
+                  <label class="opt-text" for="st_workers"><b>Shorts a la vez</b><em>Montar varios a la vez acaba antes, pero el ordenador va más cargado.</em></label>
+                  <div class="set-ctl">
+                    <select id="st_workers">
+                      <option value="0" selected>Automático</option>
+                      <option value="1">Uno: el ordenador queda libre</option>
+                      <option value="2">Dos</option>
+                      <option value="3">Tres: con muchos núcleos</option>
+                    </select>
+                  </div>
+                </div>
+                <input type="hidden" id="st_srt" value="false"><input type="hidden" id="st_clean" value="false">
+              </div>
+            </section>
+
+            <section class="set-sec" id="set-app">
+              <h2>Aplicación</h2>
+              <div class="set-card">
+                <div class="about">
+                  <div class="grow"><b id="about-version">Viral Shorts</b><br><span id="about-status">Las actualizaciones se descargan solas desde GitHub.</span></div>
+                  <button type="button" class="btn" id="upd-check"><svg class="ico"><use href="#i-refresh"/></svg>Buscar actualizaciones</button>
+                </div>
+              </div>
+            </section>
           </div>
-          </details>
         </div>
       </section>
 
@@ -2171,7 +2218,7 @@ function retryWithCookies(browser, label) {
   saveForm();
   clearBanner($("banner"));
   showBanner($("tip"), `Reintentando con las cookies de ${label}`,
-    "Queda guardado en Ajustes, en «Descarga de YouTube». Si falla, cierra el navegador y vuelve a probar.");
+    "Queda guardado en Ajustes › YouTube. Si falla, cierra el navegador y vuelve a probar.");
   lastLaunch();
 }
 
@@ -2879,7 +2926,7 @@ async function openEditor(fuente) {
   refreshWork();
   edPaintAll();
   // Recién abierto, el editor entero a la vista: vídeo y línea de tiempo.
-  if (!same) requestAnimationFrame(() => $("editor-panel").scrollIntoView({ block: "start" }));
+  if (!same) requestAnimationFrame(() => scrollMainTo($("editor-panel"), "instant"));
   if (!ED.raf) ED.raf = requestAnimationFrame(edTick);
 }
 
@@ -3325,6 +3372,84 @@ document.addEventListener("keydown", (event) => {
   }
 });
 window.addEventListener("resize", () => edPaintAll());
+
+// ===========================================================================
+// Ajustes: índice que sigue al scroll y buscador
+// ===========================================================================
+const SET_SECTIONS = [...document.querySelectorAll(".set-sec")];
+
+/** Desplaza solo el panel principal hasta `el` (scrollIntoView movería también la ventana). */
+function scrollMainTo(el, behavior) {
+  const main = $("main");
+  const top = el.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop - 12;
+  main.scrollTo({ top: Math.max(0, top), behavior });
+}
+
+function setActive(id) {
+  document.querySelectorAll("#set-links button").forEach(b => b.classList.toggle("on", b.dataset.sec === id));
+}
+
+/** Va a Ajustes y deja a la vista el apartado (o la tarjeta) `id`. */
+function openSetting(id) {
+  go("ajustes");
+  const target = $(id);
+  if (!target) return;
+  requestAnimationFrame(() => {
+    scrollMainTo(target, "instant");
+    setActive(target.closest(".set-sec").id);
+  });
+}
+
+document.querySelectorAll("#set-links button").forEach(button => button.addEventListener("click", () => {
+  scrollMainTo($(button.dataset.sec), "smooth");
+  setActive(button.dataset.sec);
+}));
+
+// El apartado activo es el último cuyo título ya ha pasado por arriba.
+$("main").addEventListener("scroll", () => {
+  if (VIEW !== "ajustes") return;
+  const top = $("main").getBoundingClientRect().top + 90;
+  let current = SET_SECTIONS.find(sec => !sec.hidden) || SET_SECTIONS[0];
+  for (const sec of SET_SECTIONS) if (!sec.hidden && sec.getBoundingClientRect().top <= top) current = sec;
+  const atEnd = $("main").scrollTop + $("main").clientHeight >= $("main").scrollHeight - 4;
+  if (atEnd) current = [...SET_SECTIONS].reverse().find(sec => !sec.hidden) || current;
+  setActive(current.id);
+}, { passive: true });
+
+const plain = (text) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+/** Deja solo los ajustes que dicen lo buscado (título, explicación u opciones). */
+function filterSettings() {
+  const query = plain($("set-q").value.trim());
+  let shown = 0;
+  SET_SECTIONS.forEach(sec => {
+    let any = false;
+    sec.querySelectorAll(".set-card").forEach(card => {
+      const rows = card.querySelectorAll(":scope > .opt, :scope > .set-row");
+      let cardHit = !query || plain(card.querySelector(".set-sub")?.textContent || "").includes(query);
+      rows.forEach(row => {
+        const hit = !query || cardHit || plain(row.textContent).includes(query);
+        row.hidden = !hit;
+        if (hit) any = true;
+      });
+      const visible = cardHit || [...rows].some(r => !r.hidden);
+      card.hidden = !visible;
+      if (visible) any = true;
+    });
+    if (!query) any = true;
+    sec.hidden = !any;
+    if (any) shown++;
+    const link = document.querySelector(`#set-links button[data-sec="${sec.id}"]`);
+    if (link) link.hidden = !any;
+  });
+  $("set-none").hidden = shown > 0;
+  if (!shown) $("set-none").textContent = `No hay ningún ajuste que diga «${$("set-q").value.trim()}».`;
+}
+$("set-q").addEventListener("input", filterSettings);
+$("set-q").addEventListener("keydown", (event) => {
+  if (event.key === "Escape") { $("set-q").value = ""; filterSettings(); }
+});
+setActive("set-montaje");
 
 // ===========================================================================
 // Perfiles de ajustes
@@ -3946,8 +4071,8 @@ function buildCard(item) {
   yt.addEventListener("click", async () => {
     if (item.youtube) { post("/api/open", { url: item.youtube }).catch(() => {}); return; }
     if (!YT.connected) {
-      showBanner($("tip"), "Conecta tu canal de YouTube", "Se hace una vez, en Ajustes › Publicar en YouTube.");
-      go("ajustes"); $("acc-youtube").open = true;
+      showBanner($("tip"), "Conecta tu canal de YouTube", "Se hace una vez, en Ajustes › YouTube.");
+      openSetting("acc-youtube");
       return;
     }
     const label = yt.querySelector("span");
