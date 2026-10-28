@@ -300,6 +300,13 @@ pub fn moments_arg(value: &Value) -> Option<String> {
     (!parts.is_empty()).then(|| parts.join(","))
 }
 
+/// Rehacer un short retocado desde «Mis shorts».
+pub fn remake_command(form: &Value) -> Vec<String> {
+    let mut args = vec!["--remake".to_string(), value_text(&form["remake"])];
+    keep_source_arg(form, &mut args);
+    args
+}
+
 /// Montar los clips marcados de un plan ya revisado.
 pub fn plan_command(form: &Value) -> Vec<String> {
     let mut args = vec!["--from-plan".to_string(), value_text(&form["from_plan"])];
@@ -609,7 +616,9 @@ impl Job {
         };
         state.output_dir = state.base_dir.clone();
 
-        let args = if truthy(&form["from_plan"]) {
+        let args = if truthy(&form["remake"]) {
+            remake_command(&form)
+        } else if truthy(&form["from_plan"]) {
             plan_command(&form)
         } else {
             // Un plan nuevo invalida el anterior: los clips que se ven en
@@ -624,7 +633,7 @@ impl Job {
             build_command(&form)
         };
 
-        state.preparing = truthy(&form["prepare"]) && !truthy(&form["from_plan"]);
+        state.preparing = truthy(&form["prepare"]) && !truthy(&form["from_plan"]) && !truthy(&form["remake"]);
         let queue = queue_summary(state);
         self.publish(json!({"type": "job", "status": "running", "queue": queue, "elegir": state.preparing}));
         self.push_log(state, format!("$ {}", args.join(" ")));
@@ -780,6 +789,7 @@ fn queue_summary(state: &State) -> Value {
                     "clips": item["clips"].as_i64().unwrap_or(0),
                     "revisar": truthy(&item["review"]),
                     "elegir": truthy(&item["prepare"]),
+                    "rehacer": truthy(&item["remake"]),
                     "trozos": item["moments"].as_array().map_or(0, Vec::len),
                 })
             })
@@ -886,6 +896,7 @@ pub fn scan_output(folder: &Path) -> Vec<Value> {
                 entry["pie"] = json!(caption.trim());
                 entry["marca"] = json!(data["fuente"]["marca"].as_str().unwrap_or(""));
                 entry["youtube"] = json!(data["youtube"]["url"].as_str().unwrap_or(""));
+                entry["retocable"] = json!(pipeline::retouch_path(&video).is_file());
             }
             entry
         })
@@ -1230,6 +1241,10 @@ fn handle_get(app: &Arc<App>, request: &Request, mut stream: TcpStream) {
         "/api/reveal" => reveal(app, request, &mut stream),
         "/api/youtube" => respond_json(&mut stream, 200, &youtube::status(&app.root)),
         "/api/channels" => respond_json(&mut stream, 200, &json!({"channels": channels::summary(&app.root)})),
+        "/api/short/retoque" => {
+            let (status, payload) = retouch_info(&app.job.base_dir(), request.query.get("id").map_or("", String::as_str));
+            respond_json(&mut stream, status, &payload)
+        }
         _ => respond_error(&mut stream, 404, "no encontrado"),
     }
 }
@@ -1503,6 +1518,7 @@ fn handle_post(app: &Arc<App>, request: &Request, stream: &mut TcpStream) {
                 (400, json!({"ok": false, "error": "direccion no permitida"}))
             }
         }
+        "/api/short/remake" => remake_short(app, &body),
         "/api/short/rename" => match library::rename_short(&app.job.base_dir(), body["id"].as_str().unwrap_or(""), body["titulo"].as_str().unwrap_or("")) {
             Ok(()) => (200, json!({"ok": true})),
             Err(error) => (400, json!({"ok": false, "error": error})),
@@ -1595,6 +1611,63 @@ pub fn check_channels(app: &Arc<App>) -> usize {
         log::info!("Canales seguidos: {count} episodio(s) nuevo(s) en la cola.");
     }
     count
+}
+
+const NOT_RETOUCHABLE: &str = "Este short se montó con una versión anterior y no guarda lo necesario para retocarlo. Los que hagas a partir de ahora sí.";
+
+/// Lo que se puede retocar de un short ya montado: texto, recorte y estilo del
+/// plan que se guardo junto a el, y los textos de publicacion actuales.
+fn retouch_info(base: &Path, id: &str) -> (u16, Value) {
+    let Some(video) = library::resolve_short(base, id) else {
+        return (404, json!({"ok": false, "error": "Ese short no existe."}));
+    };
+    let path = pipeline::retouch_path(&video);
+    let clip = match plan::load(&path) {
+        Ok(saved) => pipeline::plan_events(&saved).into_iter().next(),
+        Err(_) => None,
+    };
+    let Some(mut clip) = clip else {
+        return (409, json!({"ok": false, "error": NOT_RETOUCHABLE}));
+    };
+    // El titulo puede haberse cambiado en «Mis shorts» despues de montarlo.
+    if let Some(data) = std::fs::read_to_string(video.with_extension("json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) {
+        for (from, to) in [("title", "titulo"), ("hook", "gancho"), ("description", "descripcion"), ("hashtags", "hashtags")] {
+            if !data["publicacion"][from].is_null() {
+                clip[to] = data["publicacion"][from].clone();
+            }
+        }
+    }
+    (200, json!({"ok": true, "clip": clip}))
+}
+
+/// Guarda los cambios en el plan del short y lo pone en la cola para rehacerlo.
+fn remake_short(app: &Arc<App>, body: &Value) -> (u16, Value) {
+    let base = app.job.base_dir();
+    let Some(video) = library::resolve_short(&base, body["id"].as_str().unwrap_or("")) else {
+        return (404, json!({"ok": false, "error": "Ese short no existe."}));
+    };
+    let path = pipeline::retouch_path(&video);
+    if !path.is_file() {
+        return (409, json!({"ok": false, "error": NOT_RETOUCHABLE}));
+    }
+    let mut change = json!({"n": 1});
+    for key in ["texto_palabras", "recorte", "estilo", "publicacion", "restaurar"] {
+        if !body[key].is_null() {
+            change[key] = body[key].clone();
+        }
+    }
+    if let Err(error) = plan::update(&path, &[change]) {
+        return (500, json!({"ok": false, "error": error.to_string()}));
+    }
+    let name = video.file_name().unwrap_or_default().to_string_lossy().into_owned();
+    let mut form = json!({"remake": path.to_string_lossy(), "podcast": name});
+    if let Some(output) = body["output"].as_str().filter(|o| !o.is_empty()) {
+        form["output"] = json!(output);
+    }
+    if !body["delete_source"].is_null() {
+        form["delete_source"] = body["delete_source"].clone();
+    }
+    (200, app.job.enqueue(form))
 }
 
 fn plan_state(app: &Arc<App>) -> Value {
@@ -2408,6 +2481,68 @@ la guapa=La Guapa"}));
         let cola = b.job.snapshot()["queue"].clone();
         assert_eq!((cola[0]["elegir"].clone(), cola[1]["trozos"].clone()), (json!(true), json!(2)));
         b.job.stop();
+    }
+
+    // -- retocar un short ya hecho ---------------------------------------------------------------
+
+    fn short_retocable(dir: &Path) -> PathBuf {
+        let run = dir.join("pod_2026");
+        std::fs::create_dir_all(&run).unwrap();
+        let video = run.join("short_2.mp4");
+        std::fs::write(&video, b"v").unwrap();
+        std::fs::write(run.join("short_2.json"), json!({"publicacion": {"title": "Cambiado a mano", "hook": "OJO"}}).to_string()).unwrap();
+        let words = vec![
+            crate::words::Word::new("hola", 10.0, 10.4),
+            crate::words::Word::new("que", 10.5, 10.7),
+            crate::words::Word::new("tal", 10.8, 11.0),
+            crate::words::Word::new("estamos", 16.0, 16.5),
+        ];
+        let clip = crate::scoring::Window::new(10.0, 20.0, words, "hola que tal estamos");
+        let fuente = plan::PlanSource { ruta: "C:/w/podcast.mp4".into(), titulo: "Pod".into(), duracion: 600.0, url: "https://youtu.be/x".into() };
+        let meta = crate::llm::ClipMetadata { title: "Original".into(), hook: "GANCHO".into(), ..Default::default() };
+        plan::save_single(&pipeline::retouch_path(&video), &Config::default(), &fuente, &plan::PlanSource::default(), &clip, Some(&meta), 2, 1).unwrap();
+        video
+    }
+
+    #[test]
+    fn un_short_retocable_dice_lo_que_tiene_y_el_titulo_de_ahora() {
+        let dir = tempfile::tempdir().unwrap();
+        let video = short_retocable(dir.path());
+        let (codigo, info) = retouch_info(dir.path(), "pod_2026/short_2.mp4");
+        assert_eq!(codigo, 200, "{info}");
+        assert_eq!((info["clip"]["palabras"].clone(), info["clip"]["titulo"].clone()), (json!("hola que tal estamos"), json!("Cambiado a mano")));
+        assert_eq!(scan_output(video.parent().unwrap())[0]["retocable"], true);
+        // Uno montado con una version anterior no guarda nada que retocar.
+        std::fs::remove_file(pipeline::retouch_path(&video)).unwrap();
+        assert_eq!(retouch_info(dir.path(), "pod_2026/short_2.mp4").0, 409);
+        assert_eq!(scan_output(video.parent().unwrap())[0]["retocable"], false);
+        assert_eq!(retouch_info(dir.path(), "../fuera/short_1.mp4").0, 404);
+    }
+
+    #[test]
+    fn retocar_guarda_los_cambios_y_pone_el_short_en_la_cola() {
+        let dir = tempfile::tempdir().unwrap();
+        let video = short_retocable(dir.path());
+        let (app, _puerto, b) = app_de_prueba();
+        app.job.set_base_dir(dir.path().to_path_buf());
+        let (codigo, respuesta) = remake_short(&app, &json!({
+            "id": "pod_2026/short_2.mp4", "texto_palabras": "Hola, ¿qué tal estamos?", "estilo": "box",
+            "publicacion": {"title": "Nuevo", "hook": "NUEVO"}, "delete_source": false,
+        }));
+        assert_eq!(codigo, 200, "{respuesta}");
+        let lanzado = b.lanzados.lock().unwrap()[0].clone();
+        assert_eq!(lanzado[0], "--remake");
+        assert!(lanzado[1].ends_with("short_2.retoque.json"));
+        assert!(lanzado.contains(&"output.delete_source=off".to_string()));
+        let guardado = plan::load(&pipeline::retouch_path(&video)).unwrap();
+        let clip = &guardado.clips[0];
+        assert_eq!((clip.text.as_str(), clip.style.as_str()), ("Hola, ¿qué tal estamos?", "box"));
+        assert_eq!(clip.words[3].start, 16.0, "cada palabra conserva su momento");
+        assert_eq!(clip.meta.as_ref().unwrap().title, "Nuevo");
+        assert_eq!(plan::single_slot(&pipeline::retouch_path(&video)), Some((2, 1)));
+        assert_eq!(b.job.snapshot()["status"], "running");
+        b.job.stop();
+        assert_eq!(remake_short(&app, &json!({"id": "pod_2026/short_9.mp4"})).0, 404);
     }
 
     #[test]

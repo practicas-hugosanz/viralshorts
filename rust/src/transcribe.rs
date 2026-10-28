@@ -246,7 +246,7 @@ impl Transcriber {
     }
 
     fn finish(&self, segments: Vec<Segment>, language: Option<String>, duration: f64, path: &Path) -> Result<Transcript> {
-        let mut segments = drop_repetition_loops(segments);
+        let mut segments = drop_invented_phrases(drop_repetition_loops(segments));
         let corrections = Corrections::parse(&self.cfg.corrections);
         if !corrections.is_empty() {
             for segment in &mut segments {
@@ -406,8 +406,8 @@ fn read_cache(path: &Path) -> Option<Transcript> {
     match std::fs::read_to_string(path).ok().and_then(|t| serde_json::from_str::<Transcript>(&t).ok()) {
         Some(mut transcript) => {
             log::info!("Transcripcion en cache: {}", file_name(path));
-            // Las guardadas antes del filtro de bucles tambien se limpian.
-            transcript.segments = drop_repetition_loops(transcript.segments);
+            // Las guardadas antes de los filtros tambien se limpian.
+            transcript.segments = drop_invented_phrases(drop_repetition_loops(transcript.segments));
             Some(transcript)
         }
         None => {
@@ -712,6 +712,81 @@ pub fn drop_repetition_loops(segments: Vec<Segment>) -> Vec<Segment> {
         i += run.max(1);
     }
     segments.into_iter().zip(keep).filter_map(|(s, k)| k.then_some(s)).collect()
+}
+
+/// Despedidas de YouTube que whisper se inventa cuando no oye a nadie (silencio,
+/// musica): las aprendio del final de miles de videos. Sin acentos ni signos.
+const INVENTED: [&str; 14] = [
+    "gracias por ver el video",
+    "gracias por ver",
+    "gracias por vernos",
+    "si te gusto dale like",
+    "dale like y suscribete al canal",
+    "suscribete al canal",
+    "y suscribete",
+    "no olvides suscribirte",
+    "nos vemos en el proximo video",
+    "thank you for watching",
+    "thanks for watching",
+    "please subscribe",
+    "like and subscribe",
+    "see you in the next video",
+];
+
+/// Firmas de subtitulos ajenos que nunca son habla.
+const NEVER_SPEECH: [&str; 5] = ["amaraorg", "amara org", "subtitulos realizados por", "subtitulado por", "subtitles by"];
+
+/// Silencio que tiene que haber antes y despues para dar una despedida por
+/// inventada: en una conversacion de verdad las frases van pegadas.
+const INVENTED_GAP: f64 = 2.0;
+
+fn plain_text(text: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    let flat: String = text
+        .nfd()
+        .filter(|c| !unicode_normalization::char::is_combining_mark(*c))
+        .flat_map(char::to_lowercase)
+        .map(|c| if c.is_alphanumeric() { c } else { ' ' })
+        .collect();
+    flat.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Quita lo que whisper se inventa en los silencios: un trozo que solo dice una
+/// despedida de YouTube ("Gracias por ver el video. Si te gusto, dale like...")
+/// y no tiene a nadie hablando cerca. Si alguien lo dice de verdad en mitad de
+/// la conversacion, se queda.
+pub fn drop_invented_phrases(segments: Vec<Segment>) -> Vec<Segment> {
+    let texts: Vec<String> = segments.iter().map(|s| plain_text(&s.text)).collect();
+    let keep: Vec<bool> = (0..segments.len())
+        .map(|i| {
+            let text = &texts[i];
+            if text.is_empty() {
+                return true;
+            }
+            if NEVER_SPEECH.iter().any(|sign| text.contains(sign)) {
+                return false;
+            }
+            let mut rest = format!(" {text} ");
+            for phrase in INVENTED {
+                rest = rest.replace(&format!(" {phrase} "), " ");
+            }
+            // Lo que sobra es como mucho una palabra suelta ("el", "y"...).
+            let only_farewell = rest.split_whitespace().count() <= 1 && rest.trim() != text.as_str();
+            let quiet_before = i == 0 || segments[i].start - segments[i - 1].end >= INVENTED_GAP;
+            let quiet_after = i + 1 == segments.len() || segments[i + 1].start - segments[i].end >= INVENTED_GAP;
+            !(only_farewell && quiet_before && quiet_after)
+        })
+        .collect();
+    segments
+        .into_iter()
+        .zip(keep)
+        .filter_map(|(segment, keep)| {
+            if !keep {
+                log::info!("Quitada una frase inventada en un silencio ({:.0} s: \"{}\").", segment.start, segment.text.trim());
+            }
+            keep.then_some(segment)
+        })
+        .collect()
 }
 
 /// Anotaciones de sonido que whisper escribe en vez de habla.
@@ -1082,6 +1157,32 @@ mod tests {
         ];
         let textos: Vec<String> = drop_repetition_loops(entrada).into_iter().map(|s| s.text).collect();
         assert_eq!(textos, ["Eso funciona.", "Yo creo que los que me han spawneados son bichos que...", "Vale, ahora a por el cofre."]);
+    }
+
+    #[test]
+    fn las_despedidas_inventadas_en_un_silencio_se_quitan() {
+        // Caso real: 28 s sin voz y whisper escribe la despedida de YouTube.
+        let entrada = vec![
+            Segment { start: 129.0, end: 131.0, text: "y no se puede ver.".into(), words: vec![] },
+            Segment { start: 159.0, end: 171.0, text: "Gracias por ver el video. Si te gustó, dale like y suscríbete al canal.".into(), words: vec![] },
+        ];
+        let textos: Vec<String> = drop_invented_phrases(entrada).into_iter().map(|s| s.text).collect();
+        assert_eq!(textos, ["y no se puede ver."]);
+        let solo = vec![seg(10.0, "¡Gracias por ver!"), seg(40.0, "Thanks for watching.")];
+        assert!(drop_invented_phrases(solo).is_empty());
+        let amara = vec![seg(0.0, "Vale."), seg(2.1, "Subtítulos realizados por la comunidad de Amara.org")];
+        assert_eq!(drop_invented_phrases(amara).len(), 1, "esto no es habla nunca");
+    }
+
+    #[test]
+    fn decir_gracias_por_ver_en_plena_charla_se_queda() {
+        // Pegado a otras frases: lo ha dicho alguien.
+        let charla = vec![seg(0.0, "Y con esto acabamos."), seg(2.2, "Gracias por ver el vídeo."), seg(4.4, "Nos vemos la semana que viene.")];
+        assert_eq!(drop_invented_phrases(charla.clone()), charla);
+        // Con mas cosas dentro tampoco: no es solo la despedida.
+        let mas = vec![seg(0.0, "Gracias por ver el vídeo de hoy sobre las motos de agua")];
+        assert_eq!(drop_invented_phrases(mas.clone()), mas);
+        assert_eq!(plain_text("¡Suscríbete AL canal!"), "suscribete al canal");
     }
 
     #[test]

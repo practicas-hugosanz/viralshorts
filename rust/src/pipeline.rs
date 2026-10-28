@@ -140,6 +140,9 @@ pub struct Args {
     /// Montar exactamente estos trozos, en segundos: 754-790,2462-2493.
     #[arg(long, value_name = "INICIO-FIN,...", help_heading = "Elegir a mano")]
     pub moments: Option<String>,
+    /// Rehacer un short ya montado con su short_N.retoque.json (texto, recorte o estilo cambiados).
+    #[arg(long, value_name = "FICHERO", help_heading = "Montaje en dos tiempos")]
+    pub remake: Option<PathBuf>,
     #[arg(short, long, global = true)]
     pub verbose: bool,
 }
@@ -235,7 +238,7 @@ pub fn apply_overrides(cfg: &mut Config, args: &Args) -> Result<(), ConfigError>
 /// Ejecuta el pipeline y devuelve el codigo de salida (0 bien, 1 fallo del
 /// trabajo, 2 mal uso o mala configuracion).
 pub fn run(args: &Args) -> i32 {
-    if args.from_plan.is_none() && args.podcast.as_deref().is_none_or(|p| p.trim().is_empty()) {
+    if args.from_plan.is_none() && args.remake.is_none() && args.podcast.as_deref().is_none_or(|p| p.trim().is_empty()) {
         log::error!("Hace falta --podcast (o --from-plan).");
         return 2;
     }
@@ -270,6 +273,7 @@ pub fn run(args: &Args) -> i32 {
     }
 
     let code = match (&args.from_plan, &args.moments) {
+        _ if args.remake.is_some() => run_remake(args, args.remake.as_deref().unwrap_or(Path::new("")), &mut cfg, &work_dir, started),
         (Some(path), _) => run_from_plan(args, path, &mut cfg, &work_dir, started),
         _ if args.prepare => run_prepare(args, &cfg, &work_dir),
         (None, Some(moments)) => match parse_moments(moments) {
@@ -874,16 +878,7 @@ fn run_from_plan(args: &Args, plan_path: &Path, cfg: &mut Config, work_dir: &Pat
         }
     };
 
-    // La configuracion del plan manda: es con la que se eligieron los clips.
-    // Encima se aplican los argumentos de esta llamada (carpeta de salida, --set
-    // de estilo), que es lo que el usuario acaba de pedir.
-    let rebuilt = (|| {
-        let mut fresh = Config::default();
-        fresh.merge(&saved.config, "plan")?;
-        apply_overrides(&mut fresh, args)?;
-        Ok::<_, ConfigError>(fresh)
-    })();
-    match rebuilt {
+    match config_from_plan(&saved, args) {
         Ok(fresh) => *cfg = fresh,
         Err(error) => {
             log::error!("El plan trae ajustes que esta version no entiende: {error}");
@@ -903,36 +898,13 @@ fn run_from_plan(args: &Args, plan_path: &Path, cfg: &mut Config, work_dir: &Pat
         return 2;
     }
 
-    let mut podcast = Source::from(&saved.podcast);
-    // Un plan sin fondo (composicion sin fondo): se usa el propio podcast.
-    let mut background = if saved.background.ruta.is_empty() && saved.background.url.is_empty() {
-        Source::from(&saved.podcast)
-    } else {
-        Source::from(&saved.background)
-    };
-    let mut extra: Vec<Source> = saved.extra_backgrounds.iter().map(Source::from).collect();
-    let mut sources: Vec<(&mut Source, String, &str)> = vec![(&mut podcast, "podcast".into(), "podcast"), (&mut background, "background".into(), "video de fondo")];
-    sources.extend(extra.iter_mut().enumerate().map(|(i, s)| (s, format!("background_{}", i + 2), "video de fondo")));
-    for (source, base, label) in sources {
-        if source.path.is_file() {
-            continue;
-        }
-        // Lo normal es que se borrase al terminar el montaje anterior para no
-        // ocupar disco: si vino de un enlace, se baja otra vez.
-        if source.url.is_empty() {
-            log::error!("El {label} del plan ya no esta en {}. Vuelve a buscar los momentos con el video.", source.path.display());
+    let (podcast, background, extra) = match plan_sources(&saved, cfg, work_dir) {
+        Ok(sources) => sources,
+        Err(error) => {
+            log::error!("{error}");
             return 2;
         }
-        progress::stage("descarga", "Descargando los videos");
-        log::info!("El {label} ya no esta en el disco: se vuelve a descargar.");
-        match download::fetch(&source.url, &work_dir.join(base), &cfg.download) {
-            Ok(video) => source.path = video.path,
-            Err(error) => {
-                log::error!("No se pudo volver a descargar el {label}: {error}");
-                return 2;
-            }
-        }
-    }
+    };
 
     // Misma carpeta cada vez que se monta el mismo plan: volver a montarlo tras
     // corregir un titulo reemplaza sus shorts, no los duplica.
@@ -969,6 +941,120 @@ fn run_from_plan(args: &Args, plan_path: &Path, cfg: &mut Config, work_dir: &Pat
     finish(cfg, &output_dir);
     free_source(cfg, work_dir, &podcast, &results);
     report_results(&results, clips.len(), started.elapsed().as_secs_f64())
+}
+
+/// La configuracion del plan manda: es con la que se eligieron los clips.
+/// Encima se aplican los argumentos de esta llamada (carpeta de salida, --set
+/// de estilo), que es lo que el usuario acaba de pedir.
+fn config_from_plan(saved: &plan::Plan, args: &Args) -> Result<Config, ConfigError> {
+    let mut fresh = Config::default();
+    fresh.merge(&saved.config, "plan")?;
+    apply_overrides(&mut fresh, args)?;
+    Ok(fresh)
+}
+
+/// El podcast y los fondos de un plan, descargandolos otra vez si ya no estan.
+fn plan_sources(saved: &plan::Plan, cfg: &Config, work_dir: &Path) -> Result<(Source, Source, Vec<Source>), String> {
+    let mut podcast = Source::from(&saved.podcast);
+    // Un plan sin fondo (composicion sin fondo): se usa el propio podcast.
+    let own_background = !(saved.background.ruta.is_empty() && saved.background.url.is_empty());
+    let mut background = Source::from(if own_background { &saved.background } else { &saved.podcast });
+    let mut extra: Vec<Source> = saved.extra_backgrounds.iter().map(Source::from).collect();
+    let mut sources: Vec<(&mut Source, String, &str)> = vec![(&mut podcast, "podcast".into(), "podcast")];
+    if own_background {
+        sources.push((&mut background, "background".into(), "video de fondo"));
+    }
+    sources.extend(extra.iter_mut().enumerate().map(|(i, s)| (s, format!("background_{}", i + 2), "video de fondo")));
+    for (source, base, label) in sources {
+        if source.path.is_file() {
+            continue;
+        }
+        // Lo normal es que se borrase al terminar el montaje anterior para no
+        // ocupar disco: si vino de un enlace, se baja otra vez.
+        if source.url.is_empty() {
+            return Err(format!("El {label} ya no esta en {}. Vuelve a elegirlo y monta de nuevo.", source.path.display()));
+        }
+        progress::stage("descarga", "Descargando los videos");
+        log::info!("El {label} ya no esta en el disco: se vuelve a descargar.");
+        let video = download::fetch(&source.url, &work_dir.join(base), &cfg.download).map_err(|e| format!("No se pudo volver a descargar el {label}: {e}"))?;
+        source.path = video.path;
+    }
+    if !own_background {
+        background = podcast.clone();
+    }
+    Ok((podcast, background, extra))
+}
+
+/// Rehace un short ya montado desde su `short_N.retoque.json`, con el texto,
+/// el recorte o el estilo que se le hayan cambiado: sin elegir ni transcribir
+/// nada, en su misma carpeta y con su mismo numero (lo sustituye).
+fn run_remake(args: &Args, path: &Path, cfg: &mut Config, work_dir: &Path, started: Instant) -> i32 {
+    let saved = match plan::load(path) {
+        Ok(saved) if saved.clips.len() == 1 => saved,
+        Ok(_) => {
+            log::error!("{} no es el plan de un solo short.", path.display());
+            return 2;
+        }
+        Err(error) => {
+            log::error!("{error}");
+            return 2;
+        }
+    };
+    match config_from_plan(&saved, args) {
+        Ok(fresh) => *cfg = fresh,
+        Err(error) => {
+            log::error!("El short trae ajustes que esta version no entiende: {error}");
+            return 2;
+        }
+    }
+    let Some(folder) = path.parent().filter(|f| f.is_dir()).map(Path::to_path_buf) else {
+        log::error!("La carpeta del short ya no existe.");
+        return 2;
+    };
+    let (number, turn) = plan::single_slot(path).unwrap_or((1, 1));
+    check_fonts(cfg);
+    let (podcast, background, _) = match plan_sources(&saved, cfg, work_dir) {
+        Ok(sources) => sources,
+        Err(error) => {
+            log::error!("{error}");
+            return 2;
+        }
+    };
+
+    progress::result("salida", json!({"ruta": std::path::absolute(&folder).unwrap_or(folder.clone()).to_string_lossy()}));
+    let clip = saved.clips[0].to_window();
+    let meta = saved.clips[0].meta.clone();
+    log::info!("Rehaciendo el short {number} ({}).", clip.describe());
+    progress::stage("render", &format!("Rehaciendo el short {number}"));
+    let duration = ffmpeg::probe(&background.path).map(|i| i.duration).unwrap_or(background.duration);
+    let outcome = render_one(&clip, number, turn, meta.as_ref(), &podcast, &background, duration, cfg, work_dir, &folder, None);
+    clip_event(number, &outcome, meta.as_ref());
+    let results = vec![(number, outcome)];
+    finish(cfg, &folder);
+    free_source(cfg, work_dir, &podcast, &results);
+    report_results(&results, 1, started.elapsed().as_secs_f64())
+}
+
+/// Le dice a la interfaz como ha ido un short.
+fn clip_event(number: usize, outcome: &Result<PathBuf, String>, meta: Option<&ClipMetadata>) {
+    match outcome {
+        Ok(path) => progress::result(
+            "clip_done",
+            json!({
+                "n": number,
+                "ruta": std::path::absolute(path).unwrap_or(path.clone()).to_string_lossy(),
+                "fichero": path.file_name().unwrap_or_default().to_string_lossy(),
+                "titulo": meta.map_or("", |m| m.title.as_str()),
+                "gancho": meta.map_or("", |m| m.hook.as_str()),
+                "pie": meta.map_or(String::new(), |m| m.caption()),
+            }),
+        ),
+        // Un clip que falla no debe tirar los demas.
+        Err(error) => {
+            log::error!("El clip {number} fallo: {error}");
+            progress::result("clip_failed", json!({"n": number, "error": error}));
+        }
+    }
 }
 
 /// Al terminar, borra el video descargado del podcast: pesa cientos de MB y
@@ -1150,24 +1236,7 @@ fn render_all(
                 let turn = (number - 1) / backgrounds.len().max(1) + 1;
                 let outcome =
                     render_one(clip, number, turn, meta, podcast, &backgrounds[which], durations[which], cfg, work_dir, output_dir, energy);
-                match &outcome {
-                    Ok(path) => progress::result(
-                        "clip_done",
-                        json!({
-                            "n": number,
-                            "ruta": std::path::absolute(path).unwrap_or(path.clone()).to_string_lossy(),
-                            "fichero": path.file_name().unwrap_or_default().to_string_lossy(),
-                            "titulo": meta.map_or("", |m| m.title.as_str()),
-                            "gancho": meta.map_or("", |m| m.hook.as_str()),
-                            "pie": meta.map_or(String::new(), |m| m.caption()),
-                        }),
-                    ),
-                    // Un clip que falla no debe tirar los demas.
-                    Err(error) => {
-                        log::error!("El clip {number} fallo: {error}");
-                        progress::result("clip_failed", json!({"n": number, "error": error}));
-                    }
-                }
+                clip_event(number, &outcome, meta);
                 results.lock().unwrap().push((number, outcome));
 
                 let finished = done.fetch_add(1, Ordering::SeqCst) + 1;
@@ -1199,6 +1268,7 @@ fn render_one(
     output_dir: &Path,
     energy: Option<&EnergyTrack>,
 ) -> Result<PathBuf, String> {
+    let base_cfg = cfg;
     // La plantilla de subtitulos puede ser propia de este clip.
     let own_cfg;
     let cfg = if clip.style.is_empty() || clip.style == cfg.subtitles.style {
@@ -1352,7 +1422,29 @@ fn render_one(
     }
 
     write_sidecar(&output, clip, meta, podcast, &cuts);
+    write_retouch(&output, clip, meta, podcast, background, number, turn, base_cfg);
     Ok(output)
+}
+
+/// Junto al short, lo necesario para retocarlo despues (ver `plan::save_single`).
+#[allow(clippy::too_many_arguments)]
+fn write_retouch(output: &Path, clip: &Window, meta: Option<&ClipMetadata>, podcast: &Source, background: &Source, number: usize, turn: usize, cfg: &Config) {
+    let source = |s: &Source| PlanSource {
+        ruta: std::path::absolute(&s.path).unwrap_or(s.path.clone()).to_string_lossy().into_owned(),
+        titulo: s.title.clone(),
+        duracion: round(s.duration, 2),
+        url: s.url.clone(),
+    };
+    // Sin fondo propio (el fondo es el mismo podcast): el plan lo deja vacio.
+    let background = if background.path == podcast.path { PlanSource::default() } else { source(background) };
+    if let Err(error) = plan::save_single(&retouch_path(output), cfg, &source(podcast), &background, clip, meta, number, turn) {
+        log::warn!("No se pudo guardar lo necesario para retocar {}: {error}", output.display());
+    }
+}
+
+/// `short_3.mp4` -> `short_3.retoque.json`.
+pub fn retouch_path(video: &Path) -> PathBuf {
+    video.with_extension("retoque.json")
 }
 
 /// Guarda los textos de publicacion junto al video.

@@ -48,7 +48,7 @@
 - **Formatos** 9:16, 4:5 y 1:1, **efectos de sonido** (whoosh y pitido de censura), **portada con el gancho**, **pantalla final** y **fondo** variable (punto, velocidad, desenfoque).
 - **Kits de marca**: logo, usuario y estilo guardados para aplicarlos con un clic.
 - **Música de fondo** que baja sola cuando habla alguien, y una **barra de progreso** sobre el vídeo.
-- **Edición por clip**: corrige el texto de los subtítulos, recorta cada clip y elige su estilo antes de montar.
+- **Retocar un short ya hecho**: desde «Mis shorts», corrige el texto de los subtítulos, recórtalo, cámbiale el estilo, el título o el gancho, y se rehace solo ese short en segundos, sin volver a transcribir.
 - **Perfiles**: guarda todos tus ajustes con un nombre y recupéralos con un clic.
 - **Acertar más con el texto**: vuelve a transcribir los clips elegidos con un modelo mayor, y añade nombres difíciles y correcciones fijas.
 - **Subtítulos en otro idioma**: al inglés sin conexión; al español, francés, portugués, alemán o italiano con Claude.
@@ -125,6 +125,20 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
+
+### 1.6.2 (2026-10-28)
+
+- **Retocar un short ya hecho**: en «Mis shorts», el botón «Retocar» deja
+  corregir el texto de los subtítulos, recortar el principio o el final,
+  cambiar el estilo, el título o el gancho, y rehace solo ese short en unos
+  segundos, en su sitio y sin volver a transcribir. Vale para los shorts que se
+  monten a partir de esta versión.
+- Fuera las frases que el reconocimiento de voz se inventa cuando no oye a
+  nadie («Gracias por ver el vídeo. Si te gustó, dale like y suscríbete…»): si
+  esa despedida está sola entre silencios, no sale en los subtítulos. Si alguien
+  la dice de verdad en mitad de la charla, se queda.
+- Se puede recortar un trozo aunque no quede ninguna palabra dentro (sale sin
+  subtítulos).
 
 ### 1.6.1 (2026-10-28)
 

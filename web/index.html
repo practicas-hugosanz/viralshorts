@@ -608,7 +608,16 @@ dialog::backdrop { background: rgba(15, 16, 19, .55); backdrop-filter: blur(3px)
 .dlg-body li { margin: 3px 0; }
 .dlg-body p { color: var(--mute); }
 .dlg-body p + p { margin-top: 8px; }
-.dlg-foot { padding: 14px 26px 22px; display: flex; justify-content: flex-end; }
+.dlg-foot { padding: 14px 26px 22px; display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+.dlg-foot .grow { flex: 1; margin: 0; }
+dialog.wide { width: min(880px, calc(100vw - 32px)); }
+.rt-sub { color: var(--mute); margin-top: 4px; }
+.rt-body { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 22px; align-items: start; padding-top: 18px; }
+.rt-body video { width: 100%; aspect-ratio: 9 / 16; background: #000; border-radius: 16px; object-fit: contain; position: sticky; top: 0; }
+.rt-fields { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.rt-fields .fields { gap: 14px 16px; }
+.rt-fields .hint { margin-top: 4px; }
+@media (max-width: 720px) { .rt-body { grid-template-columns: 1fr; } .rt-body video { max-height: 300px; position: static; } }
 body.modal-open .main { overflow: hidden; }
 
 /* ---------------------------------------------------------- transcripcion en directo */
@@ -843,6 +852,7 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
   <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-scissors" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><path d="M8.2 7.4L20 17M8.2 16.6L20 7"/></symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></symbol>
   <symbol id="i-pause" viewBox="0 0 24 24"><rect x="7" y="5.5" width="3.2" height="13" rx="1"/><rect x="13.8" y="5.5" width="3.2" height="13" rx="1"/></symbol>
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M11 7l-5 5 5 5M18 7l-5 5 5 5"/></symbol>
@@ -1689,6 +1699,45 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
 </div>
 
 <!-- ============================================================= ayuda ====== -->
+<dialog id="retouch" class="wide" aria-labelledby="rt-title">
+  <div class="dlg-head"><h2 id="rt-title">Retocar el short</h2><p class="rt-sub" id="rt-sub"></p></div>
+  <div class="dlg-body rt-body">
+    <video id="rt-video" controls preload="metadata"></video>
+    <div class="rt-fields">
+      <div>
+        <label class="lbl-t" for="rt-text">Texto de los subtítulos</label>
+        <textarea id="rt-text" rows="5"></textarea>
+        <p class="hint" id="rt-text-hint">Corrige lo que se haya entendido mal: cada palabra conserva su momento.</p>
+      </div>
+      <div class="fields">
+        <div><label class="lbl-t" for="rt-cut-start">Empezar más tarde (s)</label><input type="number" id="rt-cut-start" min="0" max="30" step="0.5"></div>
+        <div><label class="lbl-t" for="rt-cut-end">Terminar antes (s)</label><input type="number" id="rt-cut-end" min="0" max="30" step="0.5"></div>
+      </div>
+      <p class="hint" id="rt-len"></p>
+      <div class="fields">
+        <div class="wide">
+          <label class="lbl-t" for="rt-style">Estilo de los subtítulos</label>
+          <select id="rt-style">
+            <option value="">El que tenía</option>
+            <option value="classic">Clásico</option>
+            <option value="box">Caja</option>
+            <option value="marker">Rotulador</option>
+            <option value="neon">Neón</option>
+            <option value="minimal">Sobrio</option>
+          </select>
+        </div>
+        <div class="wide"><label class="lbl-t" for="rt-titulo">Título de la publicación</label><input type="text" id="rt-titulo" maxlength="120"></div>
+        <div class="wide"><label class="lbl-t" for="rt-gancho">Gancho: el rótulo de los primeros segundos</label><input type="text" id="rt-gancho" maxlength="60"></div>
+      </div>
+    </div>
+  </div>
+  <div class="dlg-foot">
+    <span class="grow hint" id="rt-note">Se rehace solo este short, sin volver a transcribir.</span>
+    <button type="button" class="btn" id="rt-cancel">Cancelar</button>
+    <button type="button" class="btn primary" id="rt-go"><svg class="ico"><use href="#i-scissors"/></svg>Rehacer el short</button>
+  </div>
+</dialog>
+
 <dialog id="help">
   <div class="dlg-head"><h2>Cómo funciona</h2></div>
   <div class="dlg-body">
@@ -2621,7 +2670,7 @@ function renderQueue(items) {
     <div class="queue-item">
       <div class="num">${item.n}</div>
       <div class="what">${escapeHtml(shortName(item.podcast))}</div>
-      <span class="chip">${item.elegir ? "para elegir los trozos" : item.trozos ? item.trozos + (item.trozos === 1 ? " trozo" : " trozos") : item.revisar ? "para revisar" : item.clips + " shorts"}</span>
+      <span class="chip">${item.rehacer ? "retocar un short" : item.elegir ? "para elegir los trozos" : item.trozos ? item.trozos + (item.trozos === 1 ? " trozo" : " trozos") : item.revisar ? "para revisar" : item.clips + " shorts"}</span>
       <div class="ops">
         <button type="button" data-op="up" data-n="${item.n}" aria-label="Adelantar" title="Adelantar" ${i === 0 ? "disabled" : ""}><svg class="ico"><use href="#i-up"/></svg></button>
         <button type="button" data-op="down" data-n="${item.n}" aria-label="Atrasar" title="Atrasar" ${i === list.length - 1 ? "disabled" : ""}><svg class="ico"><use href="#i-down"/></svg></button>
@@ -3911,8 +3960,6 @@ function renderClips(clips) {
 // ===========================================================================
 let LIB = [];                    // lo que devuelve /api/existing: todas las ejecuciones
 const CARDS = new Map();         // id -> { el, sig }
-const RUN_N = new Map();         // ruta del short -> numero en el plan (para «Rehacer este»)
-const norm = (path) => String(path || "").replace(/\\/g, "/").toLowerCase();
 
 function whenText(secs) {
   if (!secs) return "";
@@ -3925,8 +3972,6 @@ function whenText(secs) {
   if (days === 1) return `ayer, ${hour}`;
   return date.toLocaleDateString("es", { day: "numeric", month: "short", year: date.getFullYear() === today.getFullYear() ? undefined : "numeric" });
 }
-
-function noteResult(item) { if (item.ruta && item.n) RUN_N.set(norm(item.ruta), item.n); }
 
 async function loadLibrary() {
   try {
@@ -3974,7 +4019,7 @@ function renderLibrary() {
 
   let shown = 0;
   LIB.forEach((item, index) => {
-    const sig = [item.id, item.mtime, item.titulo, item.gancho, item.pie, RUN_N.has(norm(item.ruta)) && PLAN ? "r" : ""].join("|");
+    const sig = [item.id, item.mtime, item.titulo, item.gancho, item.pie, item.retocable ? "r" : ""].join("|");
     let card = CARDS.get(item.id);
     if (!card || card.sig !== sig) {
       if (card) card.el.remove();
@@ -4048,20 +4093,12 @@ function buildCard(item) {
     foot.appendChild(copy);
   }
 
-  // Rehacer solo este short: cambia el título o el gancho en la revisión y vuelve
-  // a montarse sin repetir la transcripción (si el vídeo se borró, se baja otra vez).
-  const number = RUN_N.get(norm(item.ruta));
-  if (PLAN && number) {
-    const again = iconButton("Rehacer este", "refresh");
-    again.addEventListener("click", async () => {
-      const label = again.querySelector("span");
-      again.disabled = true;
-      label.textContent = "Montando…";
-      await renderFromPlan([number]);
-      again.disabled = false;
-      label.textContent = "Rehacer este";
-    });
-    foot.appendChild(again);
+  // Retocar: corregir el texto, recortar o cambiar el estilo y rehacer solo
+  // este short, sin volver a transcribir (si el vídeo se borró, se baja otra vez).
+  if (item.retocable) {
+    const retouch = iconButton("Retocar", "scissors");
+    retouch.addEventListener("click", () => openRetouch(item));
+    foot.appendChild(retouch);
   }
 
   // YouTube: subir con un clic (o ver el que ya se subio).
@@ -4125,6 +4162,103 @@ function buildCard(item) {
   return card;
 }
 
+// ===========================================================================
+// Retocar un short ya hecho
+// ===========================================================================
+let RT = null;      // { item, clip }
+
+async function openRetouch(item) {
+  clearBanner($("banner"));
+  let answer;
+  try {
+    const response = await fetch(`/api/short/retoque?id=${encodeURIComponent(item.id)}`, { headers: AUTH });
+    answer = await response.json();
+    if (!response.ok || !answer.ok) throw new Error(answer.error || `HTTP ${response.status}`);
+  } catch (error) {
+    showBanner($("tip"), "No se puede retocar este short", escapeHtml(error.message));
+    return;
+  }
+  const clip = answer.clip;
+  RT = { item, clip };
+  $("rt-sub").textContent = item.titulo || item.fichero;
+  $("rt-video").src = `/api/video?f=${encodeURIComponent(item.id)}&t=${encodeURIComponent(TOKEN)}&v=${item.mtime || 0}#t=0.1`;
+  $("rt-text").value = clip.palabras || "";
+  $("rt-text").disabled = false;
+  $("rt-cut-start").value = clip.recorte ? clip.recorte.inicio : 0;
+  $("rt-cut-end").value = clip.recorte ? clip.recorte.fin : 0;
+  $("rt-style").value = clip.estilo || "";
+  $("rt-titulo").value = clip.titulo || "";
+  $("rt-gancho").value = clip.gancho || "";
+  rtPaintLength();
+  $("retouch").showModal();
+  document.body.classList.add("modal-open");
+}
+
+function closeRetouch() {
+  document.body.classList.remove("modal-open");
+  $("rt-video").pause();
+  $("retouch").close();
+}
+
+/** El recorte se cuenta desde el clip tal como salió: se puede volver a ampliar. */
+function rtCuts() {
+  const read = (id) => Math.min(30, Math.max(0, parseFloat(String($(id).value).replace(",", ".")) || 0));
+  return { inicio: read("rt-cut-start"), fin: read("rt-cut-end") };
+}
+
+function rtPaintLength() {
+  if (!RT) return;
+  const clip = RT.clip;
+  const full = (clip.duracion || 0) + (clip.recorte ? clip.recorte.inicio + clip.recorte.fin : 0);
+  const cut = rtCuts();
+  const left = full - cut.inicio - cut.fin;
+  const trimmed = Math.abs(cut.inicio - (clip.recorte?.inicio || 0)) > 0.01 || Math.abs(cut.fin - (clip.recorte?.fin || 0)) > 0.01;
+  const tooShort = left < 5;
+  $("rt-len").innerHTML = tooShort
+    ? `<span style="color:var(--bad)">Así quedaría en ${left.toFixed(1).replace(".", ",")} s: tiene que durar al menos 5 s.</span>`
+    : `El trozo durará unos ${Math.round(left)} s (antes de quitar silencios).`;
+  // Con otro recorte el texto ya no es el mismo tramo: se ajusta solo.
+  $("rt-text").disabled = trimmed;
+  $("rt-text-hint").textContent = trimmed
+    ? "Al cambiar el recorte, el texto se ajusta solo al nuevo tramo. Rehazlo y, si hace falta, corrige el texto después."
+    : "Corrige lo que se haya entendido mal: cada palabra conserva su momento.";
+  $("rt-go").disabled = tooShort;
+}
+["rt-cut-start", "rt-cut-end"].forEach(id => $(id).addEventListener("input", rtPaintLength));
+
+async function remakeShort() {
+  if (!RT) return;
+  const { item, clip } = RT;
+  const cut = rtCuts();
+  const body = {
+    id: item.id,
+    recorte: cut,
+    estilo: $("rt-style").value,
+    publicacion: { title: $("rt-titulo").value.trim(), hook: $("rt-gancho").value.trim() },
+    output: $("output").value.trim(),
+    delete_source: $("delete_source").checked,
+  };
+  const text = $("rt-text").value.trim();
+  if (!$("rt-text").disabled && text && text !== String(clip.palabras || "").trim()) body.texto_palabras = text;
+  $("rt-go").disabled = true;
+  try {
+    const answer = await post("/api/short/remake", body);
+    closeRetouch();
+    showBanner($("tip"), answer.encolado ? "Añadido a la cola" : "Rehaciendo el short",
+      answer.encolado
+        ? `Se rehará en cuanto termine lo que hay en marcha (posición ${answer.posicion}).`
+        : "Suele tardar menos de un minuto. Lo verás aquí mismo cuando termine.");
+  } catch (error) {
+    showBanner($("banner"), "No se ha podido rehacer", escapeHtml(error.message));
+  } finally {
+    $("rt-go").disabled = false;
+  }
+}
+$("rt-go").addEventListener("click", remakeShort);
+$("rt-cancel").addEventListener("click", closeRetouch);
+$("retouch").addEventListener("close", () => { document.body.classList.remove("modal-open"); $("rt-video").pause(); });
+$("retouch").addEventListener("click", (event) => { if (event.target === $("retouch")) closeRetouch(); });
+
 function startRename(card, item) {
   const title = card.querySelector("h3");
   if (!title || card.querySelector(".rename")) return;
@@ -4187,7 +4321,6 @@ events.onmessage = (message) => {
       renderClips(event.clips || []);
       (event.notices || []).forEach(showNotice);
       (event.live || []).forEach(addLive);
-      (event.results || []).forEach(noteResult);
       loadLibrary();
       if (event.env && event.env.output_dir) {
         $("output").placeholder = event.env.output_dir;
@@ -4265,7 +4398,7 @@ events.onmessage = (message) => {
       $("stage-label").textContent = "Pódcast listo: elige los trozos";
       go("trabajo");
       break;
-    case "clip_done":   noteResult(event); loadLibrarySoon(); break;
+    case "clip_done":   loadLibrarySoon(); break;
     case "clip_failed":
       showBanner($("banner"), `El short ${event.n} no ha salido`,
                  escapeHtml(event.error || "") + " Los demás siguen adelante.");

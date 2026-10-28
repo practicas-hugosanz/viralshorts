@@ -165,6 +165,52 @@ pub fn save(
     Ok(path.to_path_buf())
 }
 
+/// El plan de un solo short ya montado, junto a el (`short_N.retoque.json`):
+/// lo que hace falta para retocarlo desde «Mis shorts» sin volver a elegir ni a
+/// transcribir. Lleva su numero y la vuelta de su fondo para que salga igual.
+/// Si ya habia uno de este short (se esta rehaciendo), conserva el clip tal como
+/// salio la primera vez, para poder deshacer un recorte.
+#[allow(clippy::too_many_arguments)]
+pub fn save_single(
+    path: &Path,
+    cfg: &Config,
+    podcast: &PlanSource,
+    background: &PlanSource,
+    clip: &Window,
+    meta: Option<&ClipMetadata>,
+    number: usize,
+    turn: usize,
+) -> Result<(), PlanError> {
+    let mut dict = clip_dict(clip, meta, true);
+    dict["estilo"] = json!(clip.style);
+    let before = read_raw(path).ok().and_then(|old| old["clips"][0]["original"].as_object().cloned());
+    if let Some(original) = before {
+        let inside = |key: &str| original.get(key).and_then(Value::as_f64);
+        if inside("inicio").is_some_and(|s| s <= clip.start + 0.01) && inside("fin").is_some_and(|e| e >= clip.end - 0.01) {
+            dict["original"] = Value::Object(original);
+        }
+    }
+    let data = json!({
+        "version": FORMAT_VERSION,
+        "creado": chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        "config": cfg.to_value(),
+        "podcast": podcast,
+        "background": background,
+        "fondos_extra": [],
+        "clips": [dict],
+        "salida": {"numero": number, "turno": turn},
+    });
+    write_json(path, &data)
+}
+
+/// Numero del short y vuelta de su fondo de un plan de `save_single`.
+pub fn single_slot(path: &Path) -> Option<(usize, usize)> {
+    let data = read_raw(path).ok()?;
+    let number = data["salida"]["numero"].as_u64().filter(|n| *n > 0)? as usize;
+    let turn = data["salida"]["turno"].as_u64().filter(|n| *n > 0).unwrap_or(number as u64) as usize;
+    Some((number, turn))
+}
+
 fn write_json(path: &Path, data: &Value) -> Result<(), PlanError> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| PlanError::Io(format!("No se pudo crear {}: {e}", parent.display())))?;
@@ -408,16 +454,15 @@ fn edit_clip(clip: &mut Value, change: &Value) {
         let changed = (cut_start - now_start).abs() > 0.01 || (cut_end - now_end).abs() > 0.01;
         let (new_start, new_end) = (original.start + cut_start, original.end - cut_end);
         if changed && new_end - new_start >= 5.0 {
+            // Puede no quedar ninguna palabra (un trozo sin voz): sale sin subtitulos.
             let words: Vec<Word> = original.words.iter().filter(|w| w.start >= new_start - 0.02 && w.end <= new_end + 0.02).cloned().collect();
-            if !words.is_empty() {
-                c.start = new_start;
-                c.end = new_end;
-                c.text = join_words(&words);
-                c.words = words;
-                c.original = Some(original);
-                if cut_start == 0.0 && cut_end == 0.0 && c.original.as_ref().is_some_and(|o| o.words == c.words) {
-                    c.original = None; // vuelve a ser el clip sin tocar
-                }
+            c.start = new_start;
+            c.end = new_end;
+            c.text = join_words(&words);
+            c.words = words;
+            c.original = Some(original);
+            if cut_start == 0.0 && cut_end == 0.0 && c.original.as_ref().is_some_and(|o| o.words == c.words) {
+                c.original = None; // vuelve a ser el clip sin tocar
             }
         }
     }
@@ -768,6 +813,31 @@ mod tests {
         assert!(plan.clips[0].meta.is_none());
         assert_eq!(plan.podcast.ruta, "C:/p.mp4");
         assert_eq!(plan.clips[0].signals["heat"], 0.2);
+    }
+
+    #[test]
+    fn el_plan_de_un_short_guarda_su_sitio_y_conserva_el_original_al_rehacerlo() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("short_3.retoque.json");
+        let words: Vec<Word> = (0..20).map(|i| Word::new(&format!("p{i}"), 10.0 + i as f64, 10.5 + i as f64)).collect();
+        let clip = Window::new(10.0, 30.0, words, "texto");
+        let fuente = PlanSource { ruta: "C:/w/p.mp4".into(), titulo: "P".into(), duracion: 100.0, url: String::new() };
+        save_single(&path, &Config::default(), &fuente, &PlanSource::default(), &clip, None, 3, 2).unwrap();
+        assert_eq!(single_slot(&path), Some((3, 2)));
+        let cargado = load(&path).unwrap();
+        assert_eq!((cargado.clips.len(), cargado.clips[0].words.len(), cargado.podcast.ruta.as_str()), (1, 20, "C:/w/p.mp4"));
+
+        // Se recorta, se monta y el montaje vuelve a guardar el plan: el clip de
+        // la primera vez sigue ahi para poder deshacer el recorte.
+        let recortado = update(&path, &[json!({"n": 1, "recorte": {"inicio": 4, "fin": 2}})]).unwrap();
+        let mut nuevo = recortado.clips[0].to_window();
+        nuevo.style = "neon".into();
+        save_single(&path, &Config::default(), &fuente, &PlanSource::default(), &nuevo, None, 3, 2).unwrap();
+        let otra_vez = load(&path).unwrap();
+        assert_eq!((otra_vez.clips[0].start, otra_vez.clips[0].end, otra_vez.clips[0].style.as_str()), (14.0, 28.0, "neon"));
+        assert_eq!(otra_vez.clips[0].original.as_ref().map(|o| (o.start, o.end)), Some((10.0, 30.0)));
+        let deshecho = update(&path, &[json!({"n": 1, "recorte": {"inicio": 0, "fin": 0}})]).unwrap();
+        assert_eq!((deshecho.clips[0].start, deshecho.clips[0].end), (10.0, 30.0));
     }
 
     #[test]

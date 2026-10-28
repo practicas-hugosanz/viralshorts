@@ -67,7 +67,7 @@ fn main() -> ExitCode {
     logging::setup(cli.args.verbose);
     ffmpeg::use_portable_tools(&ffmpeg::project_root());
 
-    let sin_trabajo = cli.args.podcast.is_none() && cli.args.background.is_none() && cli.args.from_plan.is_none();
+    let sin_trabajo = cli.args.podcast.is_none() && cli.args.background.is_none() && cli.args.from_plan.is_none() && cli.args.remake.is_none();
     let code = match &cli.command {
         None if sin_trabajo => viralshorts::app::run(),
         None => pipeline::run(&cli.args),
