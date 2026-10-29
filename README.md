@@ -126,6 +126,18 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
 
+### 1.6.3 (2026-10-29)
+
+- Se pueden quitar los textos: en Crear › Aspecto › «Subtítulos y textos» hay
+  interruptores para los subtítulos, el gancho del principio y la tarjeta del
+  título (que antes estaba en Ajustes). Sin subtítulos siguen saliendo el gancho
+  y la tarjeta si están encendidos.
+- Un vídeo que dura lo que un short (o menos, hasta 5 s más que la duración
+  máxima) sale entero en un solo short, en vez de recortarlo o fallar. Si pedías
+  varios, avisa de que no da para más.
+- Si el vídeo es tan corto que saltarse la intro y la despedida no deja sitio
+  para ningún clip, no se las salta.
+
 ### 1.6.2 (2026-10-28)
 
 - **Retocar un short ya hecho**: en «Mis shorts», el botón «Retocar» deja

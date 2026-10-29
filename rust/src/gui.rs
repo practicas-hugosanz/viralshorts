@@ -81,7 +81,7 @@ enum Kind {
 
 /// La lista es cerrada a proposito: el navegador no decide que ajuste del
 /// pipeline se cambia, solo elige entre estos.
-const STYLE_FIELDS: [(&str, &str, Kind); 43] = [
+const STYLE_FIELDS: [(&str, &str, Kind); 45] = [
     ("font_name", "subtitles.font_name", Kind::Text),
     ("font_size", "subtitles.font_size", Kind::Int),
     ("color_active", "subtitles.color_active", Kind::Color),
@@ -115,6 +115,8 @@ const STYLE_FIELDS: [(&str, &str, Kind); 43] = [
     ("format", "layout.format", Kind::Format),
     ("sfx", "audio.sfx", Kind::Flag),
     ("emojis", "subtitles.emojis", Kind::Flag),
+    ("subs", "subtitles.enabled", Kind::Flag),
+    ("hook", "hook.enabled", Kind::Flag),
     ("export_srt", "output.export_srt", Kind::Flag),
     ("export_clean", "output.export_clean", Kind::Flag),
     ("censor_beep", "audio.censor_beep", Kind::Flag),
@@ -2543,6 +2545,17 @@ la guapa=La Guapa"}));
         assert_eq!(b.job.snapshot()["status"], "running");
         b.job.stop();
         assert_eq!(remake_short(&app, &json!({"id": "pod_2026/short_9.mp4"})).0, 404);
+    }
+
+    #[test]
+    fn se_pueden_quitar_los_subtitulos_y_el_gancho() {
+        let pares: Map<String, Value> = style_pairs(&json!({"style": {"subs": "false", "hook": false}})).into_iter().collect();
+        assert_eq!((pares["subtitles.enabled"].clone(), pares["hook.enabled"].clone()), (json!(false), json!(false)));
+        let mut cfg = Config::default();
+        for (ajuste, valor) in pares {
+            cfg.set(&format!("{ajuste}={}", value_text(&valor))).unwrap();
+        }
+        assert!(!cfg.subtitles.enabled && !cfg.hook.enabled);
     }
 
     #[test]

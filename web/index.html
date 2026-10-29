@@ -92,7 +92,9 @@ body {
   color: var(--text);
   font: 500 14px/1.5 var(--ui);
   -webkit-font-smoothing: antialiased;
-  overflow: hidden;
+  /* clip y no hidden: con hidden el navegador aun puede desplazar la pagina al
+     enfocar un control, y el marco se descoloca. */
+  overflow: clip;
 }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
@@ -104,7 +106,7 @@ code { font: 12.5px Consolas, monospace; background: var(--raise); padding: 1px 
 .ico.fill { fill: currentColor; stroke: none; }
 
 /* ------------------------------------------------------------- estructura */
-.app { display: grid; grid-template-columns: 92px minmax(0, 1fr); height: 100vh; }
+.app { display: grid; grid-template-columns: 92px minmax(0, 1fr); height: 100vh; overflow: clip; }
 .main {
   overflow-y: auto; scroll-behavior: smooth;
   margin: 12px 12px 12px 0; border-radius: 30px;
@@ -733,6 +735,9 @@ mark.set-hit { background: var(--butter); color: inherit; border-radius: 4px; pa
   .set-ctl { flex-basis: auto; }
 }
 
+.texts-on { margin-bottom: 18px; padding-bottom: 6px; border-bottom: 1px solid var(--line-soft); }
+#subs-fields.off { opacity: .4; pointer-events: none; }
+
 /* ------------------------------------------- elegir los trozos a mano */
 .editor { display: flex; flex-direction: column; gap: 14px; }
 .editor .card-title { margin-bottom: 4px; }
@@ -1064,9 +1069,15 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
             </div>
               </details>
               <details class="acc" name="aspecto" id="acc-subs">
-                <summary><b>Subtítulos</b><span class="sum" id="sum-subs"></span></summary>
+                <summary><b>Subtítulos y textos</b><span class="sum" id="sum-subs"></span></summary>
                 <div class="acc-body">
-              <div class="fields">
+              <div class="opts texts-on">
+                <label class="opt"><span class="opt-text"><b>Subtítulos</b><em>Lo que se dice, palabra a palabra.</em></span><input type="checkbox" class="switch" id="fx-subs" checked></label>
+                <label class="opt"><span class="opt-text"><b>Gancho al principio</b><em>El rótulo grande de los primeros segundos («NO TE LO CREES»).</em></span><input type="checkbox" class="switch" id="fx-hook" checked></label>
+                <label class="opt"><span class="opt-text"><b>Tarjeta del título</b><em>Durante los primeros 2,5 segundos aparece arriba de qué va el clip, para quien llega de golpe.</em></span><input type="checkbox" class="switch" id="title_card" checked></label>
+                <input type="hidden" id="st_subs" value="true"><input type="hidden" id="st_hook" value="true">
+              </div>
+              <div class="fields" id="subs-fields">
                 <div class="wide">
                   <span class="lbl-t">Estilo</span>
                   <div class="seg auto" role="radiogroup" aria-label="Estilo de los subtítulos">
@@ -1473,12 +1484,11 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
 
             <section class="set-sec" id="set-montaje">
               <h2>Cómo queda el short</h2>
-              <p class="set-lead">El aspecto (composición, subtítulos, tu marca) se elige en Crear, en la pestaña Aspecto. Esto es lo que se hace al montar.</p>
+              <p class="set-lead">El aspecto (composición, subtítulos y otros textos, tu marca) se elige en Crear, en la pestaña Aspecto. Esto es lo que se hace al montar.</p>
               <div class="set-card opts">
                 <label class="opt"><span class="opt-text"><b>Seguir la cara</b><em>El encuadre se mueve hacia quien habla en vez de recortar por el centro.</em></span><input type="checkbox" class="switch" id="reframe" checked></label>
                 <label class="opt"><span class="opt-text"><b>Quitar los silencios</b><em>Corta las pausas largas para que el clip vaya más rápido. También en los trozos que eliges a mano.</em></span><input type="checkbox" class="switch" id="jumpcuts" checked></label>
                 <label class="opt"><span class="opt-text"><b>Zoom lento</b><em>Un acercamiento suave y continuo para que el plano no se quede muerto.</em></span><input type="checkbox" class="switch" id="zoom" checked></label>
-                <label class="opt"><span class="opt-text"><b>Tarjeta de contexto al empezar</b><em>Durante los primeros 2,5 segundos aparece arriba el título del clip, para que quien llega de golpe entienda de qué se habla.</em></span><input type="checkbox" class="switch" id="title_card" checked></label>
                 <label class="opt"><span class="opt-text"><b>Tapar las palabrotas</b><em>En los subtítulos, «puta» sale como «p#ta». Se lee igual, pero deja de ser literal para los filtros de las plataformas. El audio no se toca.</em></span><input type="checkbox" class="switch" id="censor" checked></label>
               </div>
             </section>
@@ -1787,7 +1797,7 @@ const STYLE  = { st_color: "color_active", st_size: "font_size",
                  st_lsize: "logo_size", st_lop: "logo_opacity", st_handle: "handle",
                  st_bar: "bar", st_barpos: "bar_pos", st_barcolor: "bar_color",
                  st_music: "music", st_mvol: "music_volume", st_mduck: "music_duck",
-                 st_format: "format", st_sfx: "sfx", st_emojis: "emojis", st_srt: "export_srt", st_clean: "export_clean", st_beep: "censor_beep", st_cover: "cover_text",
+                 st_format: "format", st_sfx: "sfx", st_emojis: "emojis", st_subs: "subs", st_hook: "hook", st_srt: "export_srt", st_clean: "export_clean", st_beep: "censor_beep", st_cover: "cover_text",
                  st_bgstart: "bg_start", st_bgspeed: "bg_speed", st_bgblur: "bg_blur", st_bgdim: "bg_dim",
                  st_endcard: "endcard", st_endtext: "endcard_text" };
 const LOOK   = ["st_color", "st_size", "st_pos", "st_words", "st_font",
@@ -1980,6 +1990,7 @@ function paintPhone() {
   hotIndex = hotIndex % line.length;
   sub.innerHTML = line.map(word => `<span>${word}</span>`).join(" ");
   sub.className = "sub s-" + $("st_sstyle").value;
+  sub.hidden = $("st_subs").value === "false";
   sub.style.setProperty("--hot", color);
   paintHot();
 }
@@ -2064,10 +2075,12 @@ function syncLook() {
   setRadio("lpos", $("st_lpos").value);
   setRadio("fmt", $("st_format").value);
   [["fx-sfx", "st_sfx"], ["fx-beep", "st_beep"], ["fx-cover", "st_cover"], ["fx-end", "st_endcard"],
-   ["fx-emoji", "st_emojis"], ["fx-srt", "st_srt"], ["fx-clean", "st_clean"]]
+   ["fx-emoji", "st_emojis"], ["fx-srt", "st_srt"], ["fx-clean", "st_clean"],
+   ["fx-subs", "st_subs"], ["fx-hook", "st_hook"]]
     .forEach(([box, hidden]) => { $(box).checked = $(hidden).value === "true"; });
   $("bar-on").checked = $("st_bar").value === "true";
   $("duck-on").checked = $("st_mduck").value !== "false";
+  $("subs-fields").classList.toggle("off", $("st_subs").value === "false");
 }
 
 function afterLook() {
@@ -3637,7 +3650,12 @@ function paintSummaries() {
   const comp = [COMP_NAMES[mode], $("st_format").value];
   if (mode === "stack") comp.push(Math.round(+$("st_top").value * 100) + " % pódcast");
   $("sum-comp").textContent = comp.join(" · ");
-  $("sum-subs").textContent = `${STYLE_NAMES[$("st_sstyle").value]} · ${$("st_font").value} · ${$("st_words").value} palabras`;
+  const texts = [];
+  if ($("st_hook").value !== "false") texts.push("gancho");
+  if ($("title_card").checked) texts.push("título");
+  $("sum-subs").textContent = $("st_subs").value === "false"
+    ? (texts.length ? `Sin subtítulos · ${texts.join(" y ")}` : "Sin textos")
+    : `${STYLE_NAMES[$("st_sstyle").value]} · ${$("st_font").value} · ${$("st_words").value} palabras`;
   const brand = [$("st_logo").value.trim() ? "Logo" : "Sin logo"];
   if ($("st_handle").value.trim()) brand.push($("st_handle").value.trim());
   $("sum-marca").textContent = brand.join(" · ");
@@ -3848,9 +3866,11 @@ $("logo-clear").addEventListener("click", () => { $("st_logo").value = ""; after
 document.querySelectorAll('input[name="fmt"]').forEach(r =>
   r.addEventListener("change", () => { $("st_format").value = radio("fmt"); afterLook(); }));
 [["fx-sfx", "st_sfx"], ["fx-beep", "st_beep"], ["fx-cover", "st_cover"], ["fx-end", "st_endcard"],
- ["fx-emoji", "st_emojis"], ["fx-srt", "st_srt"], ["fx-clean", "st_clean"]].forEach(([box, hidden]) =>
+ ["fx-emoji", "st_emojis"], ["fx-srt", "st_srt"], ["fx-clean", "st_clean"],
+   ["fx-subs", "st_subs"], ["fx-hook", "st_hook"]].forEach(([box, hidden]) =>
   $(box).addEventListener("change", () => { $(hidden).value = $(box).checked ? "true" : "false"; afterLook(); }));
 $("bar-on").addEventListener("change", () => { $("st_bar").value = $("bar-on").checked ? "true" : "false"; afterLook(); });
+$("title_card").addEventListener("change", paintSummaries);
 $("duck-on").addEventListener("change", () => { $("st_mduck").value = $("duck-on").checked ? "true" : "false"; afterLook(); });
 $("music-clear").addEventListener("click", () => { $("st_music").value = ""; afterLook(); });
 

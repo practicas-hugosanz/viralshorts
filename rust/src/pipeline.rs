@@ -485,6 +485,20 @@ fn select_clips(args: &Args, cfg: &Config, work_dir: &Path, limit: Option<usize>
     let podcast = download::fetch(args.podcast.as_deref().unwrap_or(""), &work_dir.join("podcast"), &cfg.download).map_err(|e| e.to_string())?;
     let (background, extra_backgrounds) = fetch_backgrounds(args, cfg, work_dir, &podcast)?;
 
+    // Un video que dura lo que un short (o menos) no se trocea: sale entero.
+    if fits_in_one_short(cfg, podcast.duration) {
+        return whole_video(cfg, podcast, background, extra_backgrounds);
+    }
+    // Si no cabe ni un clip entre la intro y la despedida que se ignoran, no se ignoran.
+    let adapted;
+    let cfg = match skips_for(cfg, podcast.duration) {
+        Some(fitted) => {
+            adapted = fitted;
+            &adapted
+        }
+        None => cfg,
+    };
+
     // El orden importa: la energia y el heatmap no necesitan texto y se calculan
     // en segundos, asi que sirven para decidir QUE hay que transcribir.
     progress::stage("analisis", "Analizando audio y buscando momentos");
@@ -533,6 +547,63 @@ fn select_clips(args: &Args, cfg: &Config, work_dir: &Path, limit: Option<usize>
     refine_clips(cfg, &podcast.path, podcast.duration, &mut picked);
     translate_clips(cfg, &podcast.path, podcast.duration, &mut picked, &mut judge);
     Ok(Selection { clips: picked, podcast, background, extra_backgrounds, judge, energy })
+}
+
+/// Margen sobre la duracion maxima: un video de 48 s con un maximo de 45 sale
+/// entero, que es lo que se espera, en vez de recortarle 3 s.
+const WHOLE_MARGIN: f64 = 5.0;
+
+/// El video dura lo que un short (o menos): no hay nada que elegir.
+pub fn fits_in_one_short(cfg: &Config, duration: f64) -> bool {
+    duration > 0.0 && duration <= cfg.clips.max_duration + WHOLE_MARGIN
+}
+
+/// Ajustes con la intro y la despedida sin saltar, si saltarlas no deja sitio
+/// ni para un clip de la duracion minima. `None`: no hace falta tocar nada.
+pub fn skips_for(cfg: &Config, duration: f64) -> Option<Config> {
+    let left = duration - cfg.clips.head_skip.max(0.0) - cfg.clips.tail_skip.max(0.0);
+    if left >= cfg.clips.min_duration || (cfg.clips.head_skip <= 0.0 && cfg.clips.tail_skip <= 0.0) {
+        return None;
+    }
+    log::info!("El video dura {}: no se salta la intro ni la despedida, o no quedaria sitio para ningun clip.", hms(duration));
+    let mut fitted = cfg.clone();
+    fitted.clips.head_skip = 0.0;
+    fitted.clips.tail_skip = 0.0;
+    Some(fitted)
+}
+
+/// Un short con el video entero, sin buscar momentos: solo se transcribe.
+fn whole_video(cfg: &Config, podcast: SourceVideo, background: SourceVideo, extra_backgrounds: Vec<SourceVideo>) -> Result<Selection, String> {
+    log::info!("El video dura {}, lo que un short: sale entero, sin trocearlo.", hms(podcast.duration));
+    if cfg.clips.num_clips > 1 {
+        progress::result(
+            "aviso",
+            json!({
+                "titulo": "El vídeo es corto: sale un solo short",
+                "texto": format!("Dura {}, así que no da para {} shorts: se monta entero en uno.", hms(podcast.duration), cfg.clips.num_clips),
+            }),
+        );
+    }
+    progress::stage("analisis", "Analizando el audio");
+    let energy = audio_energy::analyse(&podcast.path, podcast.duration).map_err(|e| e.to_string())?;
+    progress::stage("transcripcion", "Transcribiendo el vídeo");
+    let engine = WhisperCpp::discover(&ffmpeg::project_root()).map_err(|e| e.to_string())?;
+    let mut transcriber = Transcriber::new(cfg.transcribe.clone(), &cfg.paths.cache_dir, Box::new(engine)).map_err(|e| e.to_string())?;
+    // Sin voz (musica, un plano sin hablar) tambien vale: sale sin subtitulos.
+    let words: Vec<crate::words::Word> = match transcriber.transcribe(&podcast.path, podcast.duration) {
+        Ok(transcript) => transcript.segments.into_iter().flat_map(|s| s.words).collect(),
+        Err(error) if error.to_string().contains("ninguna palabra") => Vec::new(),
+        Err(error) => return Err(error.to_string()),
+    };
+    let text = words.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ");
+    let mut clip = Window::new(0.0, podcast.duration, words, text);
+    clip.reason = "El vídeo entero: dura lo que un short".into();
+    clip.score = 1.0;
+    let mut clips = vec![clip];
+    let mut judge = ClipJudge::new(cfg.llm.clone(), Some(Path::new(&cfg.paths.cache_dir)));
+    refine_clips(cfg, &podcast.path, podcast.duration, &mut clips);
+    translate_clips(cfg, &podcast.path, podcast.duration, &mut clips, &mut judge);
+    Ok(Selection { clips, podcast, background, extra_backgrounds, judge, energy })
 }
 
 /// El video de fondo y, si se pidieron varios, los demas.
@@ -1316,7 +1387,13 @@ fn render_one(
     let title_text = metadata::card_text(&podcast.title, meta.map_or("", |m| m.title.as_str()), cfg);
     let hook_text = meta.map_or("", |m| m.hook.as_str());
     let mut ass_name = None;
-    if cfg.subtitles.enabled || !cfg.brand.handle.trim().is_empty() || cfg.end_card.enabled {
+    // Sin subtitulos puede seguir habiendo gancho, tarjeta de contexto, usuario...
+    let any_text = cfg.subtitles.enabled
+        || (cfg.hook.enabled && !hook_text.is_empty())
+        || (cfg.title_card.enabled && !title_text.is_empty())
+        || !cfg.brand.handle.trim().is_empty()
+        || cfg.end_card.enabled;
+    if any_text {
         let mut content = subtitles::build_ass(
             &words,
             cfg.layout.width,
@@ -1546,6 +1623,27 @@ mod tests {
             args: Args,
         }
         Cli::parse_from(std::iter::once("viralshorts").chain(lista.iter().copied())).args
+    }
+
+    // -- videos cortos ------------------------------------------------------------
+
+    #[test]
+    fn un_video_que_dura_lo_que_un_short_sale_entero() {
+        let cfg = Config::default(); // de 25 a 45 s
+        assert!(fits_in_one_short(&cfg, 30.0));
+        assert!(fits_in_one_short(&cfg, 12.0), "aunque dure menos que el minimo");
+        assert!(fits_in_one_short(&cfg, 48.0), "unos segundos de mas: mejor entero que recortado");
+        assert!(!fits_in_one_short(&cfg, 90.0));
+        assert!(!fits_in_one_short(&cfg, 0.0), "sin duracion conocida se busca como siempre");
+    }
+
+    #[test]
+    fn si_la_intro_y_la_despedida_se_lo_comen_todo_no_se_saltan() {
+        let mut cfg = Config::default();
+        (cfg.clips.head_skip, cfg.clips.tail_skip, cfg.clips.min_duration) = (60.0, 30.0, 25.0);
+        let fitted = skips_for(&cfg, 100.0).expect("100 - 60 - 30 = 10 s: no cabe un clip");
+        assert_eq!((fitted.clips.head_skip, fitted.clips.tail_skip), (0.0, 0.0));
+        assert!(skips_for(&cfg, 600.0).is_none(), "en un video largo se siguen saltando");
     }
 
     // -- elegir a mano --------------------------------------------------------------
