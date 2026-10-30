@@ -716,7 +716,7 @@ pub fn drop_repetition_loops(segments: Vec<Segment>) -> Vec<Segment> {
 
 /// Despedidas de YouTube que whisper se inventa cuando no oye a nadie (silencio,
 /// musica): las aprendio del final de miles de videos. Sin acentos ni signos.
-const INVENTED: [&str; 14] = [
+const INVENTED: &[&str] = &[
     "gracias por ver el video",
     "gracias por ver",
     "gracias por vernos",
@@ -724,6 +724,16 @@ const INVENTED: [&str; 14] = [
     "dale like y suscribete al canal",
     "suscribete al canal",
     "y suscribete",
+    "suscribete",
+    "dale like",
+    "dale a la campanita",
+    "activa la campanita",
+    "para que te lleguen las notificaciones",
+    "para que el canal siga creciendo",
+    "para que me siga creciendo",
+    "para seguir creciendo",
+    "para que me sigas",
+    "para que me siga",
     "no olvides suscribirte",
     "nos vemos en el proximo video",
     "thank you for watching",
@@ -757,26 +767,41 @@ fn plain_text(text: &str) -> String {
 /// la conversacion, se queda.
 pub fn drop_invented_phrases(segments: Vec<Segment>) -> Vec<Segment> {
     let texts: Vec<String> = segments.iter().map(|s| plain_text(&s.text)).collect();
-    let keep: Vec<bool> = (0..segments.len())
-        .map(|i| {
-            let text = &texts[i];
+    let never: Vec<bool> = texts.iter().map(|t| NEVER_SPEECH.iter().any(|sign| t.contains(sign))).collect();
+    let farewell: Vec<bool> = texts
+        .iter()
+        .map(|text| {
             if text.is_empty() {
-                return true;
-            }
-            if NEVER_SPEECH.iter().any(|sign| text.contains(sign)) {
                 return false;
             }
             let mut rest = format!(" {text} ");
-            for phrase in INVENTED {
+            for phrase in INVENTED.iter() {
                 rest = rest.replace(&format!(" {phrase} "), " ");
             }
-            // Lo que sobra es como mucho una palabra suelta ("el", "y"...).
-            let only_farewell = rest.split_whitespace().count() <= 1 && rest.trim() != text.as_str();
-            let quiet_before = i == 0 || segments[i].start - segments[i - 1].end >= INVENTED_GAP;
-            let quiet_after = i + 1 == segments.len() || segments[i + 1].start - segments[i].end >= INVENTED_GAP;
-            !(only_farewell && quiet_before && quiet_after)
+            // Lo que sobra, sin las palabras de enlace ("y", "el"...), es como
+            // mucho una palabra suelta.
+            const GLUE: [&str; 10] = ["y", "e", "el", "la", "a", "al", "de", "que", "and", "the"];
+            rest.split_whitespace().filter(|w| !GLUE.contains(w)).count() <= 1 && rest.trim() != text.as_str()
         })
         .collect();
+
+    // whisper suele partir la despedida en varios trozos seguidos: cuenta la
+    // racha entera, con silencio antes y despues de ella.
+    let mut keep: Vec<bool> = never.iter().map(|n| !n).collect();
+    let mut i = 0;
+    while i < segments.len() {
+        if !farewell[i] {
+            i += 1;
+            continue;
+        }
+        let run_end = (i..segments.len()).take_while(|&j| farewell[j]).last().unwrap_or(i);
+        let quiet_before = i == 0 || segments[i].start - segments[i - 1].end >= INVENTED_GAP;
+        let quiet_after = run_end + 1 == segments.len() || segments[run_end + 1].start - segments[run_end].end >= INVENTED_GAP;
+        if quiet_before && quiet_after {
+            keep[i..=run_end].iter_mut().for_each(|k| *k = false);
+        }
+        i = run_end + 1;
+    }
     segments
         .into_iter()
         .zip(keep)
@@ -1168,6 +1193,18 @@ mod tests {
         ];
         let textos: Vec<String> = drop_invented_phrases(entrada).into_iter().map(|s| s.text).collect();
         assert_eq!(textos, ["y no se puede ver."]);
+        // Partida en varios trozos seguidos: cuenta la racha entera.
+        let partida = vec![
+            seg(20.2, "ver."),
+            Segment { start: 44.0, end: 46.2, text: "Gracias por ver el video.".into(), words: vec![] },
+            Segment { start: 46.8, end: 50.5, text: "Si te gustó, dale like, suscríbete".into(), words: vec![] },
+            Segment { start: 50.7, end: 54.5, text: "y dale a la campanita para que me siga creciendo.".into(), words: vec![] },
+        ];
+        let textos: Vec<String> = drop_invented_phrases(partida).into_iter().map(|s| s.text).collect();
+        assert_eq!(textos, ["ver."]);
+        // Caso real al transcribir solo un tramo, con mas coletilla.
+        let coletilla = vec![Segment { start: 44.0, end: 54.5, text: "Gracias por ver el video. Si te gustó, dale like, suscríbete y dale a la campanita para que me siga".into(), words: vec![] }];
+        assert!(drop_invented_phrases(coletilla).is_empty());
         let solo = vec![seg(10.0, "¡Gracias por ver!"), seg(40.0, "Thanks for watching.")];
         assert!(drop_invented_phrases(solo).is_empty());
         let amara = vec![seg(0.0, "Vale."), seg(2.1, "Subtítulos realizados por la comunidad de Amara.org")];

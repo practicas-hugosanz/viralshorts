@@ -795,6 +795,18 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
 .ed-selbar .what { flex: 1; min-width: 220px; color: var(--mute); }
 .ed-selbar .what b { color: var(--text); font-variant-numeric: tabular-nums; }
 .ed-selbar .warn { color: var(--bad); font-weight: 700; }
+.ed-subs { display: flex; flex-direction: column; gap: 4px; }
+.ed-sub { display: grid; grid-template-columns: 46px minmax(0, 1fr); align-items: center; gap: 6px; padding: 3px; border-radius: 10px; }
+.ed-sub.now { background: var(--sky); }
+.ed-sub .t { border: 0; background: none; padding: 6px 4px; border-radius: 8px; font: 700 12px var(--ui); color: var(--mute); font-variant-numeric: tabular-nums; text-align: left; }
+.ed-sub .t:hover { background: var(--raise); color: var(--text); }
+.ed-sub textarea { padding: 7px 10px; font-size: 13px; border-radius: 9px; min-height: 0; resize: none; field-sizing: content; line-height: 1.4; }
+.editor.retouch .ed-grid { grid-template-columns: minmax(0, 1fr) 340px; }
+.ed-sub { align-items: start; }
+.ed-sub .t { margin-top: 3px; }
+.ed-sub-note { color: var(--mute); font-size: 12.5px; padding: 6px 8px; border-radius: 10px; background: var(--butter); }
+.ed-selbar .note { color: var(--info); font-weight: 700; }
+.ed-rt { gap: 12px 16px; }
 @media (max-width: 900px) { .ed-grid { grid-template-columns: 1fr; } .ed-side { max-height: none; } }
 
 @media (max-width: 1080px) {
@@ -1321,7 +1333,7 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
           <section class="card editor" id="editor-panel" hidden aria-label="Elegir los trozos">
             <div class="ed-head">
               <div>
-                <h2 class="card-title">Elige los trozos</h2>
+                <h2 class="card-title" id="ed-heading">Elige los trozos</h2>
                 <p class="card-sub" id="ed-title"></p>
               </div>
               <button type="button" class="btn ghost sm" id="ed-close" title="Cierra el editor sin montar nada">Cerrar</button>
@@ -1345,9 +1357,10 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
               </div>
 
               <aside class="ed-side">
-                <h3>Trozos elegidos</h3>
+                <h3 id="ed-side-title">Trozos elegidos</h3>
                 <p class="ed-empty" id="ed-empty">Todavía ninguno. Cada trozo que selecciones será un short.</p>
                 <ol class="ed-list" id="ed-list"></ol>
+                <div class="ed-subs" id="ed-subs" hidden></div>
               </aside>
             </div>
 
@@ -1378,6 +1391,22 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
               <button type="button" class="btn sm" id="ed-preview" title="Reproduce solo el trozo marcado"><svg class="ico fill"><use href="#i-play"/></svg>Ver el trozo</button>
               <button type="button" class="btn ghost sm" id="ed-drop">Descartar</button>
               <button type="button" class="btn primary" id="ed-add">Seleccionar este trozo <kbd>Intro</kbd></button>
+            </div>
+
+            <div class="fields ed-rt" id="ed-rt" hidden>
+              <div>
+                <label class="lbl-t" for="ed-rt-style">Estilo de los subtítulos</label>
+                <select id="ed-rt-style">
+                  <option value="">El que tenía</option>
+                  <option value="classic">Clásico</option>
+                  <option value="box">Caja</option>
+                  <option value="marker">Rotulador</option>
+                  <option value="neon">Neón</option>
+                  <option value="minimal">Sobrio</option>
+                </select>
+              </div>
+              <div><label class="lbl-t" for="ed-rt-gancho">Gancho: el rótulo de los primeros segundos</label><input type="text" id="ed-rt-gancho" maxlength="60"></div>
+              <div class="wide"><label class="lbl-t" for="ed-rt-titulo">Título de la publicación</label><input type="text" id="ed-rt-titulo" maxlength="120"></div>
             </div>
 
             <div class="card-foot">
@@ -1743,6 +1772,7 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
   </div>
   <div class="dlg-foot">
     <span class="grow hint" id="rt-note">Se rehace solo este short, sin volver a transcribir.</span>
+    <button type="button" class="btn" id="rt-editor" title="Con el vídeo original y su línea de tiempo: mover o alargar la parte elegida. Hay que volver a descargar el pódcast.">Abrir en el editor</button>
     <button type="button" class="btn" id="rt-cancel">Cancelar</button>
     <button type="button" class="btn primary" id="rt-go"><svg class="ico"><use href="#i-scissors"/></svg>Rehacer el short</button>
   </div>
@@ -2683,7 +2713,7 @@ function renderQueue(items) {
     <div class="queue-item">
       <div class="num">${item.n}</div>
       <div class="what">${escapeHtml(shortName(item.podcast))}</div>
-      <span class="chip">${item.rehacer ? "retocar un short" : item.elegir ? "para elegir los trozos" : item.trozos ? item.trozos + (item.trozos === 1 ? " trozo" : " trozos") : item.revisar ? "para revisar" : item.clips + " shorts"}</span>
+      <span class="chip">${item.retocando ? "abrir un short en el editor" : item.rehacer ? "retocar un short" : item.elegir ? "para elegir los trozos" : item.trozos ? item.trozos + (item.trozos === 1 ? " trozo" : " trozos") : item.revisar ? "para revisar" : item.clips + " shorts"}</span>
       <div class="ops">
         <button type="button" data-op="up" data-n="${item.n}" aria-label="Adelantar" title="Adelantar" ${i === 0 ? "disabled" : ""}><svg class="ico"><use href="#i-up"/></svg></button>
         <button type="button" data-op="down" data-n="${item.n}" aria-label="Atrasar" title="Atrasar" ${i === list.length - 1 ? "disabled" : ""}><svg class="ico"><use href="#i-down"/></svg></button>
@@ -2916,7 +2946,8 @@ async function renderFromPlan(only) {
 // Elegir los trozos a mano: el pódcast entero en una línea de tiempo
 // ===========================================================================
 const ED_MIN = 3, ED_MAX = 180;           // segundos que puede durar un trozo
-const ED = { src: null, data: null, dur: 0, trozos: [], sel: null, editing: -1, view: 0, span: 60, stopAt: null, raf: 0 };
+const ED = { src: null, data: null, dur: 0, trozos: [], sel: null, editing: -1, view: 0, span: 60, stopAt: null, raf: 0,
+             mode: "trozos", rt: null };   // mode "retoque": un short ya hecho, con sus subtítulos
 const edVideo = $("ed-video");
 
 /** El botón "Elegir yo los momentos": descarga el pódcast y abre el editor. */
@@ -2980,8 +3011,19 @@ async function openEditor(fuente) {
     } catch (error) { ED.data = null; }
     if (ED.data && ED.data.duracion) ED.dur = +ED.data.duracion;
   }
+  // Preparado para retocar un short: el editor se abre con su parte y sus subtítulos.
+  if (fuente.retoque && (!ED.rt || ED.rt.id !== fuente.retoque)) await edStartRetouch(fuente.retoque);
+  if (!fuente.retoque && ED.mode === "retoque") {
+    ED.mode = "trozos";
+    ED.rt = null;
+    ED.sel = null;
+    ED.trozos = edRestore(fuente.ruta);
+  }
+  edApplyMode();
   const heat = ED.data && ED.data.visto && ED.data.visto.length > 1;
-  $("ed-legend").textContent = heat
+  $("ed-legend").textContent = ED.mode === "retoque"
+    ? "Todo el pódcast. Abajo, arrastra los bordes azules para mover o alargar la parte elegida."
+    : heat
     ? "Todo el pódcast. Lo más alto es lo que más se ha vuelto a ver en YouTube."
     : "Todo el pódcast. Haz clic para saltar; abajo, arrastra sobre la onda para marcar un trozo.";
   $("ed-dur").textContent = clock(ED.dur);
@@ -2997,8 +3039,10 @@ function closeEditor(forget) {
   edVideo.pause();
   edVideo.removeAttribute("src");
   edVideo.load();
-  if (forget && ED.src) edForget();
+  if (forget && ED.src && ED.mode !== "retoque") edForget();
   ED.src = null;
+  ED.mode = "trozos";
+  ED.rt = null;
   $("editor-panel").hidden = true;
   post("/api/source/close", {}).catch(() => {});
   refreshWork();
@@ -3121,6 +3165,7 @@ function edOverlaps([a, b]) {
 }
 
 function edPaintSelBar() {
+  if (ED.mode === "retoque" && ED.rt && ED.sel) return edPaintRetouchBar();
   const what = $("ed-sel-what");
   const sel = ED.sel;
   $("ed-preview").disabled = $("ed-drop").disabled = !sel;
@@ -3143,6 +3188,7 @@ function edPaintSelBar() {
 }
 
 function edPaintList() {
+  if (ED.mode === "retoque" && ED.rt && ED.sel) return edPaintSubs();
   const n = ED.trozos.length;
   $("ed-empty").hidden = n > 0;
   $("ed-list").innerHTML = ED.trozos.map(([a, b], i) => `
@@ -3194,6 +3240,13 @@ function edTick() {
   if (!edVideo.paused && (t > ED.view + ED.span * 0.94 || t < ED.view)) {
     edSetView(t - ED.span * 0.06);
   }
+  if (ED.mode === "retoque" && ED.rt) {
+    const now = ED.rt.blocks.findIndex(b => t >= b.words[0].start - 0.05 && t <= b.words[b.words.length - 1].end + 0.05);
+    if (now !== ED.rt.now) {
+      ED.rt.now = now;
+      $("ed-subs").querySelectorAll(".ed-sub").forEach(row => row.classList.toggle("now", +row.dataset.i === now));
+    }
+  }
   edPaintPlayhead();
   ED.raf = requestAnimationFrame(edTick);
 }
@@ -3236,7 +3289,7 @@ function edMarkOut() {
   edPaintAll();
 }
 function edAdd() {
-  if (!ED.sel || $("ed-add").disabled) return;
+  if (ED.mode === "retoque" || !ED.sel || $("ed-add").disabled) return;
   const piece = [Math.round(ED.sel[0] * 100) / 100, Math.round(ED.sel[1] * 100) / 100];
   if (ED.editing >= 0) ED.trozos[ED.editing] = piece; else ED.trozos.push(piece);
   ED.trozos.sort((x, y) => x[0] - y[0]);
@@ -3246,6 +3299,12 @@ function edAdd() {
   edPaintAll();
 }
 function edDrop() {
+  if (ED.mode === "retoque" && ED.rt) {
+    // Deshacer: la parte vuelve a ser la de antes.
+    ED.sel = [ED.rt.clip.inicio, ED.rt.clip.fin];
+    edPaintAll();
+    return;
+  }
   ED.sel = null;
   ED.editing = -1;
   edPaintAll();
@@ -3257,7 +3316,214 @@ function edPlayRange([a, b]) {
   edVideo.play().catch(() => {});
 }
 
+// ---------------------------------------------------------------- retocar un short en el editor
+/** Carga la parte elegida y las palabras (con su momento) de un short ya hecho. */
+async function edStartRetouch(id) {
+  let answer;
+  try {
+    const response = await fetch(`/api/short/retoque?id=${encodeURIComponent(id)}`, { headers: AUTH });
+    answer = await response.json();
+    if (!response.ok || !answer.ok) throw new Error(answer.error || `HTTP ${response.status}`);
+  } catch (error) {
+    showBanner($("banner"), "No se puede retocar este short", escapeHtml(error.message));
+    ED.mode = "trozos";
+    ED.rt = null;
+    return;
+  }
+  const clip = answer.clip;
+  const detail = clip.detalle || {};
+  const toWords = (list) => (list || []).map(([text, start, end]) => ({ text, start, end }));
+  // Las de ahora mandan; las de cuando salió completan lo que se recortó.
+  const pool = toWords(detail.palabras);
+  toWords(detail.original).forEach(w => { if (!pool.some(p => Math.abs(p.start - w.start) < 0.02)) pool.push(w); });
+  pool.sort((a, b) => a.start - b.start);
+  ED.mode = "retoque";
+  ED.rt = { id, clip, words: pool, known: detail.transcrito || [clip.inicio, clip.fin], dirty: false, key: "", blocks: [], now: -1 };
+  ED.trozos = [];
+  ED.editing = -1;
+  ED.sel = [clip.inicio, clip.fin];
+  $("ed-rt-style").value = clip.estilo || "";
+  $("ed-rt-titulo").value = clip.titulo || "";
+  $("ed-rt-gancho").value = clip.gancho || "";
+  const len = clip.fin - clip.inicio;
+  ED.span = [30, 60, 120, 300].find(span => span >= len * 1.4) || 300;
+  ED.view = Math.max(0, clip.inicio - (ED.span - len) / 2);
+  edVideo.addEventListener("loadedmetadata", () => edSeek(clip.inicio), { once: true });
+  edSeek(clip.inicio);
+}
+
+function edApplyMode() {
+  const retouch = ED.mode === "retoque";
+  $("ed-heading").textContent = retouch ? "Retocar el short" : "Elige los trozos";
+  $("ed-side-title").textContent = retouch ? "Subtítulos" : "Trozos elegidos";
+  $("ed-list").hidden = retouch;
+  $("ed-subs").hidden = !retouch;
+  $("ed-rt").hidden = !retouch;
+  $("ed-add").hidden = retouch;
+  $("ed-drop").textContent = retouch ? "Deshacer" : "Descartar";
+  if (retouch) $("ed-empty").hidden = true;
+  $("editor-panel").classList.toggle("retouch", retouch);
+}
+
+/** Fuera de lo que ya estaba transcrito: al rehacer se vuelve a escuchar. */
+function edExtends() {
+  return !!(ED.rt && ED.sel && (ED.sel[0] < ED.rt.known[0] - 0.3 || ED.sel[1] > ED.rt.known[1] + 0.3));
+}
+
+/** Las palabras de la parte elegida: entra la que tiene dentro su mitad. */
+function edWordsIn(a, b) {
+  return ED.rt.words.filter(w => (w.start + w.end) / 2 >= a && (w.start + w.end) / 2 <= b);
+}
+
+/** Las palabras de la parte elegida, en frases como las que se leen. */
+function edSubBlocks() {
+  const [a, b] = ED.sel;
+  const words = edWordsIn(a, b);
+  const blocks = [];
+  let current = null;
+  words.forEach((word, i) => {
+    const prev = words[i - 1];
+    if (!current || current.words.length >= 7 || (prev && (word.start - prev.end > 0.6 || /[.?!…]$/.test(prev.text)))) {
+      current = { words: [] };
+      blocks.push(current);
+    }
+    current.words.push(word);
+  });
+  return blocks;
+}
+
+function edPaintSubs() {
+  const key = ED.sel.map(v => v.toFixed(2)).join("-");
+  if (key === ED.rt.key) return;      // no se repinta mientras se escribe
+  ED.rt.key = key;
+  ED.rt.blocks = edSubBlocks();
+  ED.rt.now = -1;
+  const extends_ = edExtends();
+  const rows = [];
+  if (extends_) rows.push(`<p class="ed-sub-note">Has alargado la parte elegida: al rehacer se escucha otra vez y salen los subtítulos nuevos. Si hay que corregir algo, retócalo después.</p>`);
+  ED.rt.blocks.forEach((block, i) => {
+    const a = block.words[0].start, b = block.words[block.words.length - 1].end;
+    rows.push(`<div class="ed-sub" data-i="${i}">
+      <button type="button" class="t" title="Ver esta frase" data-a="${a}" data-b="${b}">${clock(a)}</button>
+      <textarea rows="1" spellcheck="true" aria-label="Subtítulo de ${clock(a)}" ${extends_ ? "disabled" : ""}>${escapeHtml(block.words.map(w => w.text).join(" "))}</textarea>
+    </div>`);
+  });
+  if (!ED.rt.blocks.length && !extends_) rows.push(`<p class="ed-empty">En esta parte no se dice nada: sale sin subtítulos.</p>`);
+  $("ed-subs").innerHTML = rows.join("");
+}
+
+/** Lo escrito en una frase pasa a sus palabras sin perder el momento de cada una. */
+$("ed-subs").addEventListener("input", (event) => {
+  const row = event.target.closest(".ed-sub");
+  if (!row || !ED.rt) return;
+  const block = ED.rt.blocks[+row.dataset.i];
+  const tokens = event.target.value.trim().split(/\s+/).filter(Boolean);
+  if (!block || !tokens.length) return;
+  let fresh;
+  if (tokens.length === block.words.length) {
+    block.words.forEach((word, i) => { word.text = tokens[i]; });
+    fresh = block.words;
+  } else {
+    const a = block.words[0].start, b = block.words[block.words.length - 1].end;
+    const step = (b - a) / tokens.length;
+    fresh = tokens.map((text, i) => ({ text, start: a + i * step, end: a + (i + 1) * step }));
+    const first = ED.rt.words.indexOf(block.words[0]);
+    ED.rt.words.splice(first, block.words.length, ...fresh);
+    block.words = fresh;
+  }
+  ED.rt.dirty = true;
+});
+$("ed-subs").addEventListener("click", (event) => {
+  const button = event.target.closest("button.t");
+  if (button) edPlayRange([+button.dataset.a, +button.dataset.b + 0.2]);
+});
+
+function edPaintRetouchBar() {
+  const [a, b] = ED.sel;
+  const len = b - a;
+  const clip = ED.rt.clip;
+  const moved = Math.abs(a - clip.inicio) > 0.01 || Math.abs(b - clip.fin) > 0.01;
+  let warn = "";
+  if (len < ED_MIN) warn = `Muy corta: al menos ${ED_MIN} s.`;
+  else if (len > ED_MAX) warn = "Muy larga: como mucho 3 minutos.";
+  $("ed-sel-what").innerHTML = `Parte elegida: <b>${edFine(a)} → ${edFine(b)}</b> <span class="chip">${len.toFixed(1).replace(".", ",")} s</span>` +
+    (warn ? ` <span class="warn">${warn}</span>` : edExtends() ? ` <span class="note">La parte nueva se transcribe al rehacer.</span>` : "");
+  $("ed-preview").disabled = false;
+  $("ed-drop").disabled = !moved;
+  $("ed-render").disabled = !!warn;
+  $("ed-render").textContent = "Rehacer el short";
+  $("ed-tally").textContent = "Arrastra los bordes azules para mover o alargar la parte elegida, y corrige los subtítulos a la derecha. Se rehace solo este short, en su sitio.";
+}
+
+async function edRemake() {
+  if (!ED.rt || !ED.sel) return;
+  clearBanner($("banner"));
+  const { id, clip } = ED.rt;
+  const [a, b] = ED.sel;
+  const moved = Math.abs(a - clip.inicio) > 0.01 || Math.abs(b - clip.fin) > 0.01;
+  const body = {
+    id,
+    estilo: $("ed-rt-style").value,
+    publicacion: { title: $("ed-rt-titulo").value.trim(), hook: $("ed-rt-gancho").value.trim() },
+    output: $("output").value.trim(),
+    delete_source: $("delete_source").checked,
+  };
+  if (moved) body.rango = { inicio: Math.round(a * 100) / 100, fin: Math.round(b * 100) / 100 };
+  if (ED.rt.dirty && !edExtends()) {
+    body.texto_palabras = edWordsIn(a, b).map(w => w.text).join(" ");
+  }
+  const busy = STATE === "running";
+  try {
+    const answer = await post("/api/short/remake", body);
+    closeEditor(false);
+    if (answer.encolado) {
+      showBanner($("tip"), "Añadido a la cola", `El short se rehará en cuanto termine lo que hay en marcha (posición ${answer.posicion}).`);
+    } else if (!busy) {
+      STEPS_NOW = STEPS;
+      startFresh();
+    }
+    go("trabajo");
+  } catch (error) {
+    showBanner($("banner"), "No se ha podido rehacer", escapeHtml(error.message));
+  }
+}
+
+/** «Retocar» en Mis shorts: al editor si el pódcast sigue en el disco; si no,
+ *  primero el retoque rápido, que no necesita descargarlo otra vez. */
+async function retouchShort(item) {
+  clearBanner($("banner"));
+  let answer;
+  try {
+    const response = await fetch(`/api/short/retoque?id=${encodeURIComponent(item.id)}`, { headers: AUTH });
+    answer = await response.json();
+    if (!response.ok || !answer.ok) throw new Error(answer.error || `HTTP ${response.status}`);
+  } catch (error) {
+    showBanner($("tip"), "No se puede retocar este short", escapeHtml(error.message));
+    return;
+  }
+  if (answer.clip.detalle && answer.clip.detalle.en_disco) editShort(item);
+  else openRetouch(item, answer);
+}
+
+/** Abre un short en el editor (prepara su pódcast; si se borró, lo descarga). */
+async function editShort(item) {
+  const busy = STATE === "running";
+  try {
+    const answer = await post("/api/short/edit", { id: item.id, cookies: $("st_cookies").value });
+    if (answer.encolado) {
+      showBanner($("tip"), "Añadido a la cola", "El editor se abrirá en cuanto termine lo que hay en marcha.");
+    } else if (!busy) {
+      STEPS_NOW = PREP_STEPS;
+      startFresh();
+    }
+    go("trabajo");
+  } catch (error) {
+    showBanner($("banner"), "No se puede abrir en el editor", escapeHtml(error.message));
+  }
+}
+
 async function edRender() {
+  if (ED.mode === "retoque") return edRemake();
   if (!ED.src || !ED.trozos.length) return;
   clearBanner($("banner"));
   const busy = STATE === "running";
@@ -4117,7 +4383,7 @@ function buildCard(item) {
   // este short, sin volver a transcribir (si el vídeo se borró, se baja otra vez).
   if (item.retocable) {
     const retouch = iconButton("Retocar", "scissors");
-    retouch.addEventListener("click", () => openRetouch(item));
+    retouch.addEventListener("click", () => retouchShort(item));
     foot.appendChild(retouch);
   }
 
@@ -4187,17 +4453,8 @@ function buildCard(item) {
 // ===========================================================================
 let RT = null;      // { item, clip }
 
-async function openRetouch(item) {
+async function openRetouch(item, answer) {
   clearBanner($("banner"));
-  let answer;
-  try {
-    const response = await fetch(`/api/short/retoque?id=${encodeURIComponent(item.id)}`, { headers: AUTH });
-    answer = await response.json();
-    if (!response.ok || !answer.ok) throw new Error(answer.error || `HTTP ${response.status}`);
-  } catch (error) {
-    showBanner($("tip"), "No se puede retocar este short", escapeHtml(error.message));
-    return;
-  }
   const clip = answer.clip;
   RT = { item, clip };
   $("rt-sub").textContent = item.titulo || item.fichero;
@@ -4276,6 +4533,7 @@ async function remakeShort() {
 }
 $("rt-go").addEventListener("click", remakeShort);
 $("rt-cancel").addEventListener("click", closeRetouch);
+$("rt-editor").addEventListener("click", () => { const item = RT && RT.item; closeRetouch(); if (item) editShort(item); });
 $("retouch").addEventListener("close", () => { document.body.classList.remove("modal-open"); $("rt-video").pause(); });
 $("retouch").addEventListener("click", (event) => { if (event.target === $("retouch")) closeRetouch(); });
 

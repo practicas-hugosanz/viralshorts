@@ -85,6 +85,9 @@ pub struct PlanClip {
     pub style: String,
     /// Lo que habia antes de editar el clip, si se ha editado.
     pub original: Option<OriginalClip>,
+    /// Se ha alargado mas alla de lo transcrito: al montarlo hay que volver a
+    /// escuchar ese tramo.
+    pub retranscribe: bool,
 }
 
 impl PlanClip {
@@ -305,6 +308,7 @@ fn clip_from_value(data: &Value) -> Option<PlanClip> {
         }),
         words: words_from_json(&data["palabras"]),
         style: text_of(&data["estilo"]),
+        retranscribe: data["retranscribir"].as_bool().unwrap_or(false),
         original: data["original"].as_object().and_then(|o| {
             Some(OriginalClip {
                 start: o.get("inicio")?.as_f64()?,
@@ -429,7 +433,11 @@ const STYLES: [&str; 5] = ["classic", "box", "marker", "neon", "minimal"];
 ///  * `restaurar`: vuelve al clip tal como salio de la seleccion.
 fn edit_clip(clip: &mut Value, change: &Value) {
     let Some(mut c) = clip_from_value(clip) else { return };
-    let touched = change.get("recorte").is_some() || change.get("texto_palabras").is_some() || change.get("restaurar").is_some() || change.get("estilo").is_some();
+    let touched = change.get("recorte").is_some()
+        || change.get("rango").is_some()
+        || change.get("texto_palabras").is_some()
+        || change.get("restaurar").is_some()
+        || change.get("estilo").is_some();
     if !touched {
         return;
     }
@@ -444,7 +452,28 @@ fn edit_clip(clip: &mut Value, change: &Value) {
         }
     }
 
-    if let Some(trim) = change["recorte"].as_object() {
+    // Inicio y fin exactos (el editor): se puede mover y alargar. Lo que quede
+    // fuera de lo transcrito se escucha al montarlo.
+    let mut retranscribe = c.retranscribe;
+    if let Some((start, end)) = change["rango"]["inicio"].as_f64().zip(change["rango"]["fin"].as_f64()) {
+        let (start, end) = (start.max(0.0), end);
+        if end - start >= 3.0 && end - start <= 600.0 && ((start - c.start).abs() > 0.01 || (end - c.end).abs() > 0.01) {
+            let original = c.original.clone().unwrap_or_else(|| snapshot(&c));
+            let mut pool: Vec<Word> = original.words.iter().chain(c.words.iter()).cloned().collect();
+            pool.sort_by(|a, b| a.start.total_cmp(&b.start));
+            pool.dedup_by(|a, b| (a.start - b.start).abs() < 0.02);
+            // Una palabra entra si su mitad cae dentro (la del borde no se pierde).
+            let words: Vec<Word> = pool.into_iter().filter(|w| (w.start + w.end) / 2.0 >= start && (w.start + w.end) / 2.0 <= end).collect();
+            retranscribe = retranscribe || start < original.start - 0.3 || end > original.end + 0.3;
+            c.start = start;
+            c.end = end;
+            c.text = join_words(&words);
+            c.words = words;
+            c.original = Some(original);
+        }
+    }
+
+    if let Some(trim) = change["recorte"].as_object().filter(|_| change.get("rango").is_none()) {
         let cut_start = trim.get("inicio").and_then(Value::as_f64).unwrap_or(0.0).clamp(0.0, 30.0);
         let cut_end = trim.get("fin").and_then(Value::as_f64).unwrap_or(0.0).clamp(0.0, 30.0);
         let original = c.original.clone().unwrap_or_else(|| snapshot(&c));
@@ -491,6 +520,9 @@ fn edit_clip(clip: &mut Value, change: &Value) {
     clip["texto"] = json!(c.text);
     clip["palabras"] = words_to_json(&c.words);
     clip["estilo"] = json!(c.style);
+    if retranscribe {
+        clip["retranscribir"] = json!(true);
+    }
     match &c.original {
         Some(o) => clip["original"] = json!({"inicio": round_to(o.start, 3), "fin": round_to(o.end, 3), "texto": o.text, "palabras": words_to_json(&o.words)}),
         None => {
@@ -838,6 +870,30 @@ mod tests {
         assert_eq!(otra_vez.clips[0].original.as_ref().map(|o| (o.start, o.end)), Some((10.0, 30.0)));
         let deshecho = update(&path, &[json!({"n": 1, "recorte": {"inicio": 0, "fin": 0}})]).unwrap();
         assert_eq!((deshecho.clips[0].start, deshecho.clips[0].end), (10.0, 30.0));
+    }
+
+    #[test]
+    fn el_editor_mueve_y_alarga_la_parte_elegida() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("short_1.retoque.json");
+        let words: Vec<Word> = (0..20).map(|i| Word::new(&format!("p{i}"), 10.0 + i as f64, 10.5 + i as f64)).collect();
+        let fuente = PlanSource { ruta: "C:/w/p.mp4".into(), titulo: "P".into(), duracion: 100.0, url: String::new() };
+        save_single(&path, &Config::default(), &fuente, &PlanSource::default(), &Window::new(10.0, 30.0, words, "t"), None, 1, 1).unwrap();
+
+        // Dentro de lo transcrito: se queda con sus palabras y no hay que volver a escuchar.
+        let dentro = update(&path, &[json!({"n": 1, "rango": {"inicio": 14.0, "fin": 22.0}, "texto_palabras": "p4 p5 P6 p7"})]).unwrap();
+        let clip = &dentro.clips[0];
+        assert_eq!((clip.start, clip.end, clip.retranscribe), (14.0, 22.0, false));
+        assert_eq!(clip.words.iter().map(|w| w.text.as_str()).collect::<Vec<_>>(), ["p4", "p5", "P6", "p7"]);
+        // Volver a ampliar recupera las palabras del clip de cuando salio.
+        let otra_vez = update(&path, &[json!({"n": 1, "rango": {"inicio": 10.0, "fin": 30.0}})]).unwrap();
+        assert_eq!((otra_vez.clips[0].words.len(), otra_vez.clips[0].retranscribe), (20, false));
+        // Mas alla de lo transcrito: hay que escucharlo al montar.
+        let fuera = update(&path, &[json!({"n": 1, "rango": {"inicio": 5.0, "fin": 40.0}})]).unwrap();
+        assert_eq!((fuera.clips[0].start, fuera.clips[0].end, fuera.clips[0].retranscribe), (5.0, 40.0, true));
+        // Una parte de menos de 3 s no se acepta.
+        let corta = update(&path, &[json!({"n": 1, "rango": {"inicio": 5.0, "fin": 6.0}})]).unwrap();
+        assert_eq!((corta.clips[0].start, corta.clips[0].end), (5.0, 40.0));
     }
 
     #[test]

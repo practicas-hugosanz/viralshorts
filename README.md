@@ -126,6 +126,21 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
 
+### 1.7.0 (2026-10-30)
+
+- **Retocar en el editor**: «Retocar» en Mis shorts abre el short en el editor,
+  con el vídeo original y su línea de tiempo. La parte elegida sale marcada y se
+  puede mover o alargar arrastrando sus bordes (lo que se añade se transcribe al
+  rehacer). Los subtítulos salen frase a frase, junto al momento en que suenan:
+  un clic en la hora la reproduce y se corrigen escribiendo. También el estilo,
+  el título y el gancho.
+- Si el pódcast ya no está en el disco (se borró al terminar), «Retocar» abre el
+  retoque rápido, que no necesita descargarlo; desde ahí, «Abrir en el editor»
+  lo vuelve a bajar.
+- La despedida inventada en los silencios también se quita cuando viene partida
+  en varias frases o con más coletilla («…dale a la campanita para que me siga
+  creciendo»).
+
 ### 1.6.3 (2026-10-29)
 
 - Se pueden quitar los textos: en Crear › Aspecto › «Subtítulos y textos» hay

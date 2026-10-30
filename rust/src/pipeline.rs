@@ -1093,8 +1093,16 @@ fn run_remake(args: &Args, path: &Path, cfg: &mut Config, work_dir: &Path, start
     };
 
     progress::result("salida", json!({"ruta": std::path::absolute(&folder).unwrap_or(folder.clone()).to_string_lossy()}));
-    let clip = saved.clips[0].to_window();
+    let mut clip = saved.clips[0].to_window();
     let meta = saved.clips[0].meta.clone();
+    if saved.clips[0].retranscribe {
+        // Se ha alargado: lo nuevo no estaba transcrito.
+        progress::stage("transcripcion", "Transcribiendo la parte nueva");
+        if let Err(error) = retranscribe_clip(cfg, &podcast, &mut clip) {
+            log::error!("No se pudo transcribir la parte nueva del short: {error}");
+            return 1;
+        }
+    }
     log::info!("Rehaciendo el short {number} ({}).", clip.describe());
     progress::stage("render", &format!("Rehaciendo el short {number}"));
     let duration = ffmpeg::probe(&background.path).map(|i| i.duration).unwrap_or(background.duration);
@@ -1104,6 +1112,28 @@ fn run_remake(args: &Args, path: &Path, cfg: &mut Config, work_dir: &Path, start
     finish(cfg, &folder);
     free_source(cfg, work_dir, &podcast, &results);
     report_results(&results, 1, started.elapsed().as_secs_f64())
+}
+
+/// Vuelve a escuchar todo el tramo de un clip (se ha alargado en el editor) y
+/// le pone sus palabras. Un tramo sin voz se queda sin subtitulos.
+fn retranscribe_clip(cfg: &Config, podcast: &Source, clip: &mut Window) -> Result<(), String> {
+    let engine = WhisperCpp::discover(&ffmpeg::project_root()).map_err(|e| e.to_string())?;
+    let mut transcriber = Transcriber::new(cfg.transcribe.clone(), &cfg.paths.cache_dir, Box::new(engine)).map_err(|e| e.to_string())?;
+    let end = if podcast.duration > 0.0 { (clip.end + 1.0).min(podcast.duration) } else { clip.end + 1.0 };
+    let region = [((clip.start - 1.0).max(0.0), end)];
+    let (words, text) = match transcriber.transcribe_regions(&podcast.path, podcast.duration, &region) {
+        Ok(transcript) => words_per_clip(&transcript, std::slice::from_ref(clip), |_, _| true).pop().flatten().unwrap_or_default(),
+        Err(error) if error.to_string().contains("ninguna palabra") => Default::default(),
+        Err(error) => return Err(error.to_string()),
+    };
+    clip.words = words;
+    clip.text = text;
+    let mut clips = vec![clip.clone()];
+    refine_clips(cfg, &podcast.path, podcast.duration, &mut clips);
+    let mut judge = ClipJudge::new(cfg.llm.clone(), Some(Path::new(&cfg.paths.cache_dir)));
+    translate_clips(cfg, &podcast.path, podcast.duration, &mut clips, &mut judge);
+    *clip = clips.remove(0);
+    Ok(())
 }
 
 /// Le dice a la interfaz como ha ido un short.
