@@ -59,7 +59,7 @@
 **Cómodo de usar**
 - Aplicación de escritorio con instalador, sin consola ni ficheros `.bat`.
 - Transcripción en directo mientras trabaja, cola de trabajos que puedes reordenar y biblioteca de todos tus shorts con búsqueda.
-- **Sube a YouTube Shorts** con un clic, con su título, texto y hashtags (privado, oculto o público).
+- **Sube a YouTube Shorts** con un clic, con su título, texto y hashtags (privado, oculto o público), o prográmalos para que se publiquen solos.
 - **Sigue canales**: cuando publican un episodio nuevo, se pone en la cola solo.
 - Borra el vídeo descargado al terminar para no llenar el disco.
 - Se actualiza sola desde GitHub.
@@ -125,6 +125,22 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
+
+### 1.9.0 (2026-11-03)
+
+- **Vista previa real en Crear**: el móvil de la derecha enseña un fotograma
+  montado de verdad con tu composición, tus subtítulos y tu marca, sobre tu vídeo
+  o la miniatura de YouTube, con un texto de ejemplo. Se actualiza en 1 o 2 segundos.
+- **Programar en YouTube**: al subir un short se puede elegir fecha y hora, y
+  «Programar varios» los reparte (uno cada día, por ejemplo). YouTube los publica
+  solo, con el ordenador apagado. Mientras Google no verifique tu proyecto, lo que
+  subas con él se queda en privado.
+- **Deshacer un retoque**: cada short retocado guarda su versión anterior, y un
+  botón en Mis shorts vuelve a ella.
+- **Avisar al terminar**: si estás en otra ventana, el icono parpadea en la barra
+  de tareas y sale un aviso de Windows (se puede apagar en Ajustes). En «En curso»
+  se ve cuánto queda del paso actual.
+- Solo una ventana: abrir Viral Shorts otra vez trae al frente la que ya está abierta.
 
 ### 1.8.0 (2026-11-03)
 

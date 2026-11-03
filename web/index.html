@@ -250,7 +250,7 @@ code { font: 12.5px Consolas, monospace; background: var(--raise); padding: 1px 
 /* --------------------------------------------------------------- formulario */
 label.lbl-t, .lbl-t { display: block; font-weight: 700; margin-bottom: 7px; }
 .hint { color: var(--faint); font-size: 12.5px; margin-top: 6px; }
-input[type="text"], input[type="number"], select, textarea {
+input[type="text"], input[type="number"], input[type="datetime-local"], select, textarea {
   width: 100%; padding: 10px 14px;
   background: var(--raise); border: 1px solid transparent; border-radius: var(--r-s);
   color: var(--text); font-weight: 600;
@@ -404,6 +404,8 @@ input[type="color"].swatch::-webkit-color-swatch { border: 0; border-radius: 50%
 .kit-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: -4px 0 14px; }
 .kit-row select { width: auto; min-width: 200px; padding-block: 6px; }
 .screen.mode-center .seam { display: none; }
+.ph-real { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 30; transition: opacity .15s; }
+.ph-real.stale { opacity: .72; }
 /* Encajar: el vídeo entero en el centro, sobre una copia suya difuminada. */
 .screen.mode-fit .gamebg, .screen.mode-fit .seam { display: none; }
 .screen.mode-fit .pod { inset: var(--inset, 34.2%) 0 var(--inset, 34.2%) 0; }
@@ -618,6 +620,10 @@ dialog::backdrop { background: rgba(15, 16, 19, .55); backdrop-filter: blur(3px)
 .dlg-foot { padding: 14px 26px 22px; display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
 .dlg-foot .grow { flex: 1; margin: 0; }
 dialog.wide { width: min(880px, calc(100vw - 32px)); }
+.yp-body { display: flex; flex-direction: column; gap: 14px; }
+.yp-body .hint { margin: 0; }
+.yp-when { grid-template-columns: repeat(2, 1fr); }
+.yp-body .set-inline input[type="number"] { width: 84px; }
 .rt-sub { color: var(--mute); margin-top: 4px; }
 .rt-body { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 22px; align-items: start; padding-top: 18px; }
 .rt-body video { width: 100%; aspect-ratio: 9 / 16; background: #000; border-radius: 16px; object-fit: contain; position: sticky; top: 0; }
@@ -878,6 +884,7 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
   <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
   <symbol id="i-scissors" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><path d="M8.2 7.4L20 17M8.2 16.6L20 7"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M8 5L3 10l5 5"/><path d="M3 10h11a6 6 0 0 1 0 12h-3"/></symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></symbol>
   <symbol id="i-pause" viewBox="0 0 24 24"><rect x="7" y="5.5" width="3.2" height="13" rx="1"/><rect x="13.8" y="5.5" width="3.2" height="13" rx="1"/></symbol>
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M11 7l-5 5 5 5M18 7l-5 5 5 5"/></symbol>
@@ -1302,9 +1309,10 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
                 <div class="ph-brand tr" id="ph_brand" hidden><img id="ph_logo" alt="" hidden><div class="handle" id="ph_handle"></div></div>
                 <div class="hooktag" id="ph_hook">¿POR QUÉ NADIE LO DICE?</div>
                 <div class="sub" id="ph_sub"></div>
+                <img class="ph-real" id="ph_real" alt="" hidden>
               </div>
             </div>
-            <p class="hint">Así se verá tu short.</p>
+            <p class="hint" id="ph-hint">Así se verá tu short.</p>
 
             <div class="launch">
               <h3>Antes de generar</h3>
@@ -1448,6 +1456,7 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
             <div class="meter">
               <div class="meter-top"><span id="stage-label">Preparando</span><span class="pct" id="pct"></span></div>
               <div class="bar"><i id="bar"></i></div>
+              <p class="hint" id="eta-live" hidden></p>
               <div class="ruler" aria-hidden="true"></div>
             </div>
             <div class="live-text" id="live-text" hidden>
@@ -1499,6 +1508,7 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
         <div class="lib-tools" id="lib-tools" hidden>
           <input type="text" id="lib-search" placeholder="Buscar por título, gancho o texto" aria-label="Buscar shorts" spellcheck="false">
           <select id="lib-folder" aria-label="Ejecución"><option value="">Todas las ejecuciones</option></select>
+          <button type="button" class="btn" id="lib-plan" hidden><svg class="ico"><use href="#i-upload"/></svg>Programar varios</button>
         </div>
         <div class="grid" id="results"></div>
       </section>
@@ -1740,6 +1750,7 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
             <section class="set-sec" id="set-app">
               <h2>Aplicación</h2>
               <div class="set-card">
+                <label class="opt"><span class="opt-text"><b>Avisarme cuando termine</b><em>Si estás en otra ventana, el icono parpadea en la barra de tareas y sale un aviso de Windows cuando los shorts estén listos o algo falle. El aviso solo se ve con las notificaciones de Windows activadas.</em></span><input type="checkbox" class="switch" id="notify" checked></label>
                 <div class="about">
                   <div class="grow"><b id="about-version">Viral Shorts</b><br><span id="about-status">Las actualizaciones se descargan solas desde GitHub.</span></div>
                   <button type="button" class="btn" id="upd-check"><svg class="ico"><use href="#i-refresh"/></svg>Buscar actualizaciones</button>
@@ -1755,6 +1766,33 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
 </div>
 
 <!-- ============================================================= ayuda ====== -->
+<dialog id="yt-plan" aria-labelledby="yp-title">
+  <div class="dlg-head"><h2 id="yp-title">Subir a YouTube</h2><p class="rt-sub" id="yp-sub"></p></div>
+  <div class="dlg-body yp-body">
+    <div class="seg yp-when" role="radiogroup" aria-label="Cuándo se publica">
+      <label class="choice"><input type="radio" name="ypwhen" value="now" checked><b>Ahora</b><em>como digan los Ajustes</em></label>
+      <label class="choice"><input type="radio" name="ypwhen" value="later"><b>Programar</b><em>se publica solo</em></label>
+    </div>
+    <div class="fields" id="yp-later" hidden>
+      <div class="wide"><label class="lbl-t" for="yp-date" id="yp-date-label">Se publica el</label><input type="datetime-local" id="yp-date"></div>
+      <div class="wide" id="yp-every-box">
+        <label class="lbl-t" for="yp-every">Y los demás, cada</label>
+        <div class="set-inline">
+          <input type="number" id="yp-every" value="1" min="1" max="60">
+          <select id="yp-unit" aria-label="Unidad" style="width:auto"><option value="24" selected>días</option><option value="1">horas</option></select>
+        </div>
+      </div>
+      <p class="hint wide">Se sube ahora y se queda privado; YouTube lo publica solo en esa fecha, aunque tengas el ordenador apagado.</p>
+    </div>
+    <p class="hint">YouTube deja subir unos 6 vídeos al día con una credencial nueva. Y mientras Google no verifique tu proyecto, lo que subas con él se queda en privado, también lo programado.</p>
+    <p class="hint" id="yp-msg" aria-live="polite"></p>
+  </div>
+  <div class="dlg-foot">
+    <button type="button" class="btn" id="yp-cancel">Cancelar</button>
+    <button type="button" class="btn primary" id="yp-go">Subir</button>
+  </div>
+</dialog>
+
 <dialog id="retouch" class="wide" aria-labelledby="rt-title">
   <div class="dlg-head"><h2 id="rt-title">Retocar el short</h2><p class="rt-sub" id="rt-sub"></p></div>
   <div class="dlg-body rt-body">
@@ -1829,7 +1867,7 @@ const FIELDS = ["podcast", "background", "output", "clips", "language",
                 "min_duration", "max_duration", "head_skip", "tail_skip",
                 "model", "beam", "regions"];
 const FLAGS  = ["llm", "reframe", "jumpcuts", "zoom", "prescan",
-                "title_card", "context", "censor", "delete_source"];
+                "title_card", "context", "censor", "delete_source", "notify"];
 const RADIOS = ["length", "preset"];
 // Estilo de subtitulos: id del control -> clave que entiende el servidor.
 // Los tres ultimos no tocan el aspecto sino la velocidad, pero viajan por el
@@ -2040,6 +2078,47 @@ function paintPhone() {
   sub.hidden = $("st_subs").value === "false";
   sub.style.setProperty("--hot", color);
   paintHot();
+  schedulePreview();
+}
+
+// El monitor con un fotograma montado de verdad, con lo elegido y texto de
+// ejemplo. Mientras llega (o si no se puede), se queda el dibujo.
+const PV = { timer: null, busy: false, again: false, key: "", n: 0 };
+function schedulePreview() {
+  clearTimeout(PV.timer);
+  PV.timer = setTimeout(runPreview, 900);
+}
+async function runPreview() {
+  if (VIEW !== "crear" || STATE === "running") return;
+  if (PV.busy) { PV.again = true; return; }
+  const body = {
+    style: styleValues(),
+    title_card: $("title_card").checked,
+    podcast: $("podcast").value.trim(),
+    background: $("background").value.trim(),
+  };
+  const key = JSON.stringify(body);
+  if (key === PV.key) return;
+  PV.key = key;
+  PV.busy = true;
+  const image = $("ph_real");
+  image.classList.add("stale");
+  try {
+    await post("/api/preview", body);
+    PV.n++;
+    image.onload = () => {
+      image.hidden = false;
+      image.classList.remove("stale");
+      $("ph-hint").textContent = "Así se verá tu short, con un texto de ejemplo.";
+    };
+    image.src = `/api/preview.jpg?t=${encodeURIComponent(TOKEN)}&v=${PV.n}`;
+  } catch (error) {
+    image.hidden = true;
+    $("ph-hint").textContent = "Así se verá tu short.";
+  } finally {
+    PV.busy = false;
+    if (PV.again) { PV.again = false; schedulePreview(); }
+  }
 }
 
 /** Composicion y marca del monitor, segun los controles de Crear. */
@@ -2203,6 +2282,7 @@ function monitorImage(value) {
 
 let monitorTimer = null;
 function refreshMonitor() {
+  schedulePreview();
   clearTimeout(monitorTimer);
   // Con un archivo local cada pulsacion lanzaria un ffmpeg: se espera a que pare de teclear.
   monitorTimer = setTimeout(() => {
@@ -4173,6 +4253,7 @@ async function refreshYoutube() {
   $("yt-on").hidden = !YT.connected;
   $("yt-channel").textContent = YT.channel ? `Canal: ${YT.channel}` : "Listo para subir.";
   $("yt-sum").textContent = YT.connected ? (YT.channel || "Conectado") : "Sin conectar";
+  renderLibrary();
 }
 $("yt-console").addEventListener("click", () => post("/api/open", { url: "https://console.cloud.google.com/apis/credentials" }).catch(() => {}));
 $("yt-connect").addEventListener("click", async () => {
@@ -4307,7 +4388,7 @@ function setStatus(status) {
   $("clear").disabled = busy;
   $("skip-row").hidden = !busy || $("queue-panel").hidden;
   updateSummary();
-  if (!busy) { $("bar").style.width = "0"; $("pct").textContent = ""; }
+  if (!busy) { $("bar").style.width = "0"; $("pct").textContent = ""; etaReset(); }
   if (!busy) $("live-head").classList.add("idle");
   if (status === "done") { paintSteps(STEPS_NOW.length); $("stage-label").textContent = "Terminado"; }
   if (!busy && (!$("review-panel").hidden || !$("editor-panel").hidden)) $("progress-panel").hidden = true;
@@ -4315,6 +4396,41 @@ function setStatus(status) {
 }
 
 let lastError = "";
+
+/** Aviso de Windows, solo si no se está mirando la aplicación. */
+function notifyIfAway(body) {
+  if ($("notify").checked && !document.hasFocus()) post("/api/notify", body).catch(() => {});
+}
+
+// Cuánto falta, con lo que está tardando este paso: no hay forma honrada de
+// saber cuánto tardarán los siguientes.
+const ETA = { stage: "", started: 0, from: 0, last: -1, shown: 0 };
+function etaReset() {
+  ETA.stage = "";
+  ETA.last = -1;
+  ETA.shown = 0;
+  $("eta-live").hidden = true;
+}
+function etaUpdate(stage, pct) {
+  const now = Date.now();
+  if (stage !== ETA.stage || pct < ETA.last - 1) {
+    ETA.stage = stage;
+    ETA.started = now;
+    ETA.from = pct;
+    ETA.shown = 0;
+    $("eta-live").hidden = true;
+  }
+  ETA.last = pct;
+  const seconds = (now - ETA.started) / 1000;
+  const done = pct - ETA.from;
+  if (seconds < 8 || done < 2 || now - ETA.shown < 3000) return;
+  ETA.shown = now;
+  const left = seconds * (100 - pct) / done;
+  $("eta-live").textContent = left < 60 ? "Queda menos de 1 minuto en este paso."
+    : left < 90 ? "Queda más o menos 1 minuto en este paso."
+    : `Quedan unos ${Math.round(left / 60)} minutos en este paso.`;
+  $("eta-live").hidden = false;
+}
 
 function appendLog(line) {
   const log = $("log");
@@ -4409,7 +4525,7 @@ function renderLibrary() {
 
   let shown = 0;
   LIB.forEach((item, index) => {
-    const sig = [item.id, item.mtime, item.titulo, item.gancho, item.pie, item.retocable ? "r" : ""].join("|");
+    const sig = [item.id, item.mtime, item.titulo, item.gancho, item.pie, item.retocable ? "r" : "", item.deshacer ? "d" : "", item.youtube, item.programado].join("|");
     let card = CARDS.get(item.id);
     if (!card || card.sig !== sig) {
       if (card) card.el.remove();
@@ -4434,6 +4550,8 @@ function renderLibrary() {
   none.hidden = shown > 0 || LIB.length === 0;
   grid.appendChild(none);
 
+  const notUp = LIB.filter(item => !item.youtube && matchesFilters(item));
+  $("lib-plan").hidden = !YT.connected || notUp.length < 2;
   const total = LIB.length;
   $("lib-empty").hidden = total > 0;
   $("lib-tools").hidden = total === 0;
@@ -4465,7 +4583,7 @@ function buildCard(item) {
       ${item.gancho ? `<div class="hook" title="${escapeAttr(item.gancho)}">${escapeHtml(item.gancho)}</div>` : ""}
       <h3>${escapeHtml(item.titulo || item.fichero)}</h3>
       ${item.pie ? `<div class="caption">${escapeHtml(item.pie)}</div>` : ""}
-      <div class="when">${escapeHtml(whenText(item.mtime))}</div>
+      <div class="when">${escapeHtml(whenText(item.mtime))}${item.programado ? ` · se publica ${escapeHtml(whenText(Math.floor(new Date(item.programado).getTime() / 1000)))}` : ""}</div>
     </div>
     <div class="foot"></div>`;
   const foot = card.querySelector(".foot");
@@ -4490,6 +4608,28 @@ function buildCard(item) {
     retouch.addEventListener("click", () => retouchShort(item));
     foot.appendChild(retouch);
   }
+  if (item.deshacer) {
+    const undo = iconButton("Deshacer el último retoque", "undo", true);
+    let ready = null;
+    undo.addEventListener("click", async () => {
+      if (!ready) {
+        undo.classList.add("confirm");
+        undo.title = "Pulsa otra vez para volver a la versión anterior";
+        ready = setTimeout(() => { ready = null; undo.classList.remove("confirm"); undo.title = "Deshacer el último retoque"; }, 3000);
+        return;
+      }
+      clearTimeout(ready);
+      undo.disabled = true;
+      try {
+        await post("/api/short/undo", { id: item.id });
+        await loadLibrary();
+      } catch (error) {
+        undo.disabled = false;
+        showBanner($("banner"), "No se ha podido deshacer", escapeHtml(error.message));
+      }
+    });
+    foot.appendChild(undo);
+  }
 
   // YouTube: subir con un clic (o ver el que ya se subio).
   const yt = iconButton(item.youtube ? "Ver en YouTube" : "Subir a YouTube", item.youtube ? "link" : "upload");
@@ -4502,22 +4642,7 @@ function buildCard(item) {
       openSetting("acc-youtube");
       return;
     }
-    const label = yt.querySelector("span");
-    yt.disabled = true;
-    label.textContent = "Subiendo…";
-    try {
-      const answer = await post("/api/youtube/upload", { id: item.id, privacidad: $("yt-privacy").value });
-      if (!answer.ok) throw new Error(answer.error || "no se pudo");
-      item.youtube = answer.url;
-      label.textContent = "Ver en YouTube";
-      yt.querySelector("use").setAttribute("href", "#i-link");
-      yt.classList.add("done");
-    } catch (error) {
-      label.textContent = "Subir a YouTube";
-      showBanner($("banner"), "No se pudo subir a YouTube", escapeHtml(error.message));
-    } finally {
-      yt.disabled = false;
-    }
+    openYtPlan([item]);
   });
   foot.appendChild(yt);
 
@@ -4640,6 +4765,95 @@ $("rt-editor").addEventListener("click", () => { const item = RT && RT.item; clo
 $("retouch").addEventListener("close", () => { document.body.classList.remove("modal-open"); $("rt-video").pause(); });
 $("retouch").addEventListener("click", (event) => { if (event.target === $("retouch")) closeRetouch(); });
 
+// ---------------------------------------------------------------- subir y programar
+const YP = { items: [], running: false, stop: false };
+
+/** datetime-local quiere la hora local, sin zona. */
+function localInputValue(date) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function openYtPlan(items, later) {
+  YP.items = items;
+  YP.stop = false;
+  const many = items.length > 1;
+  $("yp-title").textContent = many ? `Subir ${items.length} shorts a YouTube` : "Subir a YouTube";
+  $("yp-sub").textContent = many ? "Los que aún no has subido de esta lista, del más reciente al más antiguo." : (items[0].titulo || items[0].fichero);
+  $("yp-every-box").hidden = !many;
+  $("yp-date-label").textContent = many ? "El primero se publica el" : "Se publica el";
+  document.querySelector(`input[name="ypwhen"][value="${later ? "later" : "now"}"]`).checked = true;
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(18, 0, 0, 0);
+  $("yp-date").value = localInputValue(tomorrow);
+  $("yp-msg").textContent = "";
+  ypPaint();
+  $("yt-plan").showModal();
+  document.body.classList.add("modal-open");
+}
+
+function ypPaint() {
+  const later = document.querySelector('input[name="ypwhen"]:checked').value === "later";
+  $("yp-later").hidden = !later;
+  const n = YP.items.length;
+  $("yp-go").textContent = later ? (n > 1 ? `Programar ${n} shorts` : "Programar") : (n > 1 ? `Subir ${n} shorts` : "Subir");
+}
+document.querySelectorAll('input[name="ypwhen"]').forEach(r => r.addEventListener("change", ypPaint));
+
+/** Fechas de publicación (ISO, en UTC) de cada short; null si no se programa. */
+function ypDates() {
+  if (document.querySelector('input[name="ypwhen"]:checked').value !== "later") return YP.items.map(() => null);
+  const first = new Date($("yp-date").value);
+  if (Number.isNaN(first.getTime()) || first.getTime() < Date.now() + 120000) return undefined;
+  const step = Math.max(1, +$("yp-every").value || 1) * +$("yp-unit").value * 3600000;
+  return YP.items.map((_, i) => new Date(first.getTime() + i * step).toISOString());
+}
+
+async function ypGo() {
+  const dates = ypDates();
+  if (!dates) {
+    $("yp-msg").textContent = "Elige una fecha que aún no haya pasado.";
+    return;
+  }
+  YP.running = true;
+  YP.stop = false;
+  $("yp-go").disabled = true;
+  let done = 0;
+  try {
+    for (let i = 0; i < YP.items.length && !YP.stop; i++) {
+      $("yp-msg").textContent = YP.items.length > 1 ? `Subiendo ${i + 1} de ${YP.items.length}… Puede tardar un rato.` : "Subiendo… Puede tardar un rato.";
+      await post("/api/youtube/upload", { id: YP.items[i].id, privacidad: $("yt-privacy").value, publicar_en: dates[i] });
+      done++;
+    }
+    closeYtPlan();
+    if (YP.items.length > 1 || dates[0]) {
+      showBanner($("tip"), dates[0] ? "Programado en YouTube" : "Subido a YouTube",
+        `${done === 1 ? "1 short subido" : done + " shorts subidos"}${dates[0] ? ": se publican solos en su fecha" : ""}.`);
+    }
+  } catch (error) {
+    $("yp-msg").textContent = (done ? `Se ${done === 1 ? "ha subido 1" : "han subido " + done} de ${YP.items.length}. ` : "") + `No se ha podido seguir: ${error.message}`;
+  } finally {
+    YP.running = false;
+    $("yp-go").disabled = false;
+    loadLibrary();
+  }
+}
+
+function closeYtPlan() {
+  document.body.classList.remove("modal-open");
+  $("yt-plan").close();
+}
+$("yp-go").addEventListener("click", ypGo);
+$("yp-cancel").addEventListener("click", () => {
+  // Lo que ya se está subiendo acaba; los siguientes no empiezan.
+  if (YP.running) { YP.stop = true; $("yp-msg").textContent = "Parando después de este…"; return; }
+  closeYtPlan();
+});
+$("yt-plan").addEventListener("cancel", (event) => { if (YP.running) event.preventDefault(); });
+$("yt-plan").addEventListener("close", () => document.body.classList.remove("modal-open"));
+$("lib-plan").addEventListener("click", () => openYtPlan(LIB.filter(item => !item.youtube && matchesFilters(item)), true));
+
 function startRename(card, item) {
   const title = card.querySelector("h3");
   if (!title || card.querySelector(".rename")) return;
@@ -4744,6 +4958,7 @@ events.onmessage = (message) => {
       if (event.status === "error") {
         const nice = explain(lastError);
         showNice(nice);
+        notifyIfAway({ tipo: "error" });
       }
       break;
 
@@ -4752,6 +4967,7 @@ events.onmessage = (message) => {
     case "stage": {
       const index = STAGE_TO_STEP[event.stage];
       if (index !== undefined) paintSteps(index);
+      etaReset();
       $("stage-label").textContent = event.label || event.stage;
       refreshWork();
       break;
@@ -4760,6 +4976,7 @@ events.onmessage = (message) => {
     case "progress":
       $("bar").style.width = event.pct + "%";
       $("pct").textContent = event.pct.toFixed(0) + "%";
+      etaUpdate(event.stage, event.pct);
       // La descarga de un modelo o de un video dice que es y cuanto lleva.
       if (event.label && (event.stage === "modelo" || event.stage === "descarga")) $("stage-label").textContent = event.label;
       break;
@@ -4776,6 +4993,7 @@ events.onmessage = (message) => {
       break;
     case "fuente":
       openEditor(event);
+      if (!event.retoque) notifyIfAway({ tipo: "elegir" });
       $("stage-label").textContent = "Pódcast listo: elige los trozos";
       go("trabajo");
       break;
@@ -4790,6 +5008,7 @@ events.onmessage = (message) => {
       $("pct").textContent = "100%";
       loadLibrary();
       if (event.ok > 0) {
+        notifyIfAway({ tipo: "listo", ok: event.ok, total: event.total });
         showBanner($("tip"), `Listo: ${event.ok} de ${event.total} shorts`,
           `Ya están en <b>Mis shorts</b>, con su título y su texto para copiar.`);
         if (VIEW === "trabajo" && $("review-panel").hidden) go("biblioteca");

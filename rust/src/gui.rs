@@ -909,7 +909,9 @@ pub fn scan_output(folder: &Path) -> Vec<Value> {
                 entry["pie"] = json!(caption.trim());
                 entry["marca"] = json!(data["fuente"]["marca"].as_str().unwrap_or(""));
                 entry["youtube"] = json!(data["youtube"]["url"].as_str().unwrap_or(""));
+                entry["programado"] = json!(data["youtube"]["programado"].as_str().unwrap_or(""));
                 entry["retocable"] = json!(pipeline::retouch_path(&video).is_file());
+                entry["deshacer"] = json!(library::has_backup(&video));
             }
             entry
         })
@@ -1247,6 +1249,7 @@ fn handle_get(app: &Arc<App>, request: &Request, mut stream: TcpStream) {
         "/api/video" => serve_file(app, request.query.get("f").map_or("", String::as_str), request, &mut stream),
         "/api/source" => serve_source(app, request, &mut stream),
         "/api/source/info" => source_info(app, &mut stream),
+        "/api/preview.jpg" => stream_file(&crate::preview::image_path(&app.root), request, &mut stream),
         "/api/existing" => respond_json(&mut stream, 200, &json!({"results": library::scan_library(&app.job.base_dir())})),
         "/api/profiles" => respond_json(&mut stream, 200, &json!({"profiles": library::load_profiles(&app.root)})),
         "/api/frame" => serve_frame(request.query.get("src").map_or("", String::as_str), &mut stream),
@@ -1514,7 +1517,8 @@ fn handle_post(app: &Arc<App>, request: &Request, stream: &mut TcpStream) {
         },
         "/api/youtube/upload" => {
             let privacy = body["privacidad"].as_str().unwrap_or("private");
-            match library::upload_short(&app.job.base_dir(), &app.root, body["id"].as_str().unwrap_or(""), privacy, &youtube::Endpoints::default()) {
+            let publish_at = body["publicar_en"].as_str().filter(|at| !at.is_empty());
+            match library::upload_short(&app.job.base_dir(), &app.root, body["id"].as_str().unwrap_or(""), privacy, publish_at, &youtube::Endpoints::default()) {
                 Ok(url) => (200, json!({"ok": true, "url": url})),
                 Err(error) => (400, json!({"ok": false, "error": error})),
             }
@@ -1532,6 +1536,36 @@ fn handle_post(app: &Arc<App>, request: &Request, stream: &mut TcpStream) {
             }
         }
         "/api/short/remake" => remake_short(app, &body),
+        "/api/short/undo" => {
+            if app.job.status() == "running" {
+                (409, json!({"ok": false, "error": "Espera a que termine lo que hay en marcha."}))
+            } else {
+                match library::undo_retouch(&app.job.base_dir(), body["id"].as_str().unwrap_or("")) {
+                    Ok(()) => (200, json!({"ok": true})),
+                    Err(error) => (400, json!({"ok": false, "error": error})),
+                }
+            }
+        }
+        "/api/notify" => match notice_text(&body) {
+            Some((title, text)) => {
+                ATTENTION_WANTED.store(true, std::sync::atomic::Ordering::SeqCst);
+                show_notice(&title, &text);
+                (200, json!({"ok": true}))
+            }
+            None => (400, json!({"ok": false})),
+        },
+        "/api/focus" => {
+            FOCUS_WANTED.store(true, std::sync::atomic::Ordering::SeqCst);
+            (200, json!({"ok": true}))
+        }
+        "/api/preview" => match crate::preview::render_preview(&app.root, &body) {
+            Ok(()) => (200, json!({"ok": true})),
+            Err(error) => {
+                // No es un fallo que ensenar: la pagina se queda con el dibujo.
+                log::debug!("Sin vista previa: {error}");
+                (200, json!({"ok": false, "error": error}))
+            }
+        },
         "/api/short/edit" => edit_short(app, &body),
         "/api/short/rename" => match library::rename_short(&app.job.base_dir(), body["id"].as_str().unwrap_or(""), body["titulo"].as_str().unwrap_or("")) {
             Ok(()) => (200, json!({"ok": true})),
@@ -1627,6 +1661,85 @@ pub fn check_channels(app: &Arc<App>) -> usize {
     count
 }
 
+/// El texto de un aviso de Windows. La pagina solo dice que ha pasado: el texto
+/// sale de aqui.
+fn notice_text(body: &Value) -> Option<(String, String)> {
+    match body["tipo"].as_str()? {
+        "listo" => {
+            let (ok, total) = (body["ok"].as_u64()?, body["total"].as_u64()?);
+            let title = if ok == 1 { "Tu short está listo".to_string() } else { format!("{ok} shorts listos") };
+            let text = if ok == total { "Ya están en Mis shorts.".to_string() } else { format!("Han salido {ok} de {total}. Los que han salido están en Mis shorts.") };
+            Some((title, text))
+        }
+        "elegir" => Some(("El pódcast está preparado".into(), "Ya puedes elegir los trozos en el editor.".into())),
+        "error" => Some(("Algo ha fallado".into(), "Abre Viral Shorts para ver qué ha pasado.".into())),
+        _ => None,
+    }
+}
+
+/// La ventana tiene que venir al frente (ver `app`).
+static FOCUS_WANTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// La ventana tiene que llamar la atencion en la barra de tareas: funciona aunque
+/// las notificaciones de Windows esten apagadas.
+static ATTENTION_WANTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn take_attention_request() -> bool {
+    ATTENTION_WANTED.swap(false, std::sync::atomic::Ordering::SeqCst)
+}
+
+pub fn take_focus_request() -> bool {
+    FOCUS_WANTED.swap(false, std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Identificador con el que el instalador registra el acceso directo: es lo que
+/// hace que el aviso salga con el nombre y el icono de la aplicacion.
+const APP_USER_MODEL_ID: &str = "ViralShorts.App";
+
+/// Windows solo ensena avisos de aplicaciones que conoce: esto le dice como se
+/// llama esta, tambien si se ha abierto sin pasar por el acceso directo.
+fn register_notice_app() {
+    #[cfg(windows)]
+    {
+        let path = format!(r"Software\Classes\AppUserModelId\{APP_USER_MODEL_ID}");
+        match winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER).create_subkey(path) {
+            Ok((key, _)) => {
+                let _ = key.set_value("DisplayName", &"Viral Shorts");
+            }
+            Err(error) => log::debug!("No se pudo registrar el nombre de los avisos: {error}"),
+        }
+    }
+}
+
+/// Un aviso de Windows. Lo pinta PowerShell, que viene con el sistema; los
+/// textos van por el entorno para no tener que escaparlos.
+fn show_notice(title: &str, text: &str) {
+    const SCRIPT: &str = "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null;\
+        $x = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);\
+        $t = $x.GetElementsByTagName('text');\
+        $null = $t.Item(0).AppendChild($x.CreateTextNode($env:VS_TITLE));\
+        $null = $t.Item(1).AppendChild($x.CreateTextNode($env:VS_TEXT));\
+        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($env:VS_APP).Show([Windows.UI.Notifications.ToastNotification]::new($x))";
+    register_notice_app();
+    let mut command = std::process::Command::new("powershell.exe");
+    command
+        .args(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command", SCRIPT])
+        .env("VS_TITLE", title)
+        .env("VS_TEXT", text)
+        .env("VS_APP", APP_USER_MODEL_ID)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000); // sin ventana de consola
+    }
+    if let Err(error) = command.spawn() {
+        log::debug!("Sin aviso de Windows: {error}");
+    }
+}
+
 const NOT_RETOUCHABLE: &str = "Este short se montó con una versión anterior y no guarda lo necesario para retocarlo. Los que hagas a partir de ahora sí.";
 
 /// Lo que se puede retocar de un short ya montado: texto, recorte y estilo del
@@ -1699,6 +1812,10 @@ fn remake_short(app: &Arc<App>, body: &Value) -> (u16, Value) {
     let path = pipeline::retouch_path(&video);
     if !path.is_file() {
         return (409, json!({"ok": false, "error": NOT_RETOUCHABLE}));
+    }
+    // Antes de tocar nada: asi se puede volver a lo de ahora.
+    if let Err(error) = library::backup_short(&video) {
+        log::warn!("Sin copia para deshacer el retoque: {error}");
     }
     let mut change = json!({"n": 1});
     for key in ["texto_palabras", "recorte", "rango", "estilo", "publicacion", "restaurar"] {
@@ -2638,6 +2755,64 @@ la guapa=La Guapa"}));
         assert!(args.contains(&"--no-jumpcuts".to_string()), "{args:?}");
         let args = build_command(&json!({"podcast": "p", "background": "b", "moments": [[1, 31]], "jumpcuts": true}));
         assert!(!args.contains(&"--no-jumpcuts".to_string()), "{args:?}");
+    }
+
+    #[test]
+    fn el_texto_de_los_avisos_sale_del_servidor() {
+        assert_eq!(notice_text(&json!({"tipo": "listo", "ok": 3, "total": 3})).unwrap().0, "3 shorts listos");
+        assert_eq!(notice_text(&json!({"tipo": "listo", "ok": 1, "total": 1})).unwrap().0, "Tu short está listo");
+        assert!(notice_text(&json!({"tipo": "listo", "ok": 2, "total": 3})).unwrap().1.contains("2 de 3"));
+        assert!(notice_text(&json!({"tipo": "error"})).is_some() && notice_text(&json!({"tipo": "elegir"})).is_some());
+        assert!(notice_text(&json!({"tipo": "cualquiera", "texto": "lo que sea"})).is_none(), "la pagina no escribe avisos");
+    }
+
+    #[test]
+    fn retocar_guarda_la_version_anterior_y_se_puede_deshacer() {
+        let dir = tempfile::tempdir().unwrap();
+        let video = short_retocable(dir.path());
+        let carpeta = video.parent().unwrap().to_path_buf();
+        std::fs::write(&video, b"version 1").unwrap();
+        std::fs::write(carpeta.join("short_2.txt"), b"texto 1").unwrap();
+        std::fs::write(carpeta.join("sin-subtitulos_2.mp4"), b"limpio 1").unwrap();
+        std::fs::write(carpeta.join("short_20.mp4"), b"otro short").unwrap();
+        let (app, _puerto, b) = app_de_prueba();
+        app.job.set_base_dir(dir.path().to_path_buf());
+        assert_eq!(scan_output(&carpeta)[0]["deshacer"], false);
+
+        let (codigo, _) = remake_short(&app, &json!({"id": "pod_2026/short_2.mp4", "texto_palabras": "hola que tal, estamos", "estilo": "box"}));
+        assert_eq!(codigo, 200);
+        b.job.stop();
+        // El montaje sustituye el short.
+        std::fs::write(&video, b"version 2").unwrap();
+        std::fs::write(carpeta.join("short_2.txt"), b"texto 2").unwrap();
+        let en_lista: Vec<String> = scan_output(&carpeta).iter().map(|e| e["fichero"].as_str().unwrap().to_string()).collect();
+        assert_eq!(en_lista, ["short_2.mp4", "short_20.mp4"], "la copia no sale como otro short");
+        assert_eq!(scan_output(&carpeta)[0]["deshacer"], true);
+
+        // Con algo en marcha no se toca: el montaje podria estar escribiendolo.
+        while b.job.status() == "running" {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        library::undo_retouch(dir.path(), "pod_2026/short_2.mp4").unwrap();
+        assert_eq!(std::fs::read(&video).unwrap(), b"version 1");
+        assert_eq!(std::fs::read(carpeta.join("short_2.txt")).unwrap(), b"texto 1");
+        assert_eq!(std::fs::read(carpeta.join("sin-subtitulos_2.mp4")).unwrap(), b"limpio 1");
+        assert_eq!(std::fs::read(carpeta.join("short_20.mp4")).unwrap(), b"otro short", "short_20 no es short_2");
+        assert_eq!(plan::load(&pipeline::retouch_path(&video)).unwrap().clips[0].style, "", "el plan vuelve con el short");
+        assert_eq!(scan_output(&carpeta)[0]["deshacer"], false);
+        assert!(library::undo_retouch(dir.path(), "pod_2026/short_2.mp4").is_err(), "deshacer es una vez");
+        assert!(!std::fs::read_dir(&carpeta).unwrap().flatten().any(|e| e.file_name().to_string_lossy().starts_with("anterior_")));
+    }
+
+    #[test]
+    fn borrar_un_short_se_lleva_tambien_su_version_anterior() {
+        let dir = tempfile::tempdir().unwrap();
+        let video = short_retocable(dir.path());
+        library::backup_short(&video).unwrap();
+        assert!(library::has_backup(&video));
+        library::delete_short(dir.path(), "pod_2026/short_2.mp4").unwrap();
+        let quedan = std::fs::read_dir(video.parent().unwrap()).unwrap().count();
+        assert_eq!(quedan, 0);
     }
 
     #[test]

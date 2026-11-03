@@ -78,7 +78,7 @@ pub fn delete_short(base: &Path, id: &str) -> Result<usize, String> {
     for entry in std::fs::read_dir(&folder).map_err(|e| e.to_string())?.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
         // `short_1.` y no `short_1`: que `short_10` no caiga con `short_1`.
-        if name.starts_with(&format!("{stem}.")) {
+        if name.starts_with(&format!("{stem}.")) || name.starts_with(&format!("{BACKUP}{stem}.")) {
             std::fs::remove_file(entry.path()).map_err(|e| format!("No se pudo borrar {name}: {e}"))?;
             removed += 1;
         }
@@ -90,6 +90,86 @@ pub fn delete_short(base: &Path, id: &str) -> Result<usize, String> {
         let _ = crate::exports::write_csv(&folder, "publicaciones.csv");
     }
     Ok(removed)
+}
+
+/// Prefijo de la version anterior de un short retocado. Con este nombre la
+/// biblioteca y la hoja de publicaciones no la toman por otro short.
+const BACKUP: &str = "anterior_";
+
+/// Los ficheros de un short: el video y todo lo que lo acompana.
+fn short_files(video: &Path) -> Vec<PathBuf> {
+    let (Some(folder), Some(stem)) = (video.parent(), video.file_stem().map(|s| s.to_string_lossy().into_owned())) else { return Vec::new() };
+    let clean = stem.strip_prefix("short_").map(|n| format!("sin-subtitulos_{n}.mp4"));
+    let Ok(entries) = std::fs::read_dir(folder) else { return Vec::new() };
+    entries
+        .flatten()
+        .filter(|e| {
+            let name = e.file_name().to_string_lossy().into_owned();
+            name.starts_with(&format!("{stem}.")) || clean.as_deref() == Some(name.as_str())
+        })
+        .map(|e| e.path())
+        .collect()
+}
+
+fn backup_of(file: &Path) -> Option<PathBuf> {
+    Some(file.with_file_name(format!("{BACKUP}{}", file.file_name()?.to_string_lossy())))
+}
+
+/// Hay una version anterior a la que volver.
+pub fn has_backup(video: &Path) -> bool {
+    backup_of(video).is_some_and(|b| b.is_file())
+}
+
+/// Guarda el short tal como esta antes de rehacerlo (solo la ultima version).
+pub fn backup_short(video: &Path) -> Result<(), String> {
+    let folder = video.parent().ok_or("Ese short no existe.")?;
+    let prefix = format!("{BACKUP}{}.", video.file_stem().unwrap_or_default().to_string_lossy());
+    let clean = video.file_stem().and_then(|s| s.to_str()).and_then(|s| s.strip_prefix("short_")).map(|n| format!("{BACKUP}sin-subtitulos_{n}.mp4"));
+    for entry in std::fs::read_dir(folder).map_err(|e| e.to_string())?.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with(&prefix) || clean.as_deref() == Some(name.as_str()) {
+            std::fs::remove_file(entry.path()).map_err(|e| format!("No se pudo borrar {name}: {e}"))?;
+        }
+    }
+    for file in short_files(video) {
+        let target = backup_of(&file).ok_or("Nombre de fichero raro.")?;
+        std::fs::copy(&file, &target).map_err(|e| format!("No se pudo guardar la versión anterior: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Vuelve a la version de antes del ultimo retoque. Esa version deja de estar
+/// guardada: deshacer es una vez por retoque.
+pub fn undo_retouch(base: &Path, id: &str) -> Result<(), String> {
+    let video = resolve_short(base, id).ok_or("Ese short no existe.")?;
+    if !has_backup(&video) {
+        return Err("Este short no tiene ningún retoque que deshacer.".into());
+    }
+    let folder = video.parent().ok_or("Ese short no existe.")?.to_path_buf();
+    let stem = video.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+    let clean = stem.strip_prefix("short_").map(|n| format!("{BACKUP}sin-subtitulos_{n}.mp4"));
+    let saved: Vec<PathBuf> = std::fs::read_dir(&folder)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .filter(|e| {
+            let name = e.file_name().to_string_lossy().into_owned();
+            name.starts_with(&format!("{BACKUP}{stem}.")) || clean.as_deref() == Some(name.as_str())
+        })
+        .map(|e| e.path())
+        .collect();
+    for file in short_files(&video) {
+        std::fs::remove_file(&file).map_err(|e| format!("No se pudo cambiar el short (¿lo tienes abierto?): {e}"))?;
+    }
+    for file in saved {
+        let name = file.file_name().unwrap_or_default().to_string_lossy().into_owned();
+        std::fs::rename(&file, folder.join(name.trim_start_matches(BACKUP))).map_err(|e| format!("No se pudo recuperar {name}: {e}"))?;
+    }
+    let sheet = folder.join("publicaciones.csv");
+    if sheet.is_file() {
+        let _ = std::fs::remove_file(&sheet);
+        let _ = crate::exports::write_csv(&folder, "publicaciones.csv");
+    }
+    Ok(())
 }
 
 /// Cambia el titulo de publicacion de un short (el que se ve y se copia).
@@ -117,8 +197,14 @@ pub fn rename_short(base: &Path, id: &str, title: &str) -> Result<(), String> {
 
 /// Sube un short a YouTube con su titulo, pie y hashtags, y apunta la
 /// direccion en su .json para que la biblioteca la ensene.
-pub fn upload_short(base: &Path, root: &Path, id: &str, privacy: &str, endpoints: &crate::youtube::Endpoints) -> Result<String, String> {
+pub fn upload_short(base: &Path, root: &Path, id: &str, privacy: &str, publish_at: Option<&str>, endpoints: &crate::youtube::Endpoints) -> Result<String, String> {
     let video = resolve_short(base, id).ok_or("Ese short no existe.")?;
+    if let Some(at) = publish_at {
+        let when = chrono::DateTime::parse_from_rfc3339(at).map_err(|_| "Esa fecha de publicación no es válida.")?;
+        if when.timestamp() <= chrono::Local::now().timestamp() + 60 {
+            return Err("La fecha de publicación tiene que ser futura.".into());
+        }
+    }
     let sidecar = video.with_extension("json");
     let mut data: Value = std::fs::read_to_string(&sidecar).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_else(|| json!({}));
     let publication = &data["publicacion"];
@@ -127,9 +213,10 @@ pub fn upload_short(base: &Path, root: &Path, id: &str, privacy: &str, endpoints
         description: publication["description"].as_str().unwrap_or("").to_string(),
         tags: publication["hashtags"].as_array().map(|t| t.iter().filter_map(Value::as_str).map(str::to_string).collect()).unwrap_or_default(),
         privacy: privacy.to_string(),
+        publish_at: publish_at.map(str::to_string),
     };
     let url = crate::youtube::upload(root, &video, &details, endpoints).map_err(|e| e.to_string())?;
-    data["youtube"] = json!({"url": url, "privacidad": details.snippet()["status"]["privacyStatus"]});
+    data["youtube"] = json!({"url": url, "privacidad": details.snippet()["status"]["privacyStatus"], "programado": publish_at});
     let _ = std::fs::write(&sidecar, serde_json::to_string_pretty(&data).unwrap_or_default());
     Ok(url)
 }
@@ -228,6 +315,17 @@ mod tests {
             json!({"publicacion": {"title": titulo, "hook": "g", "hashtags": ["a"], "description": "d"}, "fuente": {"marca": "1:00"}}).to_string(),
         )
         .unwrap();
+    }
+
+    #[test]
+    fn no_se_programa_con_una_fecha_rota_o_pasada() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("short_1.mp4"), b"v").unwrap();
+        // Falla antes de tocar la red: los puntos de acceso no se llegan a usar.
+        let puntos = crate::youtube::Endpoints::default();
+        let subir = |fecha: &str| upload_short(dir.path(), dir.path(), "short_1.mp4", "private", Some(fecha), &puntos).unwrap_err();
+        assert!(subir("el martes").contains("no es válida"));
+        assert!(subir("2020-01-01T10:00:00.000Z").contains("futura"));
     }
 
     #[test]

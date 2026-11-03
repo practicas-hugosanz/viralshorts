@@ -1446,14 +1446,7 @@ fn render_one(
             Some(&title_text),
         )
         .map_err(|e| e.to_string())?;
-        // El usuario del canal va junto al logo, asi que hace falta su tamano.
-        let logo_size = (!cfg.brand.logo.is_empty())
-            .then(|| ffmpeg::image_size(Path::new(&cfg.brand.logo)))
-            .flatten()
-            .map(|(logo_w, logo_h)| {
-                let w = ffmpeg::even((cfg.layout.width as f64 * cfg.brand.scale.clamp(0.03, 0.6)).round() as i64);
-                (w, (w as f64 * logo_h as f64 / logo_w as f64).round() as i64)
-            });
+        let logo_size = logo_size(cfg);
         subtitles::append_handle(&mut content, &cfg.brand, cfg.layout.width, cfg.layout.height, cuts.output_duration(), &cfg.subtitles, logo_size);
         subtitles::append_end_card(&mut content, &cfg.end_card, &cfg.brand.handle, cfg.layout.width, cfg.layout.height, cuts.output_duration(), &cfg.subtitles);
         let name = format!("short_{number}.ass");
@@ -1541,6 +1534,17 @@ fn render_one(
     write_sidecar(&output, clip, meta, podcast, &cuts);
     write_retouch(&output, clip, meta, podcast, background, number, turn, base_cfg);
     Ok(output)
+}
+
+/// El usuario del canal va junto al logo, asi que hace falta su tamano.
+pub fn logo_size(cfg: &Config) -> Option<(i64, i64)> {
+    (!cfg.brand.logo.is_empty())
+        .then(|| ffmpeg::image_size(Path::new(&cfg.brand.logo)))
+        .flatten()
+        .map(|(logo_w, logo_h)| {
+            let w = ffmpeg::even((cfg.layout.width as f64 * cfg.brand.scale.clamp(0.03, 0.6)).round() as i64);
+            (w, (w as f64 * logo_h as f64 / logo_w as f64).round() as i64)
+        })
 }
 
 /// Junto al short, lo necesario para retocarlo despues (ver `plan::save_single`).

@@ -24,6 +24,7 @@ pub mod metadata;
 pub mod pipeline;
 pub mod plan;
 pub mod prescan;
+pub mod preview;
 pub mod progress;
 pub mod render;
 pub mod scoring;

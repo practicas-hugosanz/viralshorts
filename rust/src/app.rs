@@ -9,8 +9,8 @@ use std::time::Duration;
 
 use tao::dpi::LogicalSize;
 use tao::event::{Event, WindowEvent};
-use tao::event_loop::{ControlFlow, EventLoop};
-use tao::window::{Icon, WindowBuilder};
+use tao::event_loop::{ControlFlow, EventLoopBuilder};
+use tao::window::{Icon, UserAttentionType, WindowBuilder};
 use wry::{NewWindowResponse, WebContext, WebViewBuilder};
 
 use crate::ffmpeg;
@@ -18,6 +18,32 @@ use crate::gui::{self, Running};
 
 /// Icono de la ventana: 64x64 en RGBA crudo (el del .exe va incrustado aparte).
 const ICON_RGBA: &[u8] = include_bytes!("../assets/icon-64.rgba");
+
+/// Lo que el servidor le pide a la ventana.
+#[derive(Debug, Clone, Copy)]
+enum Request {
+    Focus,
+    Attention,
+}
+
+/// Donde la ventana abierta deja como llamarla.
+fn instance_file() -> std::path::PathBuf {
+    ffmpeg::project_root().join("app.instance")
+}
+
+/// Pide a la ventana abierta que venga al frente. Si el fichero es de una
+/// ejecucion anterior nadie contesta, y se sigue arrancando.
+fn focus_running_instance() -> bool {
+    let Some(data) = std::fs::read_to_string(instance_file()).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()) else {
+        return false;
+    };
+    let (Some(port), Some(token)) = (data["port"].as_u64(), data["token"].as_str()) else { return false };
+    ureq::post(&format!("http://127.0.0.1:{port}/api/focus"))
+        .set("X-VS-Token", token)
+        .timeout(Duration::from_millis(1500))
+        .send_json(serde_json::json!({}))
+        .is_ok()
+}
 
 /// Una direccion que la interfaz puede cargar dentro de la ventana. Todo lo
 /// demas (los enlaces a YouTube, a la documentacion...) se abre en el
@@ -32,6 +58,11 @@ pub fn is_internal(url: &str, port: u16) -> bool {
 
 /// Abre la aplicacion. No vuelve hasta que se cierra la ventana.
 pub fn run() -> i32 {
+    // Ya abierta (otro doble clic, o un clic en un aviso de Windows): se trae al
+    // frente en vez de abrir una segunda, que se pelearia por la carpeta de trabajo.
+    if focus_running_instance() {
+        return 0;
+    }
     let running = match gui::launch(gui::DEFAULT_PORT) {
         Ok(running) => running,
         Err(error) => {
@@ -39,6 +70,8 @@ pub fn run() -> i32 {
             return 2;
         }
     };
+    let instance = serde_json::json!({"port": running.port, "token": running.app.token});
+    let _ = std::fs::write(instance_file(), instance.to_string());
 
     // `open_window` solo vuelve si no se pudo abrir la ventana; si se abre, el
     // proceso termina al cerrarla.
@@ -55,7 +88,17 @@ pub fn run() -> i32 {
 }
 
 fn open_window(running: &Running) -> Result<std::convert::Infallible, String> {
-    let event_loop = EventLoop::new();
+    let event_loop = EventLoopBuilder::<Request>::with_user_event().build();
+    let proxy = event_loop.create_proxy();
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_millis(300));
+        if gui::take_focus_request() && proxy.send_event(Request::Focus).is_err() {
+            return;
+        }
+        if gui::take_attention_request() && proxy.send_event(Request::Attention).is_err() {
+            return;
+        }
+    });
     let window = WindowBuilder::new()
         .with_title("Viral Shorts")
         .with_inner_size(LogicalSize::new(1200.0, 860.0))
@@ -91,9 +134,19 @@ fn open_window(running: &Running) -> Result<std::convert::Infallible, String> {
     event_loop.run(move |event, _, flow| {
         *flow = ControlFlow::Wait;
         let _vivo = &webview; // la vista vive tanto como el bucle
-        if let Event::WindowEvent { event: WindowEvent::CloseRequested, .. } = event {
-            job.stop(); // un trabajo a medias no se queda huerfano
-            *flow = ControlFlow::Exit;
+        match event {
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+                job.stop(); // un trabajo a medias no se queda huerfano
+                let _ = std::fs::remove_file(instance_file());
+                *flow = ControlFlow::Exit;
+            }
+            Event::UserEvent(Request::Focus) => {
+                window.set_minimized(false);
+                window.set_focus();
+            }
+            // Parpadea en la barra de tareas hasta que se vuelve a la ventana.
+            Event::UserEvent(Request::Attention) => window.request_user_attention(Some(UserAttentionType::Critical)),
+            _ => {}
         }
     })
 }

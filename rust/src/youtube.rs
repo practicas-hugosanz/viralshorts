@@ -271,6 +271,8 @@ pub struct Upload {
     pub tags: Vec<String>,
     /// public | unlisted | private
     pub privacy: String,
+    /// Fecha de publicacion (RFC 3339, en UTC). Hasta entonces, privado.
+    pub publish_at: Option<String>,
 }
 
 impl Upload {
@@ -290,9 +292,14 @@ impl Upload {
             description.push_str(" #Shorts");
         }
         let privacy = if ["public", "unlisted", "private"].contains(&self.privacy.as_str()) { self.privacy.as_str() } else { "private" };
+        // YouTube solo programa los videos privados: se hacen publicos solos.
+        let status = match &self.publish_at {
+            Some(at) => json!({"privacyStatus": "private", "publishAt": at, "selfDeclaredMadeForKids": false}),
+            None => json!({"privacyStatus": privacy, "selfDeclaredMadeForKids": false}),
+        };
         json!({
             "snippet": {"title": if title.is_empty() { "Short".to_string() } else { title }, "description": description.trim(), "tags": self.tags, "categoryId": "22"},
-            "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": false},
+            "status": status,
         })
     }
 }
@@ -346,6 +353,16 @@ fn api_error(code: u16, response: ureq::Response) -> YoutubeError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn programar_sube_en_privado_con_su_fecha() {
+        let datos = Upload { title: "T".into(), description: "P".into(), tags: vec![], privacy: "public".into(), publish_at: Some("2026-11-20T17:00:00.000Z".into()) }.snippet();
+        assert_eq!(datos["status"]["privacyStatus"], "private");
+        assert_eq!(datos["status"]["publishAt"], "2026-11-20T17:00:00.000Z");
+        let ahora = Upload { title: "T".into(), description: "P".into(), tags: vec![], privacy: "public".into(), publish_at: None }.snippet();
+        assert_eq!(ahora["status"]["privacyStatus"], "public");
+        assert!(ahora["status"].get("publishAt").is_none());
+    }
     use std::sync::{Arc, Mutex};
 
     #[test]
@@ -402,7 +419,7 @@ mod tests {
 
     #[test]
     fn titulo_descripcion_y_hashtags_como_los_quiere_youtube() {
-        let datos = Upload { title: "a<b>".repeat(40), description: "Pie.".into(), tags: vec!["humor".into(), "#minecraft".into()], privacy: "raro".into() }.snippet();
+        let datos = Upload { title: "a<b>".repeat(40), description: "Pie.".into(), tags: vec!["humor".into(), "#minecraft".into()], privacy: "raro".into(), publish_at: None }.snippet();
         assert_eq!(datos["snippet"]["title"].as_str().unwrap().chars().count(), 80, "sin < ni >");
         assert_eq!(datos["snippet"]["description"], "Pie.\n\n#humor #minecraft #Shorts");
         assert_eq!(datos["status"]["privacyStatus"], "private", "lo desconocido va en privado");
@@ -458,7 +475,7 @@ mod tests {
             (200, vec![("Location", format!("{destino}/sesion"))], "{}".into()),
         ]);
         let endpoints = Endpoints { auth: String::new(), token: format!("{google}/token"), api: String::new(), upload: format!("{google}/upload") };
-        let detalles = Upload { title: "Titulo".into(), description: "Pie".into(), tags: vec!["a".into()], privacy: "unlisted".into() };
+        let detalles = Upload { title: "Titulo".into(), description: "Pie".into(), tags: vec!["a".into()], privacy: "unlisted".into(), publish_at: None };
         assert_eq!(upload(dir.path(), &video, &detalles, &endpoints).unwrap(), "https://youtube.com/shorts/abc123");
         let pedido = pedido.lock().unwrap();
         assert!(pedido[0].contains("grant_type=refresh_token") && pedido[0].contains("refresh_token=r"));

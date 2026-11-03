@@ -45,8 +45,12 @@ Name: "desktopicon"; Description: "Crear un acceso directo en el &Escritorio"; G
 Source: "{#ExePath}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\Viral Shorts"; Filename: "{app}\viralshorts.exe"
-Name: "{autodesktop}\Viral Shorts"; Filename: "{app}\viralshorts.exe"; Tasks: desktopicon
+Name: "{autoprograms}\Viral Shorts"; Filename: "{app}\viralshorts.exe"; AppUserModelID: "ViralShorts.App"
+Name: "{autodesktop}\Viral Shorts"; Filename: "{app}\viralshorts.exe"; AppUserModelID: "ViralShorts.App"; Tasks: desktopicon
+
+[Registry]
+; El nombre con el que salen los avisos de Windows (la aplicacion lo crea al avisar).
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\ViralShorts.App"; ValueType: string; ValueName: "DisplayName"; ValueData: "Viral Shorts"; Flags: uninsdeletekey
 
 [InstallDelete]
 ; Hasta la 1.0.2 el acceso directo del menu Inicio se llamaba "viralshorts".
