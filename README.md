@@ -10,14 +10,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/practicas-hugosanz/viralshorts-releases/releases/latest"><img src="https://img.shields.io/github/v/release/practicas-hugosanz/viralshorts-releases?label=versi%C3%B3n&color=ff7a1a" alt="Última versión"></a>
+  <a href="https://github.com/practicas-hugosanz/viralshorts-releases/releases/latest"><img src="https://img.shields.io/github/v/release/practicas-hugosanz/viralshorts-releases?label=versi%C3%B3n&color=ff0033" alt="Última versión"></a>
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-1f6feb" alt="Windows 10 y 11">
   <img src="https://img.shields.io/badge/hecho%20con-Rust-b7410e" alt="Hecho con Rust">
   <img src="https://img.shields.io/badge/se%20ejecuta-en%20tu%20ordenador-3ddc97" alt="Se ejecuta en tu ordenador">
 </p>
 
 <p align="center">
-  <img src="docs/img/crear.png" alt="Pantalla Crear de Viral Shorts, con la vista previa 9:16 y la lista «Antes de generar» a la derecha" width="900">
+  <img src="docs/img/crear.png" alt="Pantalla Crear de Viral Shorts, con los tres pasos y la vista previa" width="900">
 </p>
 
 ## Cómo funciona
@@ -68,15 +68,15 @@
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/img/en-curso.png" alt="Progreso por pasos con la transcripción en directo y la cola"><br><sub><b>En curso.</b> Cada paso, la transcripción en directo y la cola de trabajos.</sub></td>
-    <td width="50%"><img src="docs/img/revision.png" alt="Revisión de los momentos encontrados"><br><sub><b>Revisión.</b> Marca los momentos que valen y corrige títulos y ganchos.</sub></td>
+    <td width="50%"><img src="docs/img/editor.png" alt="Editor con el vídeo, la línea de tiempo y los trozos elegidos"><br><sub><b>Editor.</b> Elige los trozos en una línea de tiempo, o retoca un short ya hecho: la parte elegida y los subtítulos, frase a frase.</sub></td>
+    <td width="50%"><img src="docs/img/en-curso.png" alt="Progreso por pasos con la transcripción en directo"><br><sub><b>En curso.</b> Cada paso, cuánto queda, la transcripción en directo y la cola de trabajos.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/img/mis-shorts.png" alt="Biblioteca de shorts con búsqueda"><br><sub><b>Mis shorts.</b> Todo lo generado, con búsqueda, título editable y texto para copiar.</sub></td>
-    <td width="50%"><img src="docs/img/ajustes.png" alt="Ajustes agrupados por apartados"><br><sub><b>Ajustes.</b> Lo que normalmente no hace falta tocar, por apartados: YouTube, canales, tarjeta gráfica…</sub></td>
+    <td width="50%"><img src="docs/img/mis-shorts.png" alt="Biblioteca de shorts"><br><sub><b>Mis shorts.</b> Todo lo generado, listo para retocar, copiar el texto o subir a YouTube.</sub></td>
+    <td width="50%"><img src="docs/img/ajustes.png" alt="Ajustes por apartados, con índice y buscador"><br><sub><b>Ajustes.</b> Lo que normalmente no hace falta tocar, por apartados y con buscador.</sub></td>
   </tr>
   <tr>
-    <td colspan="2"><img src="docs/img/crear-oscuro.png" alt="Tema oscuro con la composición Dos personas y subtítulos neón"><br><sub><b>Tema claro u oscuro</b>, según tu Windows. Aquí, la composición <i>Dos personas</i> con subtítulos neón.</sub></td>
+    <td colspan="2"><img src="docs/img/crear-oscuro.png" alt="Pantalla Crear en tema oscuro"><br><sub><b>Tema claro u oscuro</b>, según tu Windows.</sub></td>
   </tr>
 </table>
 
@@ -92,11 +92,11 @@
 
 ## Tu primer short
 
-1. En **Crear**, pega el enlace del pódcast y el del vídeo de fondo.
-2. Elige cuántos shorts quieres, cuánto duran y cuánto cuidado con el texto (*Equilibrado* va bien para empezar). Si quieres, cambia el aspecto en la pestaña **Aspecto**.
-3. Pulsa **Generar** (el botón dice cuántos: «Generar 3 shorts») y mira cómo avanza en **En curso**. Cuando termina, están en **Mis shorts**.
+1. En **Crear**, pega el enlace del vídeo o elige un archivo.
+2. Elige una plantilla. Si la que eliges usa vídeo de fondo (un gameplay, por ejemplo), pega también su enlace; si no, ni te lo pide. A la derecha ves cómo quedará.
+3. Di cuántos shorts quieres y de qué duración, y pulsa **Generar** (el botón dice cuántos: «Generar 3 shorts»). Lo ves avanzar en **En curso** y, al terminar, están en **Mis shorts**.
 
-Si prefieres decidir tú qué trozos se montan, usa **Elegir yo los momentos**: descarga el pódcast y te lo enseña con su línea de tiempo (lo más visto en YouTube arriba, la onda del sonido abajo). Marca el inicio y el final con los botones, con las teclas I y O o arrastrando sobre la onda, pulsa **Seleccionar este trozo** y, cuando tengas los que quieras, **Montar**.
+¿Quieres afinar más? **Personalizar el aspecto** y **Texto e idioma** están plegados debajo. Y si prefieres decidir tú qué trozos se montan, usa **Elegir yo los momentos**: se abre el **Editor** con el vídeo y su línea de tiempo, con los mejores momentos sugeridos en verde. Marca el inicio y el final con los botones, con las teclas I y O o arrastrando sobre la onda, pulsa **Seleccionar este trozo** y, cuando tengas los que quieras, **Montar**.
 
 ## ¿Hace falta Claude?
 
@@ -125,6 +125,13 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
+
+### 1.10.0 (2026-11-03)
+
+- **Aspecto nuevo**, inspirado en YouTube: fondo negro o blanco según tu Windows, barra superior con buscador, menú lateral de iconos y texto que se puede estrechar, y el rojo solo en lo importante. Logo e icono nuevos.
+- **Crear es más sencillo**: una sola página con tres pasos (el vídeo, cómo quieres que quede y cuántos). Lo demás está plegado debajo, y el vídeo de fondo solo se pide si la plantilla lo usa. Plantilla nueva: «Encajar».
+- **El Editor tiene su propio apartado**: aparece en el menú cuando hay algo que editar, en vez de estar dentro de «En curso».
+- En Mis shorts, el buscador está arriba y se puede usar desde cualquier pantalla, y cada short tiene los botones más recogidos.
 
 ### 1.9.0 (2026-11-03)
 
@@ -453,6 +460,6 @@ powershell -File install\publicar.ps1 -Version 1.2.0          # compila, etiquet
 
 ## Aviso legal
 
-Los emojis son de [Twemoji](https://github.com/jdecked/twemoji) (© Twitter y colaboradores, licencia CC-BY 4.0) y la letra de la interfaz es Manrope (SIL Open Font License 1.1).
+Los emojis son de [Twemoji](https://github.com/jdecked/twemoji) (© Twitter y colaboradores, licencia CC-BY 4.0).
 
 Montar un pódcast ajeno con gameplay ajeno y subirlo entra de lleno en Content ID y en las políticas de contenido no original de YouTube y TikTok. Con contenido propio, o con permiso, sin problema; si no, cuenta con reclamaciones y con posibles retiradas.

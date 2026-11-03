@@ -58,6 +58,7 @@ for (const view of ['crear', 'trabajo', 'biblioteca', 'ajustes']) {
     document.querySelector('.nav-item[data-view="${view}"]').getAttribute("aria-current") === "page"; })()`);
   check(`se abre la seccion ${view}`, ok);
 }
+check('el editor no sale en el menu hasta que hay algo que editar', await run(`$("nav-editor").hidden`));
 await run('go("crear")');
 
 // ------------------------------------------------------------ composicion, formato, estilos
@@ -124,9 +125,14 @@ await run(`(() => {
 // ------------------------------------------------------------ pasos, plantillas y resumenes
 const pasos = await run(`(async () => {
   const out = {};
-  out.empiezaEnContenido = !$("panel-contenido").hidden && $("panel-aspecto").hidden;
-  document.getElementById("tab-aspecto").click();
-  out.pasaAAspecto = $("panel-contenido").hidden && !$("panel-aspecto").hidden && $("tab-aspecto").getAttribute("aria-selected") === "true";
+  out.opcionesPlegadas = !$("more-look").open && !$("more-text").open;
+  out.pasosAVista = [$("podcast"), $("templates"), $("clips")].every(el => el.getBoundingClientRect().width > 0);
+  showTab("aspecto");
+  out.abreAspecto = $("more-look").open;
+  $("background").value = "fondo.mp4";
+  document.querySelector('[data-tpl="encajar"]').click();
+  out.sinFondo = $("step-2").hidden && $("chk-bg").hidden && collect(false).background === "" && collect(false).style.layout_mode === "fit";
+  $("background").value = "";
   document.querySelector('[data-tpl="neon"]').click();
   out.plantilla = $("st_layout").value === "center" && $("st_sstyle").value === "neon" && $("st_sfx").value === "true";
   out.plantillaMarcada = document.querySelector('[data-tpl="neon"]').classList.contains("on") && !document.querySelector('[data-tpl="clasico"]').classList.contains("on");
@@ -142,11 +148,12 @@ const pasos = await run(`(async () => {
   await new Promise(r => setTimeout(r, 200));
   out.acordeon = !$("acc-comp").open && $("acc-subs").open;
   $("acc-subs").open = false;
-  document.getElementById("tab-contenido").click();
+  $("more-look").open = false;
   return out;
 })()`);
-check('al abrir, se empieza por el paso Contenido', pasos.empiezaEnContenido);
-check('se pasa al paso Aspecto', pasos.pasaAAspecto);
+check('al abrir, los tres pasos estan a la vista y lo demas plegado', pasos.opcionesPlegadas && pasos.pasosAVista);
+check('el aspecto se puede desplegar', pasos.abreAspecto);
+check('sin composicion que lo use, el fondo ni se pide ni se envia', pasos.sinFondo);
 check('una plantilla cambia todo el aspecto de un clic', pasos.plantilla && pasos.plantillaMarcada);
 check('cada seccion resume lo elegido', pasos.resumenComp === 'Franja central · 9:16' && pasos.resumenSubs.startsWith('Neón') && pasos.resumenExtras.includes('whoosh'), `${pasos.resumenComp} | ${pasos.resumenSubs} | ${pasos.resumenExtras}`);
 check('tocar un ajuste desmarca la plantilla', pasos.sinPlantillaAlTocar);
