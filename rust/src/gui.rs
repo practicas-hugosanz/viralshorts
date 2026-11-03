@@ -95,7 +95,7 @@ const STYLE_FIELDS: [(&str, &str, Kind); 45] = [
     ("refine", "transcribe.refine_model", Kind::Model),
     ("vocab", "transcribe.initial_prompt", Kind::Long),
     ("corrections", "transcribe.corrections", Kind::Long),
-    ("layout_mode", "layout.mode", Kind::Choice(&["stack", "full", "center", "duo"])),
+    ("layout_mode", "layout.mode", Kind::Choice(&["stack", "full", "fit", "center", "duo"])),
     ("color_second", "subtitles.color_second", Kind::Color),
     ("translate", "subtitles.translate_to", Kind::Choice(&["", "en", "es", "fr", "pt", "de", "it"])),
     ("top_ratio", "layout.top_ratio", Kind::Ratio),
@@ -1600,7 +1600,7 @@ fn run_form(app: &Arc<App>, mut form: Value) -> (u16, Value) {
     // El fondo solo hace falta si la composicion lo usa, y para preparar el
     // podcast (elegir a mano) todavia no.
     let layout = form["style"]["layout_mode"].as_str().unwrap_or("stack");
-    if !truthy(&form["background"]) && !matches!(layout, "full" | "duo") && !truthy(&form["prepare"]) {
+    if !truthy(&form["background"]) && !matches!(layout, "full" | "fit" | "duo") && !truthy(&form["prepare"]) {
         return (400, json!({"ok": false, "error": "Falta el vídeo de fondo: pega un enlace o elige un archivo, o cambia la composición a «Solo el pódcast»."}));
     }
     if truthy(&form["review"]) {
@@ -1662,6 +1662,7 @@ fn retouch_info(base: &Path, id: &str) -> (u16, Value) {
             "original": current.original.as_ref().map(|o| words(&o.words)).unwrap_or_default(),
             "transcrito": [known.0, known.1],
             "en_disco": Path::new(&saved.podcast.ruta).is_file(),
+            "quitar_silencios": saved.config["jumpcuts"]["enabled"].as_bool().unwrap_or(true),
         });
     }
     (200, json!({"ok": true, "clip": clip}))
@@ -1681,7 +1682,8 @@ fn edit_short(app: &Arc<App>, body: &Value) -> (u16, Value) {
     if origin.is_empty() || (!Path::new(&origin).is_file() && saved.podcast.url.is_empty()) {
         return (409, json!({"ok": false, "error": "El vídeo de este short ya no está en tu ordenador. Vuelve a elegirlo y monta el short de nuevo."}));
     }
-    let mut form = json!({"podcast": origin, "background": "", "prepare": true, "retoque": id});
+    // Con su misma carpeta de salida: si no, la biblioteca dejaria de ver el short.
+    let mut form = json!({"podcast": origin, "background": "", "prepare": true, "retoque": id, "output": app.job.base_dir().to_string_lossy()});
     if let Some(cookies) = body["cookies"].as_str().filter(|c| !c.is_empty()) {
         form["style"] = json!({"cookies": cookies});
     }
@@ -1707,11 +1709,14 @@ fn remake_short(app: &Arc<App>, body: &Value) -> (u16, Value) {
     if let Err(error) = plan::update(&path, &[change]) {
         return (500, json!({"ok": false, "error": error.to_string()}));
     }
-    let name = video.file_name().unwrap_or_default().to_string_lossy().into_owned();
-    let mut form = json!({"remake": path.to_string_lossy(), "podcast": name});
-    if let Some(output) = body["output"].as_str().filter(|o| !o.is_empty()) {
-        form["output"] = json!(output);
+    if let Some(on) = body["quitar_silencios"].as_bool() {
+        let setting: Map<String, Value> = std::iter::once(("jumpcuts.enabled".to_string(), json!(on))).collect();
+        if let Err(error) = plan::apply_config(&path, &setting) {
+            return (500, json!({"ok": false, "error": error.to_string()}));
+        }
     }
+    let name = video.file_name().unwrap_or_default().to_string_lossy().into_owned();
+    let mut form = json!({"remake": path.to_string_lossy(), "podcast": name, "output": base.to_string_lossy()});
     if !body["delete_source"].is_null() {
         form["delete_source"] = body["delete_source"].clone();
     }
@@ -2581,8 +2586,10 @@ la guapa=La Guapa"}));
         app.job.set_base_dir(dir.path().to_path_buf());
         let (codigo, respuesta) = edit_short(&app, &json!({"id": "pod_2026/short_2.mp4"}));
         assert_eq!(codigo, 200, "{respuesta}");
+        assert_eq!(info["clip"]["detalle"]["quitar_silencios"], true);
         let lanzado = b.lanzados.lock().unwrap()[0].clone();
         assert!(lanzado.contains(&"--prepare".to_string()) && lanzado.contains(&"https://youtu.be/x".to_string()), "se vuelve a bajar del enlace: {lanzado:?}");
+        assert_eq!(app.job.base_dir(), dir.path(), "la biblioteca sigue en su carpeta");
         // El podcast preparado lleva el short que se va a retocar.
         b.job.handle_event(&json!({"type": "fuente", "ruta": "x.mp4"}).to_string());
         assert_eq!(b.job.snapshot()["fuente"]["retoque"], "pod_2026/short_2.mp4");
@@ -2610,10 +2617,27 @@ la guapa=La Guapa"}));
         assert_eq!((clip.text.as_str(), clip.style.as_str()), ("Hola, ¿qué tal estamos?", "box"));
         assert_eq!(clip.words[3].start, 16.0, "cada palabra conserva su momento");
         assert_eq!(clip.meta.as_ref().unwrap().title, "Nuevo");
+        assert_eq!(guardado.config["jumpcuts"]["enabled"], true, "sin pedirlo no se toca");
+        b.job.stop();
+        remake_short(&app, &json!({"id": "pod_2026/short_2.mp4", "quitar_silencios": false}));
+        assert_eq!(plan::load(&pipeline::retouch_path(&video)).unwrap().config["jumpcuts"]["enabled"], false);
         assert_eq!(plan::single_slot(&pipeline::retouch_path(&video)), Some((2, 1)));
         assert_eq!(b.job.snapshot()["status"], "running");
         b.job.stop();
         assert_eq!(remake_short(&app, &json!({"id": "pod_2026/short_9.mp4"})).0, 404);
+    }
+
+    #[test]
+    fn encajar_no_pide_video_de_fondo_y_los_trozos_pueden_dejar_los_silencios() {
+        let (app, _puerto, b) = app_de_prueba();
+        let (codigo, respuesta) = run_form(&app, json!({"podcast": "p", "background": "", "style": {"layout_mode": "fit"}}));
+        assert_eq!(codigo, 200, "{respuesta}");
+        assert!(b.lanzados.lock().unwrap()[0].contains(&"layout.mode=fit".to_string()));
+        b.job.stop();
+        let args = build_command(&json!({"podcast": "p", "background": "b", "moments": [[1, 31]], "jumpcuts": false}));
+        assert!(args.contains(&"--no-jumpcuts".to_string()), "{args:?}");
+        let args = build_command(&json!({"podcast": "p", "background": "b", "moments": [[1, 31]], "jumpcuts": true}));
+        assert!(!args.contains(&"--no-jumpcuts".to_string()), "{args:?}");
     }
 
     #[test]

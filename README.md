@@ -42,7 +42,7 @@
 - **Dos personas en pantalla partida**: si salen las dos a la vez, una arriba y otra abajo, y la palabra que suena va del color de quien la dice.
 
 **Hacerlo tuyo**
-- **Composición**: dividido (con el reparto que quieras), solo el pódcast a pantalla completa, o el pódcast en una franja sobre el fondo.
+- **Composición**: dividido (con el reparto que quieras), solo el pódcast a pantalla completa, encajado entero sobre una copia difuminada, o el pódcast en una franja sobre el fondo.
 - **Cinco estilos de subtítulos**: Clásico, Caja, Rotulador, Neón y Sobrio.
 - **Tu marca**: logo y usuario del canal en la esquina que prefieras.
 - **Formatos** 9:16, 4:5 y 1:1, **efectos de sonido** (whoosh y pitido de censura), **portada con el gancho**, **pantalla final** y **fondo** variable (punto, velocidad, desenfoque).
@@ -125,6 +125,24 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
+
+### 1.8.0 (2026-11-03)
+
+- **Encajar**: composición nueva que enseña el vídeo entero, sin recortar, sobre
+  una copia suya ampliada y difuminada. Para grabaciones de pantalla, tutoriales
+  y partidas. No usa vídeo de fondo.
+- **Sugerencias en el editor**: al elegir los trozos a mano, la línea de tiempo
+  marca en verde los momentos que parecen mejores (por lo más visto y el volumen,
+  cortando en pausas). Se ven, se añaden, se ajustan o se descartan con un clic.
+- **Quitar los silencios, a elegir**: en el editor hay un interruptor, apagado de
+  serie: el trozo sale tal cual lo marcas. También al retocar un short.
+- Arreglo: un trozo elegido a mano sin voz ya no hace fallar el montaje; sale sin
+  subtítulos.
+- Arreglo: rehacer o abrir un short en el editor ya no pierde la carpeta de salida
+  elegida en Ajustes.
+- Arreglo: las opciones de Crear que salían deformadas desde la 1.6.0 (como los
+  estilos de subtítulos) vuelven a verse bien.
+- La despedida inventada en los silencios se detecta aunque cambie la coletilla.
 
 ### 1.7.0 (2026-10-30)
 

@@ -215,8 +215,8 @@ pub fn apply_overrides(cfg: &mut Config, args: &Args) -> Result<(), ConfigError>
     if cfg.layout.mode != "stack" && cfg.layout.mode != "duo" && cfg.title_card.anchor == "center" {
         cfg.title_card.anchor = "top".into();
     }
-    if !["stack", "full", "center", "duo"].contains(&cfg.layout.mode.as_str()) {
-        return Err(ConfigError::Invalid(format!("layout.mode '{}' no existe: usa stack, full, center o duo.", cfg.layout.mode)));
+    if !["stack", "full", "fit", "center", "duo"].contains(&cfg.layout.mode.as_str()) {
+        return Err(ConfigError::Invalid(format!("layout.mode '{}' no existe: usa stack, full, fit, center o duo.", cfg.layout.mode)));
     }
     if !["sequence", "random"].contains(&cfg.background.start.as_str()) {
         return Err(ConfigError::Invalid(format!("background.start '{}' no existe: usa sequence o random.", cfg.background.start)));
@@ -592,7 +592,7 @@ fn whole_video(cfg: &Config, podcast: SourceVideo, background: SourceVideo, extr
     // Sin voz (musica, un plano sin hablar) tambien vale: sale sin subtitulos.
     let words: Vec<crate::words::Word> = match transcriber.transcribe(&podcast.path, podcast.duration) {
         Ok(transcript) => transcript.segments.into_iter().flat_map(|s| s.words).collect(),
-        Err(error) if error.to_string().contains("ninguna palabra") => Vec::new(),
+        Err(error) if error.is_no_speech() => Vec::new(),
         Err(error) => return Err(error.to_string()),
     };
     let text = words.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ");
@@ -669,7 +669,7 @@ fn refine_clips(cfg: &Config, podcast: &Path, duration: f64, clips: &mut [Window
 
 /// La composicion usa el video de fondo (dividido o franja central).
 pub fn layout_needs_background(cfg: &Config) -> bool {
-    !matches!(cfg.layout.mode.as_str(), "full" | "duo")
+    !matches!(cfg.layout.mode.as_str(), "full" | "fit" | "duo")
 }
 
 /// Los videos de fondo pedidos: uno, o varios separados por | o por lineas.
@@ -807,15 +807,16 @@ fn run_prepare(args: &Args, cfg: &Config, work_dir: &Path) -> i32 {
     // El volumen ayuda a cortar en una pausa; si no se puede sacar, la linea
     // de tiempo sale sin onda y se elige igual.
     progress::stage("analisis", "Preparando la línea de tiempo");
-    let waves = match audio_energy::analyse(&podcast.path, podcast.duration) {
-        Ok(track) => track.level.iter().map(|level| (level * 99.0).round() as u8).collect(),
-        Err(error) => {
-            log::warn!("Sin onda de volumen en la linea de tiempo ({error}).");
-            Vec::new()
-        }
+    let track = audio_energy::analyse(&podcast.path, podcast.duration).map_err(|error| log::warn!("Sin onda de volumen en la linea de tiempo ({error}).")).ok();
+    let waves: Vec<u8> = track.iter().flat_map(|t| t.level.iter()).map(|level| (level * 99.0).round() as u8).collect();
+    // Un video que dura lo que un short no tiene nada que sugerir.
+    let ideas = if fits_in_one_short(cfg, podcast.duration) {
+        Vec::new()
+    } else {
+        prescan::suggest_moments(podcast.duration, &podcast.heatmap, track.as_ref(), &cfg.clips, &cfg.scoring, proposed_count(args, cfg))
     };
     let path = std::path::absolute(&podcast.path).unwrap_or(podcast.path.clone());
-    let data = timeline_data(&podcast, origin, &path, &waves, audio_energy::HOP_SECONDS);
+    let data = timeline_data(&podcast, origin, &path, &waves, audio_energy::HOP_SECONDS, &ideas);
     let data_path = std::path::absolute(work_dir.join("editor.json")).unwrap_or(work_dir.join("editor.json"));
     if let Err(error) = std::fs::write(&data_path, data.to_string()) {
         log::error!("No se pudo guardar {}: {error}", data_path.display());
@@ -837,7 +838,7 @@ fn run_prepare(args: &Args, cfg: &Config, work_dir: &Path) -> i32 {
 
 /// Lo que pinta la linea de tiempo: lo mas visto de YouTube (si lo hay) y el
 /// volumen, de 0 a 99, una muestra cada `hop` segundos.
-pub fn timeline_data(podcast: &SourceVideo, origin: &str, path: &Path, waves: &[u8], hop: f64) -> Value {
+pub fn timeline_data(podcast: &SourceVideo, origin: &str, path: &Path, waves: &[u8], hop: f64, ideas: &[(f64, f64, f64)]) -> Value {
     json!({
         "ruta": path.to_string_lossy(),
         "titulo": podcast.title,
@@ -846,6 +847,7 @@ pub fn timeline_data(podcast: &SourceVideo, origin: &str, path: &Path, waves: &[
         "visto": podcast.heatmap.iter().map(|h| json!([round(h.start, 2), round(h.end, 2), round(h.value, 3)])).collect::<Vec<_>>(),
         "paso": hop,
         "onda": waves,
+        "sugerencias": ideas.iter().map(|&(a, b, score)| json!([round(a, 2), round(b, 2), score])).collect::<Vec<_>>(),
     })
 }
 
@@ -889,9 +891,12 @@ fn run_manual(args: &Args, cfg: &Config, work_dir: &Path, output_dir: &Path, mom
         let engine = WhisperCpp::discover(&ffmpeg::project_root()).map_err(|e| e.to_string())?;
         let mut transcriber = Transcriber::new(cfg.transcribe.clone(), &cfg.paths.cache_dir, Box::new(engine)).map_err(|e| e.to_string())?;
         let regions: Vec<(f64, f64)> = clips.iter().map(|c| ((c.start - 1.0).max(0.0), (c.end + 1.0).min(podcast.duration))).collect();
-        let transcript = transcriber.transcribe_regions(&podcast.path, podcast.duration, &regions).map_err(|e| e.to_string())?;
         // Un trozo sin voz (musica, un silencio) se monta igual, sin subtitulos.
-        let found_words = words_per_clip(&transcript, &clips, |_, _| true);
+        let found_words = match transcriber.transcribe_regions(&podcast.path, podcast.duration, &regions) {
+            Ok(transcript) => words_per_clip(&transcript, &clips, |_, _| true),
+            Err(error) if error.is_no_speech() => vec![None; clips.len()],
+            Err(error) => return Err(error.to_string()),
+        };
         for (clip, found) in clips.iter_mut().zip(found_words) {
             if let Some((words, text)) = found {
                 clip.words = words;
@@ -1123,7 +1128,7 @@ fn retranscribe_clip(cfg: &Config, podcast: &Source, clip: &mut Window) -> Resul
     let region = [((clip.start - 1.0).max(0.0), end)];
     let (words, text) = match transcriber.transcribe_regions(&podcast.path, podcast.duration, &region) {
         Ok(transcript) => words_per_clip(&transcript, std::slice::from_ref(clip), |_, _| true).pop().flatten().unwrap_or_default(),
-        Err(error) if error.to_string().contains("ninguna palabra") => Default::default(),
+        Err(error) if error.is_no_speech() => Default::default(),
         Err(error) => return Err(error.to_string()),
     };
     clip.words = words;
@@ -1401,7 +1406,12 @@ fn render_one(
         }
         None => None,
     };
-    let track = facecrop::track_faces(&podcast.path, clip.start, clip.duration(), &cfg.reframe, Some(Path::new(&cfg.paths.cache_dir)), energy);
+    // Encajado se ve el plano entero: no hay encuadre que mover.
+    let track = if cfg.layout.mode == "fit" {
+        None
+    } else {
+        facecrop::track_faces(&podcast.path, clip.start, clip.duration(), &cfg.reframe, Some(Path::new(&cfg.paths.cache_dir)), energy)
+    };
     // Con dos personas en plano, cada palabra sabe quien la dice (por su
     // momento ANTES de quitar silencios, que es el reloj del seguimiento).
     if let Some(track) = track.as_ref().filter(|t| t.duo.is_some() && !t.speakers.is_empty()) {
@@ -1707,7 +1717,8 @@ mod tests {
             heatmap: vec![download::HeatPoint { start: 0.0, end: 36.0, value: 0.5 }],
             info: Value::Null,
         };
-        let datos = timeline_data(&video, "https://youtu.be/x", Path::new("C:/w/podcast.mp4"), &[0, 50, 99], 0.25);
+        let datos = timeline_data(&video, "https://youtu.be/x", Path::new("C:/w/podcast.mp4"), &[0, 50, 99], 0.25, &[(600.0, 635.5, 0.9)]);
+        assert_eq!(datos["sugerencias"], json!([[600.0, 635.5, 0.9]]));
         assert_eq!((datos["titulo"].clone(), datos["duracion"].clone(), datos["paso"].clone()), (json!("Episodio"), json!(3600.0), json!(0.25)));
         assert_eq!(datos["visto"], json!([[0.0, 36.0, 0.5]]));
         assert_eq!(datos["onda"], json!([0, 50, 99]));
@@ -1894,7 +1905,7 @@ C:/c.mp4 "), ["https://youtu.be/x", "b.mp4", "C:/c.mp4"]);
     fn solo_las_composiciones_con_fondo_lo_piden() {
         let mut cfg = Config::default();
         assert!(layout_needs_background(&cfg));
-        for (mode, needs) in [("stack", true), ("center", true), ("full", false), ("duo", false)] {
+        for (mode, needs) in [("stack", true), ("center", true), ("full", false), ("fit", false), ("duo", false)] {
             cfg.layout.mode = mode.into();
             assert_eq!(layout_needs_background(&cfg), needs, "{mode}");
         }

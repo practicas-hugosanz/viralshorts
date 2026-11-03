@@ -155,12 +155,17 @@ pub fn render(request: &RenderRequest, cfg: &Config) -> Result<PathBuf> {
     Ok(request.output.clone())
 }
 
+/// Composicion "fit": desenfoque (sobre la copia a un cuarto de tamano) y
+/// oscurecido del relleno, para que el video se lea por encima.
+const FIT_BLUR: i64 = 10;
+const FIT_DIM: f64 = 0.15;
+
 /// Alto del panel del podcast y del panel de fondo segun la composicion.
 pub fn panel_heights(cfg: &Config) -> (i64, i64) {
     let layout = &cfg.layout;
     match layout.mode.as_str() {
-        // Todo el fotograma es el podcast.
-        "full" => (layout.height, 0),
+        // Todo el fotograma es el podcast (en "fit", encajado sobre si mismo).
+        "full" | "fit" => (layout.height, 0),
         // Franja 16:9 en el centro; el fondo ocupa el fotograma entero.
         "center" => (even((layout.width as f64 * 9.0 / 16.0).round() as i64), layout.height),
         _ => {
@@ -249,6 +254,16 @@ pub fn build_graph(
             panel.push("setsar=1".into());
             chains.push(format!("[{input}]{}[{output}]", panel.join(",")));
         }
+    } else if mode == "fit" {
+        // El video entero, sin recortar nada, sobre una copia suya que llena el
+        // fotograma. Se desenfoca en pequeno: a tamano completo es muy lento.
+        let height = cfg.layout.height;
+        let (small_w, small_h) = (even(width / 4), even(height / 4));
+        chains.push(format!("{},split=2[fit_front][fit_back]", top.join(",")));
+        chains.push(format!("[fit_front]scale={width}:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[top]"));
+        chains.push(format!(
+            "[fit_back]scale={small_w}:{small_h}:force_original_aspect_ratio=increase,crop={small_w}:{small_h},gblur=sigma={FIT_BLUR},scale={width}:{height},eq=brightness=-{FIT_DIM},setsar=1[bottom]"
+        ));
     } else {
         top.extend(reframe_filters(podcast_info, width, top_height, request.track.as_ref(), &request.plan, cfg, options, 1.0));
         top.push("setsar=1".into());
@@ -256,7 +271,7 @@ pub fn build_graph(
     }
 
     // --- panel inferior: el gameplay --------------------------------------
-    if mode != "full" && mode != "duo" {
+    if mode != "full" && mode != "duo" && mode != "fit" {
         let speed = cfg.background.speed.clamp(0.5, 2.0);
         let first = if (speed - 1.0).abs() < 1e-6 { "[1:v]setpts=PTS-STARTPTS".to_string() } else { format!("[1:v]setpts=(PTS-STARTPTS)/{}", fl(speed)) };
         let mut bottom = vec![first, format!("fps={fps}")];
@@ -278,6 +293,7 @@ pub fn build_graph(
     let compose = match mode {
         "full" => "[top]null".to_string(),
         "center" => format!("[bottom][top]overlay=x=0:y={}", (cfg.layout.height - top_height) / 2),
+        "fit" => "[bottom][top]overlay=x=(W-w)/2:y=(H-h)/2".to_string(),
         // En "duo" swap pone a la persona de la derecha arriba.
         _ if cfg.layout.swap => "[bottom][top]vstack=inputs=2".to_string(),
         _ => "[top][bottom]vstack=inputs=2".to_string(),
@@ -762,6 +778,19 @@ mod tests {
         let centro = grafo_compuesto(&cfg);
         assert!(centro.contains("[bottom][top]overlay=x=0:y=656"), "{centro}");
         assert!(centro.contains("scale=1080:1920:force_original_aspect_ratio=increase"), "el fondo llena el fotograma: {centro}");
+    }
+
+    #[test]
+    fn encajar_ensena_el_video_entero_sobre_una_copia_difuminada() {
+        let mut cfg = Config::default();
+        cfg.layout.mode = "fit".into();
+        assert_eq!(panel_heights(&cfg), (cfg.layout.height, 0));
+        let g = grafo_compuesto(&cfg);
+        assert!(g.contains("split=2[fit_front][fit_back]"), "{g}");
+        assert!(g.contains("force_original_aspect_ratio=decrease"), "el de delante no se recorta: {g}");
+        assert!(g.contains("gblur=sigma=10") && g.contains("[bottom][top]overlay=x=(W-w)/2:y=(H-h)/2"), "{g}");
+        assert!(!g.contains("[1:v]"), "no usa el video de fondo: {g}");
+        assert!(!g.contains("zoompan"), "con zoom se saldria del encuadre: {g}");
     }
 
     #[test]

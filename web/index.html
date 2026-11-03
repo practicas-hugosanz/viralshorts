@@ -404,6 +404,10 @@ input[type="color"].swatch::-webkit-color-swatch { border: 0; border-radius: 50%
 .kit-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: -4px 0 14px; }
 .kit-row select { width: auto; min-width: 200px; padding-block: 6px; }
 .screen.mode-center .seam { display: none; }
+/* Encajar: el vídeo entero en el centro, sobre una copia suya difuminada. */
+.screen.mode-fit .gamebg, .screen.mode-fit .seam { display: none; }
+.screen.mode-fit .pod { inset: var(--inset, 34.2%) 0 var(--inset, 34.2%) 0; }
+.screen.mode-fit .pod2 { display: block; inset: -8%; z-index: 0; filter: blur(7px) brightness(.75); }
 /* Dos personas: el pódcast arriba y abajo, cada mitad mirando a una persona. */
 .pod2 { display: none; }
 .screen.mode-duo .pod { inset: 0 0 50% 0; background-position: 28% 45%; }
@@ -432,6 +436,7 @@ input[type="color"].swatch::-webkit-color-swatch { border: 0; border-radius: 50%
 .sub.s-neon .hot { color: var(--hot); text-shadow: 0 0 .15em #fff, 0 0 .4em #fff; }
 .sub.s-minimal { -webkit-text-stroke: .03em #000; text-shadow: 0 .03em .06em rgba(0,0,0,.8); }
 .seg.four { grid-template-columns: repeat(4, 1fr); }
+.seg.five { grid-template-columns: repeat(3, 1fr); }
 .seg.auto { grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); }
 .opt.compact { padding: 10px 0 0; border: 0; }
 .hooktag {
@@ -744,7 +749,7 @@ mark.set-hit { background: var(--butter); color: inherit; border-radius: 4px; pa
 .ed-head { display: flex; align-items: flex-start; gap: 12px; }
 .ed-head > div { flex: 1; min-width: 0; }
 .ed-head .card-sub { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ed-grid { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 16px; align-items: stretch; }
+.ed-grid { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 16px; align-items: stretch; }
 .ed-stage { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .ed-screen { position: relative; background: #000; border-radius: var(--r-s); overflow: hidden; aspect-ratio: 16 / 9; max-height: min(36vh, 380px); }
 .ed-screen video { width: 100%; height: 100%; display: block; object-fit: contain; }
@@ -764,7 +769,7 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
 .ed-item { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 7px 6px 7px 8px; border-radius: 12px; background: var(--lilac); }
 .ed-item.editing { outline: 2px solid var(--ink); }
 .ed-item .n { font: 800 11.5px var(--display); width: 22px; height: 22px; border-radius: 99px; display: grid; place-items: center; background: var(--ink); color: var(--ink-text); }
-.ed-item .when { display: block; font-weight: 700; font-variant-numeric: tabular-nums; font-size: 13px; }
+.ed-item .when { display: block; font-weight: 700; font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
 .ed-item .len { display: block; color: var(--mute); font-size: 12px; }
 .ed-item .ops { display: flex; }
 .ed-item .ops button { border: 0; background: none; padding: 6px; border-radius: 8px; color: var(--mute); display: grid; }
@@ -775,9 +780,9 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
 .ed-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
 .ed-legend { flex: 1 1 260px; }
 .ed-legend { color: var(--mute); font-size: 12.5px; }
-.seg { display: inline-flex; background: var(--raise); border-radius: 99px; padding: 3px; }
-.seg button { border: 0; background: none; padding: 4px 11px; border-radius: 99px; font: 700 12px var(--ui); color: var(--mute); }
-.seg button.on { background: var(--surf); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.ed-zoom { display: inline-flex; background: var(--raise); border-radius: 99px; padding: 3px; }
+.ed-zoom button { border: 0; background: none; padding: 4px 11px; border-radius: 99px; font: 700 12px var(--ui); color: var(--mute); }
+.ed-zoom button.on { background: var(--surf); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
 .ed-overview, .ed-detail { position: relative; overflow: hidden; background: var(--raise); touch-action: none; }
 .ed-overview { height: 40px; border-radius: 10px; cursor: pointer; }
 .ed-detail { height: 104px; border-radius: 12px; cursor: crosshair; }
@@ -795,13 +800,16 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
 .ed-selbar .what { flex: 1; min-width: 220px; color: var(--mute); }
 .ed-selbar .what b { color: var(--text); font-variant-numeric: tabular-nums; }
 .ed-selbar .warn { color: var(--bad); font-weight: 700; }
+.ed-ideas { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.ed-ideas .ed-item { background: var(--mint); }
+.ed-ideas .ed-item .n { background: transparent; color: var(--ok); font-size: 15px; }
+.ed-opt, .ed-opt:first-child, .ed-opt:last-child { padding: 2px 0; border: 0; }
 .ed-subs { display: flex; flex-direction: column; gap: 4px; }
 .ed-sub { display: grid; grid-template-columns: 46px minmax(0, 1fr); align-items: center; gap: 6px; padding: 3px; border-radius: 10px; }
 .ed-sub.now { background: var(--sky); }
 .ed-sub .t { border: 0; background: none; padding: 6px 4px; border-radius: 8px; font: 700 12px var(--ui); color: var(--mute); font-variant-numeric: tabular-nums; text-align: left; }
 .ed-sub .t:hover { background: var(--raise); color: var(--text); }
 .ed-sub textarea { padding: 7px 10px; font-size: 13px; border-radius: 9px; min-height: 0; resize: none; field-sizing: content; line-height: 1.4; }
-.editor.retouch .ed-grid { grid-template-columns: minmax(0, 1fr) 340px; }
 .ed-sub { align-items: start; }
 .ed-sub .t { margin-top: 3px; }
 .ed-sub-note { color: var(--mute); font-size: 12.5px; padding: 6px 8px; border-radius: 10px; background: var(--butter); }
@@ -1042,13 +1050,15 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
               <div class="fields">
                 <div class="wide">
                   <span class="lbl-t">Cómo se reparte el vídeo</span>
-                  <div class="seg four" role="radiogroup" aria-label="Composición">
+                  <div class="seg five" role="radiogroup" aria-label="Composición">
                     <label class="choice"><input type="radio" name="comp" value="stack" checked><b>Dividido</b><em>pódcast y fondo apilados</em></label>
                     <label class="choice"><input type="radio" name="comp" value="full"><b>Solo el pódcast</b><em>a pantalla completa</em></label>
+                    <label class="choice"><input type="radio" name="comp" value="fit"><b>Encajar</b><em>entero, sin recortar</em></label>
                     <label class="choice"><input type="radio" name="comp" value="center"><b>En el centro</b><em>franja sobre el fondo</em></label>
                     <label class="choice"><input type="radio" name="comp" value="duo"><b>Dos personas</b><em>una arriba, otra abajo</em></label>
                   </div>
                 </div>
+                <p class="hint wide" id="comp-fit" hidden>El vídeo se ve entero, sobre una copia suya ampliada y difuminada. Va muy bien con grabaciones de pantalla, tutoriales y partidas, donde recortar los lados se comería lo importante. No usa el vídeo de fondo.</p>
                 <div class="wide" id="comp-duo" hidden>
                   <label class="lbl-t" for="st_color2">Color de la segunda persona</label>
                   <div class="swatches">
@@ -1361,13 +1371,18 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
                 <p class="ed-empty" id="ed-empty">Todavía ninguno. Cada trozo que selecciones será un short.</p>
                 <ol class="ed-list" id="ed-list"></ol>
                 <div class="ed-subs" id="ed-subs" hidden></div>
+                <div class="ed-ideas" id="ed-ideas" hidden>
+                  <h3>Sugerencias</h3>
+                  <p class="ed-empty">Por lo más visto y el volumen, sin escuchar lo que se dice: míralas antes de añadirlas.</p>
+                  <ol class="ed-list" id="ed-idea-list"></ol>
+                </div>
               </aside>
             </div>
 
             <div class="ed-timeline">
               <div class="ed-row">
                 <span class="ed-legend" id="ed-legend">Todo el pódcast</span>
-                <span class="seg" id="ed-zoom" role="group" aria-label="Zoom de la línea de tiempo">
+                <span class="ed-zoom" id="ed-zoom" role="group" aria-label="Zoom de la línea de tiempo">
                   <button type="button" data-span="30">30 s</button>
                   <button type="button" data-span="60" class="on">1 min</button>
                   <button type="button" data-span="120">2 min</button>
@@ -1408,6 +1423,8 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
               <div><label class="lbl-t" for="ed-rt-gancho">Gancho: el rótulo de los primeros segundos</label><input type="text" id="ed-rt-gancho" maxlength="60"></div>
               <div class="wide"><label class="lbl-t" for="ed-rt-titulo">Título de la publicación</label><input type="text" id="ed-rt-titulo" maxlength="120"></div>
             </div>
+
+            <label class="opt ed-opt"><span class="opt-text"><b>Quitar los silencios</b><em>Corta las pausas largas. Apagado, el short sale tal cual lo marcas.</em></span><input type="checkbox" class="switch" id="ed-silences"></label>
 
             <div class="card-foot">
               <span class="grow" id="ed-tally"></span>
@@ -1516,7 +1533,7 @@ kbd { font: 700 11px var(--ui); padding: 0 6px; border-radius: 6px; border: 1px 
               <p class="set-lead">El aspecto (composición, subtítulos y otros textos, tu marca) se elige en Crear, en la pestaña Aspecto. Esto es lo que se hace al montar.</p>
               <div class="set-card opts">
                 <label class="opt"><span class="opt-text"><b>Seguir la cara</b><em>El encuadre se mueve hacia quien habla en vez de recortar por el centro.</em></span><input type="checkbox" class="switch" id="reframe" checked></label>
-                <label class="opt"><span class="opt-text"><b>Quitar los silencios</b><em>Corta las pausas largas para que el clip vaya más rápido. También en los trozos que eliges a mano.</em></span><input type="checkbox" class="switch" id="jumpcuts" checked></label>
+                <label class="opt"><span class="opt-text"><b>Quitar los silencios</b><em>Corta las pausas largas para que el clip vaya más rápido. Para los trozos que eliges a mano, se decide en el propio editor.</em></span><input type="checkbox" class="switch" id="jumpcuts" checked></label>
                 <label class="opt"><span class="opt-text"><b>Zoom lento</b><em>Un acercamiento suave y continuo para que el plano no se quede muerto.</em></span><input type="checkbox" class="switch" id="zoom" checked></label>
                 <label class="opt"><span class="opt-text"><b>Tapar las palabrotas</b><em>En los subtítulos, «puta» sale como «p#ta». Se lee igual, pero deja de ser literal para los filtros de las plataformas. El audio no se toca.</em></span><input type="checkbox" class="switch" id="censor" checked></label>
               </div>
@@ -1931,7 +1948,7 @@ function updateSummary() {
   source("podcast", "chk-pod");
   source("background", "chk-bg");
   // Sin fondo no pasa nada si la composicion no lo usa.
-  if (!$("background").value.trim() && ["full", "duo"].includes($("st_layout").value)) {
+  if (!$("background").value.trim() && ["full", "fit", "duo"].includes($("st_layout").value)) {
     $("chk-bg").classList.add("ok");
     $("chk-bg").querySelector("em").textContent = "no hace falta con esta composición";
   }
@@ -2031,6 +2048,7 @@ function paintLook() {
   const screen = $("screen");
   screen.classList.toggle("mode-full", mode === "full");
   screen.classList.toggle("mode-center", mode === "center");
+  screen.classList.toggle("mode-fit", mode === "fit");
   screen.classList.toggle("mode-duo", mode === "duo");
   screen.classList.toggle("swap", mode === "stack" && $("st_swap").value === "true");
   screen.style.setProperty("--top", (+$("st_top").value * 100) + "%");
@@ -2101,6 +2119,7 @@ function syncLook() {
   $("comp-swap").checked = $("st_swap").value === "true";
   $("comp-stack").hidden = $("st_layout").value !== "stack";
   $("comp-duo").hidden = $("st_layout").value !== "duo";
+  $("comp-fit").hidden = $("st_layout").value !== "fit";
   setRadio("sstyle", $("st_sstyle").value);
   setRadio("lpos", $("st_lpos").value);
   setRadio("fmt", $("st_format").value);
@@ -2947,7 +2966,7 @@ async function renderFromPlan(only) {
 // ===========================================================================
 const ED_MIN = 3, ED_MAX = 180;           // segundos que puede durar un trozo
 const ED = { src: null, data: null, dur: 0, trozos: [], sel: null, editing: -1, view: 0, span: 60, stopAt: null, raf: 0,
-             mode: "trozos", rt: null };   // mode "retoque": un short ya hecho, con sus subtítulos
+             mode: "trozos", rt: null, ignored: [] };   // mode "retoque": un short ya hecho, con sus subtítulos
 const edVideo = $("ed-video");
 
 /** El botón "Elegir yo los momentos": descarga el pódcast y abre el editor. */
@@ -2989,6 +3008,15 @@ function edDefaultLen() {
   return Number.isFinite(mid) && mid >= ED_MIN ? Math.round(mid) : 30;
 }
 
+/** Quitar los silencios de los trozos a mano: apagado salvo que se encienda. */
+function edSilencesWanted() {
+  try { return localStorage.getItem("viralshorts.trozos.silencios") === "true"; } catch (e) { return false; }
+}
+$("ed-silences").addEventListener("change", () => {
+  if (ED.mode === "retoque") return;
+  try { localStorage.setItem("viralshorts.trozos.silencios", String($("ed-silences").checked)); } catch (e) {}
+});
+
 async function openEditor(fuente) {
   if (!fuente || !fuente.ruta) return;
   const same = ED.src && ED.src.ruta === fuente.ruta;
@@ -3000,6 +3028,7 @@ async function openEditor(fuente) {
     ED.data = null;
     ED.dur = +fuente.duracion || 0;
     ED.trozos = edRestore(fuente.ruta);
+    ED.ignored = edRestoreIgnored(fuente.ruta);
     ED.sel = null;
     ED.editing = -1;
     ED.view = 0;
@@ -3020,6 +3049,7 @@ async function openEditor(fuente) {
     ED.trozos = edRestore(fuente.ruta);
   }
   edApplyMode();
+  $("ed-silences").checked = ED.mode === "retoque" && ED.rt ? ED.rt.silences : edSilencesWanted();
   const heat = ED.data && ED.data.visto && ED.data.visto.length > 1;
   $("ed-legend").textContent = ED.mode === "retoque"
     ? "Todo el pódcast. Abajo, arrastra los bordes azules para mover o alargar la parte elegida."
@@ -3050,12 +3080,19 @@ function closeEditor(forget) {
 
 // Los trozos se guardan en este ordenador: cerrar la ventana no los pierde.
 function edSave() {
-  try { localStorage.setItem("viralshorts.trozos", JSON.stringify({ ruta: ED.src && ED.src.ruta, trozos: ED.trozos })); } catch (e) {}
+  try { localStorage.setItem("viralshorts.trozos", JSON.stringify({ ruta: ED.src && ED.src.ruta, trozos: ED.trozos, ignoradas: ED.ignored })); } catch (e) {}
 }
 function edRestore(ruta) {
   try {
     const saved = JSON.parse(localStorage.getItem("viralshorts.trozos") || "null");
     if (saved && saved.ruta === ruta && Array.isArray(saved.trozos)) return saved.trozos.filter(t => t.length === 2);
+  } catch (e) {}
+  return [];
+}
+function edRestoreIgnored(ruta) {
+  try {
+    const saved = JSON.parse(localStorage.getItem("viralshorts.trozos") || "null");
+    if (saved && saved.ruta === ruta && Array.isArray(saved.ignoradas)) return saved.ignoradas;
   } catch (e) {}
   return [];
 }
@@ -3067,7 +3104,7 @@ function edForget() {
 function edColors() {
   const css = getComputedStyle(document.documentElement);
   const v = (name) => css.getPropertyValue(name).trim();
-  return { ink: v("--ink"), faint: v("--faint"), mute: v("--mute"), sky: v("--sky-hi"), info: v("--info"), lilac: v("--lilac"), text: v("--text") };
+  return { ink: v("--ink"), faint: v("--faint"), mute: v("--mute"), sky: v("--sky-hi"), info: v("--info"), lilac: v("--lilac"), mint: v("--mint"), ok: v("--ok"), text: v("--text") };
 }
 
 function edCanvas(canvas) {
@@ -3115,6 +3152,10 @@ function edPaintOverview() {
   } else {
     edWave(ctx, 0, dur, w, h + 14, c.faint);
   }
+  edIdeas().forEach(([a, b]) => {
+    ctx.fillStyle = c.ok;
+    ctx.fillRect(a / dur * w, 0, Math.max(3, (b - a) / dur * w), 5);
+  });
   ED.trozos.forEach(([a, b]) => {
     ctx.fillStyle = c.ink;
     ctx.fillRect(a / dur * w, h - 7, Math.max(3, (b - a) / dur * w), 7);
@@ -3142,6 +3183,14 @@ function edPaintDetail() {
     ctx.font = "800 11px Manrope, sans-serif";
     ctx.fillText(`Trozo ${i + 1}`, Math.max(x(a), 0) + 6, 15);
   });
+  edIdeas().forEach(([a, b]) => {
+    if (b < from || a > to) return;
+    ctx.fillStyle = c.mint;
+    ctx.fillRect(x(a), 0, x(b) - x(a), h);
+    ctx.fillStyle = c.ok;
+    ctx.font = "800 11px Manrope, sans-serif";
+    ctx.fillText("★ Sugerencia", Math.max(x(a), 0) + 6, 15);
+  });
   edWave(ctx, from, to, w, h, c.faint);
   const tick = ED.span <= 30 ? 5 : ED.span <= 60 ? 10 : ED.span <= 120 ? 15 : 30;
   ctx.fillStyle = c.mute;
@@ -3159,6 +3208,59 @@ function edPaintSel() {
   box.style.left = ((ED.sel[0] - ED.view) / ED.span * 100) + "%";
   box.style.width = ((ED.sel[1] - ED.sel[0]) / ED.span * 100) + "%";
 }
+
+/** Sugerencias que quedan: ni descartadas ni pisadas por un trozo ya elegido. */
+function edIdeas() {
+  if (ED.mode === "retoque") return [];
+  return ((ED.data && ED.data.sugerencias) || []).filter(([a, b]) =>
+    !ED.ignored.includes(a) && !ED.trozos.some(([c, d]) => a < d && b > c));
+}
+
+function edPaintIdeas() {
+  const ideas = edIdeas();
+  $("ed-ideas").hidden = !ideas.length;
+  $("ed-idea-list").innerHTML = ideas.map(([a, b]) => `
+    <li class="ed-item" data-a="${a}">
+      <span class="n" aria-hidden="true">★</span>
+      <span><span class="when">${clock(a)} → ${clock(b)}</span><span class="len">${Math.round(b - a)} s</span></span>
+      <span class="ops">
+        <button type="button" data-op="play" title="Verla" aria-label="Ver la sugerencia de ${clock(a)}"><svg class="ico fill"><use href="#i-play"/></svg></button>
+        <button type="button" data-op="add" title="Añadirla a los trozos" aria-label="Añadir la sugerencia de ${clock(a)}"><svg class="ico"><use href="#i-plus"/></svg></button>
+        <button type="button" data-op="edit" title="Ajustar dónde empieza o acaba" aria-label="Ajustar la sugerencia de ${clock(a)}"><svg class="ico"><use href="#i-edit"/></svg></button>
+        <button type="button" data-op="rm" title="Descartarla" aria-label="Descartar la sugerencia de ${clock(a)}"><svg class="ico"><use href="#i-x"/></svg></button>
+      </span>
+    </li>`).join("");
+}
+
+$("ed-idea-list").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-op]");
+  if (!button) return;
+  const start = +button.closest(".ed-item").dataset.a;
+  const idea = edIdeas().find(([a]) => a === start);
+  if (!idea) return;
+  const piece = [idea[0], idea[1]];
+  if (button.dataset.op === "play") edPlayRange(piece);
+  if (button.dataset.op === "add") {
+    ED.trozos.push(piece);
+    ED.trozos.sort((x, y) => x[0] - y[0]);
+    edSave();
+    edPaintAll();
+  }
+  if (button.dataset.op === "edit") {
+    // Pasa a la selección: se ajusta y se añade con «Seleccionar este trozo».
+    ED.editing = -1;
+    ED.sel = piece;
+    edVideo.pause();
+    edSeek(piece[0]);
+    edSetView(piece[0] - Math.max(5, (ED.span - (piece[1] - piece[0])) / 2));
+    edPaintAll();
+  }
+  if (button.dataset.op === "rm") {
+    ED.ignored.push(start);
+    edSave();
+    edPaintAll();
+  }
+});
 
 function edOverlaps([a, b]) {
   return ED.trozos.findIndex(([c, d], i) => i !== ED.editing && a < d && b > c);
@@ -3190,6 +3292,7 @@ function edPaintSelBar() {
 function edPaintList() {
   if (ED.mode === "retoque" && ED.rt && ED.sel) return edPaintSubs();
   const n = ED.trozos.length;
+  edPaintIdeas();
   $("ed-empty").hidden = n > 0;
   $("ed-list").innerHTML = ED.trozos.map(([a, b], i) => `
     <li class="ed-item${i === ED.editing ? " editing" : ""}" data-i="${i}">
@@ -3338,7 +3441,7 @@ async function edStartRetouch(id) {
   toWords(detail.original).forEach(w => { if (!pool.some(p => Math.abs(p.start - w.start) < 0.02)) pool.push(w); });
   pool.sort((a, b) => a.start - b.start);
   ED.mode = "retoque";
-  ED.rt = { id, clip, words: pool, known: detail.transcrito || [clip.inicio, clip.fin], dirty: false, key: "", blocks: [], now: -1 };
+  ED.rt = { id, clip, words: pool, known: detail.transcrito || [clip.inicio, clip.fin], silences: detail.quitar_silencios !== false, dirty: false, key: "", blocks: [], now: -1 };
   ED.trozos = [];
   ED.editing = -1;
   ED.sel = [clip.inicio, clip.fin];
@@ -3357,6 +3460,7 @@ function edApplyMode() {
   $("ed-heading").textContent = retouch ? "Retocar el short" : "Elige los trozos";
   $("ed-side-title").textContent = retouch ? "Subtítulos" : "Trozos elegidos";
   $("ed-list").hidden = retouch;
+  if (retouch) $("ed-ideas").hidden = true;
   $("ed-subs").hidden = !retouch;
   $("ed-rt").hidden = !retouch;
   $("ed-add").hidden = retouch;
@@ -3465,7 +3569,7 @@ async function edRemake() {
     id,
     estilo: $("ed-rt-style").value,
     publicacion: { title: $("ed-rt-titulo").value.trim(), hook: $("ed-rt-gancho").value.trim() },
-    output: $("output").value.trim(),
+    quitar_silencios: $("ed-silences").checked,
     delete_source: $("delete_source").checked,
   };
   if (moved) body.rango = { inicio: Math.round(a * 100) / 100, fin: Math.round(b * 100) / 100 };
@@ -3529,7 +3633,7 @@ async function edRender() {
   const busy = STATE === "running";
   if (!(await downloadNeeded())) return;
   try {
-    const form = { ...collect(false), podcast: ED.src.origen || $("podcast").value.trim(), moments: ED.trozos };
+    const form = { ...collect(false), podcast: ED.src.origen || $("podcast").value.trim(), moments: ED.trozos, jumpcuts: $("ed-silences").checked };
     const answer = await post("/api/run", form);
     const count = ED.trozos.length;
     closeEditor(true);
@@ -3908,7 +4012,7 @@ function currentTemplate() {
 }
 
 const STYLE_NAMES = { classic: "Clásico", box: "Caja", marker: "Rotulador", neon: "Neón", minimal: "Sobrio" };
-const COMP_NAMES = { stack: "Dividido", full: "Solo el pódcast", center: "Franja central", duo: "Dos personas" };
+const COMP_NAMES = { stack: "Dividido", full: "Solo el pódcast", fit: "Encajar", center: "Franja central", duo: "Dos personas" };
 
 /** Lo elegido en cada seccion, en una linea: se ve sin abrirla. */
 function paintSummaries() {
@@ -4512,7 +4616,6 @@ async function remakeShort() {
     recorte: cut,
     estilo: $("rt-style").value,
     publicacion: { title: $("rt-titulo").value.trim(), hook: $("rt-gancho").value.trim() },
-    output: $("output").value.trim(),
     delete_source: $("delete_source").checked,
   };
   const text = $("rt-text").value.trim();

@@ -28,6 +28,16 @@ use crate::words::{Segment, Transcript, Word};
 #[error("{0}")]
 pub struct TranscribeError(pub String);
 
+impl TranscribeError {
+    /// Ha ido bien, pero en ese audio no se dice nada: un trozo elegido a mano
+    /// puede ser asi, y entonces sale sin subtitulos.
+    pub fn is_no_speech(&self) -> bool {
+        self.0.contains(NO_SPEECH)
+    }
+}
+
+const NO_SPEECH: &str = "no devolvio ninguna palabra";
+
 type Result<T> = std::result::Result<T, TranscribeError>;
 
 // ----------------------------------------------------------------------------
@@ -255,7 +265,7 @@ impl Transcriber {
         }
         if segments.is_empty() {
             return Err(TranscribeError(format!(
-                "La transcripcion de '{}' no devolvio ninguna palabra. Comprueba que el video tenga audio audible.",
+                "La transcripcion de '{}' {NO_SPEECH}. Comprueba que el video tenga audio audible.",
                 file_name(path)
             )));
         }
@@ -750,6 +760,9 @@ const NEVER_SPEECH: [&str; 5] = ["amaraorg", "amara org", "subtitulos realizados
 /// inventada: en una conversacion de verdad las frases van pegadas.
 const INVENTED_GAP: f64 = 2.0;
 
+/// Parte de la frase que puede no ser despedida para darla por inventada.
+const INVENTED_REST: f64 = 0.3;
+
 fn plain_text(text: &str) -> String {
     use unicode_normalization::UnicodeNormalization;
     let flat: String = text
@@ -778,10 +791,12 @@ pub fn drop_invented_phrases(segments: Vec<Segment>) -> Vec<Segment> {
             for phrase in INVENTED.iter() {
                 rest = rest.replace(&format!(" {phrase} "), " ");
             }
-            // Lo que sobra, sin las palabras de enlace ("y", "el"...), es como
-            // mucho una palabra suelta.
+            // Sin las palabras de enlace ("y", "el"...), lo que sobra es una palabra
+            // suelta o poco mas de la frase: whisper varia la coletilla cada vez.
             const GLUE: [&str; 10] = ["y", "e", "el", "la", "a", "al", "de", "que", "and", "the"];
-            rest.split_whitespace().filter(|w| !GLUE.contains(w)).count() <= 1 && rest.trim() != text.as_str()
+            let left = rest.split_whitespace().filter(|w| !GLUE.contains(w)).count();
+            let total = text.split_whitespace().count();
+            rest.trim() != text.as_str() && (left <= 1 || (left as f64) <= total as f64 * INVENTED_REST)
         })
         .collect();
 
@@ -1193,6 +1208,9 @@ mod tests {
         ];
         let textos: Vec<String> = drop_invented_phrases(entrada).into_iter().map(|s| s.text).collect();
         assert_eq!(textos, ["y no se puede ver."]);
+        // Otra coletilla real: casi toda la frase es despedida, aunque no exacta.
+        let variante = vec![Segment { start: 59.0, end: 76.0, text: "Gracias por ver el video. Si te gustó, dale like, suscribete a mi canal y dale like a este video. ¡Suscríbete al canal!".into(), words: vec![] }];
+        assert!(drop_invented_phrases(variante).is_empty());
         // Partida en varios trozos seguidos: cuenta la racha entera.
         let partida = vec![
             seg(20.2, "ver."),
@@ -1209,6 +1227,12 @@ mod tests {
         assert!(drop_invented_phrases(solo).is_empty());
         let amara = vec![seg(0.0, "Vale."), seg(2.1, "Subtítulos realizados por la comunidad de Amara.org")];
         assert_eq!(drop_invented_phrases(amara).len(), 1, "esto no es habla nunca");
+    }
+
+    #[test]
+    fn sin_voz_se_distingue_de_un_fallo_de_verdad() {
+        assert!(TranscribeError(format!("La transcripcion de 'a.mp4' {NO_SPEECH}.")).is_no_speech());
+        assert!(!TranscribeError("no se pudo lanzar whisper".into()).is_no_speech());
     }
 
     #[test]

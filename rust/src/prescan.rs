@@ -14,6 +14,12 @@ use crate::download::HeatPoint;
 
 pub type Region = (f64, f64);
 
+/// Sugerencias del editor: cada cuanto se prueba una ventana, cuanto hueco dejan
+/// entre si y hasta donde se puede mover un borde para caer en una pausa.
+const SUGGEST_STEP: f64 = 5.0;
+const SUGGEST_GAP: f64 = 5.0;
+const SUGGEST_SNAP: f64 = 3.0;
+
 /// Devuelve tramos [(inicio, fin)] ordenados y sin solaparse.
 pub fn choose_regions(
     duration: f64,
@@ -104,6 +110,72 @@ pub fn choose_regions(
     regions
 }
 
+/// Que tramos sugerir en el editor, sin transcribir nada: los mejores por lo mas
+/// visto y la energia del audio, sin solaparse, con los bordes movidos a la pausa
+/// mas cercana para no cortar a media frase. Devuelve (inicio, fin, nota de 0 a
+/// 1) por orden de aparicion; sin ninguna senal util, nada.
+pub fn suggest_moments(
+    duration: f64,
+    heatmap: &[HeatPoint],
+    energy: Option<&EnergyTrack>,
+    clips: &ClipsConfig,
+    scoring: &ScoringConfig,
+    count: usize,
+) -> Vec<(f64, f64, f64)> {
+    let span = (clips.min_duration + clips.max_duration) / 2.0;
+    let (mut from, mut to) = (clips.head_skip.max(0.0), duration - clips.tail_skip.max(0.0));
+    if to - from < span {
+        (from, to) = (0.0, duration);
+    }
+    let mut rows: Vec<(f64, f64, f64)> = Vec::new();
+    let mut start = from;
+    while start + span <= to {
+        rows.push((start, heat_for(heatmap, start, start + span), energy.map_or(0.0, |e| e.window_score(start, start + span))));
+        start += SUGGEST_STEP;
+    }
+    let range = |pick: fn(&(f64, f64, f64)) -> f64| rows.iter().map(pick).fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| (lo.min(v), hi.max(v)));
+    let ranges = (range(|r| r.1), range(|r| r.2));
+    let mut ranked: Vec<(f64, f64)> =
+        rows.iter().map(|r| (r.0, combine(r.1, r.2, (scoring.weight_heatmap, scoring.weight_energy), ranges))).collect();
+    ranked.sort_by(|a, b| b.1.total_cmp(&a.1));
+    if ranked.first().is_none_or(|best| best.1 <= 0.0) {
+        return Vec::new();
+    }
+
+    let mut picked: Vec<(f64, f64, f64)> = Vec::new();
+    for (start, score) in ranked {
+        if picked.len() >= count {
+            break;
+        }
+        let (a, b) = (start, start + span);
+        if picked.iter().any(|&(p_a, p_b, _)| a < p_b + SUGGEST_GAP && b > p_a - SUGGEST_GAP) {
+            continue;
+        }
+        let a = quiet_near(energy, a, from, to);
+        let b = quiet_near(energy, b, from, to);
+        if b - a >= clips.min_duration.min(span) {
+            picked.push((a, b, (score * 100.0).round() / 100.0));
+        }
+    }
+    picked.sort_by(|x, y| x.0.total_cmp(&y.0));
+    picked
+}
+
+/// El momento mas silencioso a unos segundos de `moment`: ahi se puede cortar.
+fn quiet_near(energy: Option<&EnergyTrack>, moment: f64, from: f64, to: f64) -> f64 {
+    let Some(track) = energy else { return moment };
+    let mut best = (moment, track.at(moment));
+    let mut offset = -SUGGEST_SNAP;
+    while offset <= SUGGEST_SNAP {
+        let at = moment + offset;
+        if at >= from && at <= to && track.at(at) < best.1 - 1e-6 {
+            best = (at, track.at(at));
+        }
+        offset += track.hop.max(0.05);
+    }
+    (best.0 * 100.0).round() / 100.0
+}
+
 /// Suma ponderada con cada senal normalizada 0..1 sobre la poblacion. Una
 /// senal plana (sin heatmap, por ejemplo) no aporta informacion, asi que se
 /// ignora y su peso se reparte entre las demas.
@@ -151,6 +223,30 @@ mod tests {
     fn configs() -> (PrescanConfig, ClipsConfig, ScoringConfig) {
         let clips = ClipsConfig { min_duration: 25.0, max_duration: 45.0, head_skip: 60.0, tail_skip: 30.0, ..Default::default() };
         (PrescanConfig::default(), clips, ScoringConfig::default())
+    }
+
+    #[test]
+    fn las_sugerencias_salen_de_lo_mas_visto_y_sin_pisarse() {
+        let (_, c, s) = configs();
+        let mapa = heat(&[(0.0, 600.0, 0.1), (600.0, 660.0, 1.0), (660.0, 1500.0, 0.1), (1500.0, 1560.0, 0.8), (1560.0, 3000.0, 0.1)]);
+        let ideas = suggest_moments(3000.0, &mapa, None, &c, &s, 2);
+        assert_eq!(ideas.len(), 2);
+        assert!(ideas[0].0 >= 590.0 && ideas[0].1 <= 670.0, "{ideas:?}");
+        assert!(ideas[1].0 >= 1490.0 && ideas[1].1 <= 1570.0, "por orden de aparicion: {ideas:?}");
+        assert!(ideas[0].2 > ideas[1].2, "la nota sigue a la señal: {ideas:?}");
+        assert!(ideas[0].1 - ideas[0].0 >= 25.0 && ideas[0].1 - ideas[0].0 <= 45.0);
+        assert!(suggest_moments(3000.0, &[], None, &c, &s, 3).is_empty(), "sin señales no se inventa nada");
+    }
+
+    #[test]
+    fn el_borde_de_una_sugerencia_cae_en_la_pausa_cercana() {
+        // Un cuarto de segundo por muestra: silencio a los 102 s, ruido el resto.
+        let mut nivel = vec![0.8f32; 2400];
+        nivel[408] = 0.05;
+        let pista = EnergyTrack::new(nivel, 0.25, 600.0, 0.0);
+        assert_eq!(quiet_near(Some(&pista), 100.0, 0.0, 600.0), 102.0);
+        assert_eq!(quiet_near(Some(&pista), 90.0, 0.0, 600.0), 90.0, "demasiado lejos: se queda donde esta");
+        assert_eq!(quiet_near(None, 100.0, 0.0, 600.0), 100.0);
     }
 
     #[test]
