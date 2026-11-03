@@ -126,6 +126,10 @@ Cualquier ajuste se puede cambiar sin tocar el YAML: `--set subtitles.style=mark
 Cada versión publicada tiene aquí su entrada (`install\publicar.ps1` no deja
 publicar una versión sin ella). Lo más reciente, primero.
 
+### 1.10.1 (2026-11-03)
+
+- **Sin la barra de título de Windows**: minimizar, maximizar y cerrar pasan a la barra superior de la app. La ventana se mueve arrastrando esa barra, se maximiza con doble clic y se estira por los bordes, como siempre.
+
 ### 1.10.0 (2026-11-03)
 
 - **Aspecto nuevo**, inspirado en YouTube: fondo negro o blanco según tu Windows, barra superior con buscador, menú lateral de iconos y texto que se puede estrechar, y el rojo solo en lo importante. Logo e icono nuevos.

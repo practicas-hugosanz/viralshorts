@@ -10,7 +10,9 @@ use std::time::Duration;
 use tao::dpi::LogicalSize;
 use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
-use tao::window::{Icon, UserAttentionType, WindowBuilder};
+#[cfg(windows)]
+use tao::platform::windows::WindowBuilderExtWindows;
+use tao::window::{Icon, ResizeDirection, UserAttentionType, WindowBuilder};
 use wry::{NewWindowResponse, WebContext, WebViewBuilder};
 
 use crate::ffmpeg;
@@ -19,11 +21,45 @@ use crate::gui::{self, Running};
 /// Icono de la ventana: 64x64 en RGBA crudo (el del .exe va incrustado aparte).
 const ICON_RGBA: &[u8] = include_bytes!("../assets/icon-64.rgba");
 
+/// Los mandos de la ventana, que van dentro de la pagina porque la ventana no
+/// lleva la barra de titulo de Windows.
+const WINDOW_JS: &str = include_str!("../../web/window.js");
+
 /// Lo que el servidor le pide a la ventana.
 #[derive(Debug, Clone, Copy)]
 enum Request {
     Focus,
     Attention,
+    Window(WindowCommand),
+}
+
+/// Lo que los mandos de la pagina le piden a la ventana.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WindowCommand {
+    Drag,
+    ResizeTop,
+    ResizeTopLeft,
+    ResizeTopRight,
+    Minimize,
+    ToggleMaximize,
+    Close,
+    SendState,
+}
+
+impl WindowCommand {
+    fn parse(message: &str) -> Option<Self> {
+        Some(match message {
+            "drag" => Self::Drag,
+            "resize:n" => Self::ResizeTop,
+            "resize:nw" => Self::ResizeTopLeft,
+            "resize:ne" => Self::ResizeTopRight,
+            "minimize" => Self::Minimize,
+            "maximize" => Self::ToggleMaximize,
+            "close" => Self::Close,
+            "state" => Self::SendState,
+            _ => return None,
+        })
+    }
 }
 
 /// Donde la ventana abierta deja como llamarla.
@@ -90,6 +126,7 @@ pub fn run() -> i32 {
 fn open_window(running: &Running) -> Result<std::convert::Infallible, String> {
     let event_loop = EventLoopBuilder::<Request>::with_user_event().build();
     let proxy = event_loop.create_proxy();
+    let ipc_proxy = event_loop.create_proxy();
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_millis(300));
         if gui::take_focus_request() && proxy.send_event(Request::Focus).is_err() {
@@ -99,13 +136,17 @@ fn open_window(running: &Running) -> Result<std::convert::Infallible, String> {
             return;
         }
     });
-    let window = WindowBuilder::new()
+    let builder = WindowBuilder::new()
         .with_title("Viral Shorts")
+        .with_decorations(false)
         .with_inner_size(LogicalSize::new(1200.0, 860.0))
         .with_min_inner_size(LogicalSize::new(900.0, 640.0))
-        .with_window_icon(Icon::from_rgba(ICON_RGBA.to_vec(), 64, 64).ok())
-        .build(&event_loop)
-        .map_err(|e| e.to_string())?;
+        .with_window_icon(Icon::from_rgba(ICON_RGBA.to_vec(), 64, 64).ok());
+    // La sombra conserva el borde invisible con el que Windows estira la ventana
+    // por los lados y por abajo; el de arriba lo ponen los mandos de la pagina.
+    #[cfg(windows)]
+    let builder = builder.with_undecorated_shadow(true);
+    let window = builder.build(&event_loop).map_err(|e| e.to_string())?;
 
     let port = running.port;
     // Los datos del navegador integrado (cookies, cache) van a la carpeta de
@@ -113,6 +154,15 @@ fn open_window(running: &Running) -> Result<std::convert::Infallible, String> {
     let mut context = WebContext::new(Some(ffmpeg::project_root().join("webview")));
     let webview = WebViewBuilder::new_with_web_context(&mut context)
         .with_url(&running.url)
+        .with_initialization_script(WINDOW_JS)
+        .with_ipc_handler(move |request| {
+            if !is_internal(&request.uri().to_string(), port) {
+                return;
+            }
+            if let Some(command) = WindowCommand::parse(request.body()) {
+                let _ = ipc_proxy.send_event(Request::Window(command));
+            }
+        })
         .with_navigation_handler(move |url| {
             if is_internal(&url, port) {
                 return true;
@@ -131,15 +181,38 @@ fn open_window(running: &Running) -> Result<std::convert::Infallible, String> {
         .map_err(|e| e.to_string())?;
 
     let job = running.app.job.clone();
+    let close = move |flow: &mut ControlFlow| {
+        job.stop(); // un trabajo a medias no se queda huerfano
+        let _ = std::fs::remove_file(instance_file());
+        *flow = ControlFlow::Exit;
+    };
+    let mut maximized = false;
     event_loop.run(move |event, _, flow| {
         *flow = ControlFlow::Wait;
-        let _vivo = &webview; // la vista vive tanto como el bucle
+        let tell_page = |maximized: bool| {
+            let _ = webview.evaluate_script(&format!("window.__vsWindow && window.__vsWindow({maximized})"));
+        };
         match event {
-            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
-                job.stop(); // un trabajo a medias no se queda huerfano
-                let _ = std::fs::remove_file(instance_file());
-                *flow = ControlFlow::Exit;
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => close(flow),
+            // El icono de maximizar cambia tambien si se hace con el teclado o
+            // arrastrando la ventana al borde de la pantalla.
+            Event::WindowEvent { event: WindowEvent::Resized(_), .. } => {
+                let now = window.is_maximized();
+                if now != maximized {
+                    maximized = now;
+                    tell_page(now);
+                }
             }
+            Event::UserEvent(Request::Window(command)) => match command {
+                WindowCommand::Drag => drop(window.drag_window()),
+                WindowCommand::ResizeTop => drop(window.drag_resize_window(ResizeDirection::North)),
+                WindowCommand::ResizeTopLeft => drop(window.drag_resize_window(ResizeDirection::NorthWest)),
+                WindowCommand::ResizeTopRight => drop(window.drag_resize_window(ResizeDirection::NorthEast)),
+                WindowCommand::Minimize => window.set_minimized(true),
+                WindowCommand::ToggleMaximize => window.set_maximized(!window.is_maximized()),
+                WindowCommand::Close => close(flow),
+                WindowCommand::SendState => tell_page(window.is_maximized()),
+            },
             Event::UserEvent(Request::Focus) => {
                 window.set_minimized(false);
                 window.set_focus();
@@ -168,6 +241,21 @@ mod tests {
         assert!(is_internal("blob:http://127.0.0.1:8760/uuid", 8760));
         for fuera in ["https://www.youtube.com/watch?v=x", "http://127.0.0.1:9999/", "http://127.0.0.1:87601/", "http://localhost:8760/", "http://127.0.0.1.evil.example:8760/", "file:///C:/Windows/win.ini"] {
             assert!(!is_internal(fuera, 8760), "{fuera}");
+        }
+    }
+
+    #[test]
+    fn los_mandos_de_la_pagina_son_los_que_entiende_la_ventana() {
+        for message in ["drag", "minimize", "maximize", "close", "state"] {
+            assert!(WindowCommand::parse(message).is_some(), "{message}");
+            assert!(WINDOW_JS.contains(&format!("\"{message}\"")), "{message}");
+        }
+        for edge in ["n", "nw", "ne"] {
+            assert!(WindowCommand::parse(&format!("resize:{edge}")).is_some(), "{edge}");
+            assert!(WINDOW_JS.contains(&format!("\"{edge}\"")), "{edge}");
+        }
+        for desconocido in ["", "DRAG", "resize:s", "close "] {
+            assert_eq!(WindowCommand::parse(desconocido), None, "{desconocido}");
         }
     }
 
